@@ -259,6 +259,65 @@ class ProfileTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("personal_channel", response.json()["errors"])
 
+    def test_overlay_edit_keeps_existing_avatar_when_no_new_file_is_uploaded(self):
+        buffer = BytesIO()
+        Image.new("RGB", (64, 64), "red").save(buffer, format="PNG")
+        self.user.avatar = SimpleUploadedFile(
+            "existing.png",
+            buffer.getvalue(),
+            content_type="image/png",
+        )
+        self.user.save(update_fields=["avatar"])
+        original_name = self.user.avatar.name
+
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("accounts:profile"),
+            {
+                "first_name": "Иван",
+                "username": self.user.username,
+                "bio": "Изменено без нового аватара.",
+                "birthday": "",
+                "personal_channel": "",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ok"])
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.avatar.name, original_name)
+        self.assertEqual(self.user.bio, "Изменено без нового аватара.")
+
+    def test_fallback_profile_edit_keeps_existing_avatar_without_revalidation(self):
+        buffer = BytesIO()
+        Image.new("RGB", (64, 64), "blue").save(buffer, format="PNG")
+        self.user.avatar = SimpleUploadedFile(
+            "existing-fallback.png",
+            buffer.getvalue(),
+            content_type="image/png",
+        )
+        self.user.save(update_fields=["avatar"])
+        original_name = self.user.avatar.name
+
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("accounts:profile"),
+            {
+                "first_name": "Иван",
+                "last_name": "",
+                "username": self.user.username,
+                "bio": "Fallback update.",
+                "email": self.user.email,
+                "birthday": "",
+            },
+        )
+        self.assertRedirects(response, reverse("accounts:profile"))
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.avatar.name, original_name)
+        self.assertEqual(self.user.bio, "Fallback update.")
+
     def test_profile_rejects_oversized_avatar_dimensions(self):
         self.client.force_login(self.user)
         buffer = BytesIO()
