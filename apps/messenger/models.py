@@ -36,6 +36,17 @@ class Contact(models.Model):
 
 
 class Chat(models.Model):
+    class Type(models.TextChoices):
+        PRIVATE = "private", "Личный чат"
+        GROUP = "group", "Группа"
+        CHANNEL = "channel", "Канал"
+
+    type = models.CharField(
+        max_length=16,
+        choices=Type.choices,
+        default=Type.PRIVATE,
+        db_index=True,
+    )
     participants = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         through="ChatParticipant",
@@ -53,11 +64,22 @@ class Chat(models.Model):
 
 
 class ChatParticipant(models.Model):
+    class Role(models.TextChoices):
+        OWNER = "owner", "Владелец"
+        ADMIN = "admin", "Администратор"
+        MEMBER = "member", "Участник"
+
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="memberships")
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="chat_memberships",
+    )
+    role = models.CharField(
+        max_length=16,
+        choices=Role.choices,
+        default=Role.MEMBER,
+        db_index=True,
     )
     joined_at = models.DateTimeField(auto_now_add=True)
     last_read_message = models.ForeignKey(
