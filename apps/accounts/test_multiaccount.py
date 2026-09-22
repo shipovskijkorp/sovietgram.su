@@ -69,11 +69,11 @@ class MultiAccountTests(TestCase):
         remaining = self.client.session["stalingram_accounts_v1"]
         self.assertEqual([int(item["user_id"]) for item in remaining], [self.first.pk])
 
-    def test_sidebar_uses_stable_account_toggle_without_profile_links(self):
+    def test_sidebar_uses_full_header_account_toggle_without_close_button(self):
         response = self.client.get(reverse("messenger:home"))
         self.assertContains(
             response,
-            'id="profileAccountToggle" type="button"',
+            'class="profile-drawer__hero profile-drawer__hero--telegram" id="profileAccountToggle" type="button"',
             html=False,
         )
         self.assertContains(
@@ -81,6 +81,13 @@ class MultiAccountTests(TestCase):
             'id="profileAccountList" hidden',
             html=False,
         )
+        self.assertContains(
+            response,
+            'class="profile-accounts__arrow"',
+            html=False,
+        )
+        self.assertNotContains(response, 'id="profileMenuClose"', html=False)
+        self.assertNotContains(response, 'profile-accounts__toggle', html=False)
         self.assertNotContains(response, "<details", html=False)
         self.assertNotContains(response, 'profile-drawer__avatar-link', html=False)
         self.assertNotContains(response, 'profile-drawer__identity-text" href=', html=False)
