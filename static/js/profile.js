@@ -231,6 +231,10 @@ function renderUserProfile(profile) {
     if (userProfileChannelMeta) {
       userProfileChannelMeta.textContent = `Канал · ${channel.subscriber_text || "0 подписчиков"}`;
     }
+    if (userProfileChannelCard) {
+      userProfileChannelCard.disabled = !channel.open_url;
+      userProfileChannelCard.classList.toggle("is-clickable", Boolean(channel.open_url));
+    }
   }
 
   const hasBirthday = Boolean(profile.birthday_display);
@@ -424,6 +428,29 @@ userProfileEditClose?.addEventListener("click", closeUserProfile);
 
 userProfileOverlay?.addEventListener("click", (event) => {
   if (event.target === userProfileOverlay) closeUserProfile();
+});
+
+userProfileChannelCard?.addEventListener("click", () => {
+  const channel = openedProfile?.personal_channel;
+  if (!channel?.open_url) return;
+
+  if (channel.open_method === "post") {
+    const form = document.createElement("form");
+    form.method = "post";
+    form.action = channel.open_url;
+
+    const token = document.createElement("input");
+    token.type = "hidden";
+    token.name = "csrfmiddlewaretoken";
+    token.value = csrfToken();
+
+    form.appendChild(token);
+    document.body.appendChild(form);
+    form.submit();
+    return;
+  }
+
+  window.location.assign(channel.open_url);
 });
 
 userProfileEdit?.addEventListener("click", () => {
