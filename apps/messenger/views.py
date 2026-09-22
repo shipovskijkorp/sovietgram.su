@@ -643,6 +643,19 @@ def forward_message(request, chat_id, message_id):
             return JsonResponse({"ok": False, "error": "Выберите чат для пересылки."}, status=400)
         target_chat = _chat_for_user(request.user, target_chat_id)
 
+    target_membership = _membership(target_chat, request.user)
+    if (
+        target_chat.type == Chat.Type.CHANNEL
+        and target_membership.role not in {
+            ChatParticipant.Role.OWNER,
+            ChatParticipant.Role.ADMIN,
+        }
+    ):
+        return JsonResponse(
+            {"ok": False, "error": "Публиковать в канале могут только администраторы."},
+            status=403,
+        )
+
     origin = source.forwarded_from or source
     origin_name = source.forwarded_from_name or source.sender.display_name
     origin_username = source.forwarded_from_username or source.sender.username
