@@ -103,7 +103,10 @@ document.querySelectorAll("[data-confirm-form]").forEach((form) => {
 
 
 const userProfileOverlay = document.getElementById("userProfileOverlay");
+const userProfileView = document.getElementById("userProfileView");
 const userProfileClose = document.getElementById("userProfileClose");
+const userProfileEditClose = document.getElementById("userProfileEditClose");
+const userProfileEdit = document.getElementById("userProfileEdit");
 const userProfileAvatar = document.getElementById("userProfileAvatar");
 const userProfileName = document.getElementById("userProfileName");
 const userProfileStatus = document.getElementById("userProfileStatus");
@@ -114,36 +117,61 @@ const userProfileActions = document.getElementById("userProfileActions");
 const userProfileMessage = document.getElementById("userProfileMessage");
 const userProfileContact = document.getElementById("userProfileContact");
 
+const userProfileEditForm = document.getElementById("userProfileEditForm");
+const userProfileEditBack = document.getElementById("userProfileEditBack");
+const userProfileAvatarInput = document.getElementById("userProfileAvatarInput");
+const userProfileEditAvatar = document.getElementById("userProfileEditAvatar");
+const userProfileEditDisplayName = document.getElementById("userProfileEditDisplayName");
+const userProfileEditStatus = document.getElementById("userProfileEditStatus");
+const userProfileFirstNameInput = document.getElementById("userProfileFirstNameInput");
+const userProfileLastNameInput = document.getElementById("userProfileLastNameInput");
+const userProfileUsernameInput = document.getElementById("userProfileUsernameInput");
+const userProfileBioInput = document.getElementById("userProfileBioInput");
+const userProfileBioCount = document.getElementById("userProfileBioCount");
+const userProfileEditError = document.getElementById("userProfileEditError");
+
 let openedProfile = null;
+let profileAvatarPreviewUrl = "";
 
 function csrfToken() {
   return document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || "";
 }
 
+function renderProfileAvatar(target, profile) {
+  if (!target) return;
+  target.replaceChildren();
+  if (profile.avatar_url) {
+    const image = document.createElement("img");
+    image.src = profile.avatar_url;
+    image.alt = "";
+    target.appendChild(image);
+    return;
+  }
+  const fallback = document.createElement("span");
+  fallback.textContent = profile.initials || "?";
+  target.appendChild(fallback);
+}
+
+function setUserProfileMode(mode) {
+  const editing = mode === "edit";
+  if (userProfileView) userProfileView.hidden = editing;
+  if (userProfileEditForm) userProfileEditForm.hidden = !editing;
+}
+
 function closeUserProfile() {
   if (!userProfileOverlay) return;
   userProfileOverlay.hidden = true;
+  setUserProfileMode("view");
   openedProfile = null;
+  if (profileAvatarPreviewUrl) URL.revokeObjectURL(profileAvatarPreviewUrl);
+  profileAvatarPreviewUrl = "";
   document.body.classList.remove("has-profile-overlay");
 }
 
 function renderUserProfile(profile) {
   if (!userProfileOverlay) return;
   openedProfile = profile;
-
-  if (userProfileAvatar) {
-    userProfileAvatar.replaceChildren();
-    if (profile.avatar_url) {
-      const image = document.createElement("img");
-      image.src = profile.avatar_url;
-      image.alt = "";
-      userProfileAvatar.appendChild(image);
-    } else {
-      const fallback = document.createElement("span");
-      fallback.textContent = profile.initials || "?";
-      userProfileAvatar.appendChild(fallback);
-    }
-  }
+  renderProfileAvatar(userProfileAvatar, profile);
 
   if (userProfileName) userProfileName.textContent = profile.display_name || profile.username || "";
   if (userProfileStatus) userProfileStatus.textContent = profile.status || "";
@@ -155,7 +183,9 @@ function renderUserProfile(profile) {
     userProfileBio.textContent = hasBio ? profile.bio.trim() : "";
   }
 
+  if (userProfileEdit) userProfileEdit.hidden = !profile.is_self;
   if (userProfileActions) userProfileActions.hidden = Boolean(profile.is_self);
+
   if (userProfileContact) {
     userProfileContact.textContent = profile.is_contact
       ? "Удалить из контактов"
@@ -163,8 +193,41 @@ function renderUserProfile(profile) {
     userProfileContact.classList.toggle("is-danger", Boolean(profile.is_contact));
   }
 
+  setUserProfileMode("view");
   userProfileOverlay.hidden = false;
   document.body.classList.add("has-profile-overlay");
+}
+
+function fillUserProfileEdit() {
+  if (!openedProfile?.is_self) return;
+  if (userProfileFirstNameInput) userProfileFirstNameInput.value = openedProfile.first_name || "";
+  if (userProfileLastNameInput) userProfileLastNameInput.value = openedProfile.last_name || "";
+  if (userProfileUsernameInput) userProfileUsernameInput.value = openedProfile.username || "";
+  if (userProfileBioInput) userProfileBioInput.value = openedProfile.bio || "";
+  if (userProfileBioCount) userProfileBioCount.textContent = String((openedProfile.bio || "").length);
+  if (userProfileEditDisplayName) userProfileEditDisplayName.textContent = openedProfile.display_name || openedProfile.username || "";
+  if (userProfileEditStatus) userProfileEditStatus.textContent = openedProfile.status || "";
+  if (userProfileEditError) {
+    userProfileEditError.hidden = true;
+    userProfileEditError.textContent = "";
+  }
+  if (userProfileAvatarInput) userProfileAvatarInput.value = "";
+  renderProfileAvatar(userProfileEditAvatar, openedProfile);
+}
+
+function profileErrorsToText(errors) {
+  if (!errors || typeof errors !== "object") return "Не удалось сохранить профиль.";
+  const order = ["avatar", "first_name", "last_name", "username", "bio", "__all__"];
+  const used = new Set();
+  const messages = [];
+  [...order, ...Object.keys(errors)].forEach((key) => {
+    if (used.has(key) || !errors[key]) return;
+    used.add(key);
+    errors[key].forEach((item) => {
+      if (item?.message) messages.push(item.message);
+    });
+  });
+  return messages.join(" ") || "Проверьте введённые данные.";
 }
 
 async function openUserProfile(url) {
@@ -191,14 +254,90 @@ document.querySelectorAll("[data-user-profile]").forEach((link) => {
   link.addEventListener("click", (event) => {
     if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
+    if (typeof setProfileMenu === "function") setProfileMenu(false);
     openUserProfile(link.href);
   });
 });
 
 userProfileClose?.addEventListener("click", closeUserProfile);
+userProfileEditClose?.addEventListener("click", closeUserProfile);
 
 userProfileOverlay?.addEventListener("click", (event) => {
   if (event.target === userProfileOverlay) closeUserProfile();
+});
+
+userProfileEdit?.addEventListener("click", () => {
+  if (!openedProfile?.is_self) return;
+  fillUserProfileEdit();
+  setUserProfileMode("edit");
+});
+
+userProfileEditBack?.addEventListener("click", () => {
+  if (!openedProfile) return;
+  renderUserProfile(openedProfile);
+});
+
+userProfileBioInput?.addEventListener("input", () => {
+  if (userProfileBioCount) userProfileBioCount.textContent = String(userProfileBioInput.value.length);
+});
+
+userProfileAvatarInput?.addEventListener("change", () => {
+  const file = userProfileAvatarInput.files?.[0];
+  if (!file || !userProfileEditAvatar) return;
+  if (profileAvatarPreviewUrl) URL.revokeObjectURL(profileAvatarPreviewUrl);
+  profileAvatarPreviewUrl = URL.createObjectURL(file);
+  userProfileEditAvatar.replaceChildren();
+  const image = document.createElement("img");
+  image.src = profileAvatarPreviewUrl;
+  image.alt = "";
+  userProfileEditAvatar.appendChild(image);
+});
+
+userProfileEditForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!openedProfile?.is_self || !openedProfile.edit_url) return;
+
+  const submit = userProfileEditForm.querySelector('button[type="submit"]');
+  if (submit) submit.disabled = true;
+  if (userProfileEditError) {
+    userProfileEditError.hidden = true;
+    userProfileEditError.textContent = "";
+  }
+
+  try {
+    const response = await fetch(openedProfile.edit_url, {
+      method: "POST",
+      body: new FormData(userProfileEditForm),
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+      credentials: "same-origin",
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) {
+      throw { profileErrors: payload.errors };
+    }
+
+    openedProfile = {
+      ...openedProfile,
+      ...payload,
+      is_self: true,
+      edit_url: openedProfile.edit_url,
+    };
+    renderUserProfile(openedProfile);
+
+    document.querySelectorAll(".account-mini__name").forEach((element) => {
+      element.textContent = payload.display_name;
+    });
+    document.querySelectorAll(".profile-account-header__bottom strong").forEach((element) => {
+      element.textContent = payload.display_name;
+    });
+  } catch (error) {
+    if (userProfileEditError) {
+      userProfileEditError.textContent = profileErrorsToText(error?.profileErrors);
+      userProfileEditError.hidden = false;
+    }
+  } finally {
+    if (submit) submit.disabled = false;
+  }
 });
 
 userProfileMessage?.addEventListener("click", () => {
