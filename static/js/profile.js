@@ -1,8 +1,6 @@
 const profileMenuButton = document.getElementById("profileMenuButton");
 const profileMenu = document.getElementById("profileMenu");
 const profileMenuBackdrop = document.getElementById("profileMenuBackdrop");
-const profileMenuClose = document.getElementById("profileMenuClose");
-
 const profileAccountToggle = document.getElementById("profileAccountToggle");
 const profileAccountList = document.getElementById("profileAccountList");
 
@@ -34,7 +32,6 @@ if (profileMenuButton && profileMenu && profileMenuBackdrop) {
     setProfileMenu(!profileMenu.classList.contains("is-open"));
   });
   profileMenuBackdrop.addEventListener("click", () => setProfileMenu(false));
-  profileMenuClose?.addEventListener("click", () => setProfileMenu(false));
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") setProfileMenu(false);
   });
