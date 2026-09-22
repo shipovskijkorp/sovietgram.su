@@ -539,7 +539,7 @@
               {% endif %}
               <span class="community-member-row__copy">
                 <strong>{{ person.display_name }}</strong>
-                <small>{% if person.is_online %}в сети{% else %}@{{ person.username }}{% endif %}</small>
+                <small>{{ person.presence_ui }}</small>
               </span>
               <span class="community-member-row__check">✓</span>
             </label>
