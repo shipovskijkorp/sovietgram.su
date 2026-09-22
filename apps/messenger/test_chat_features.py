@@ -127,6 +127,23 @@ class ChatFeatureTests(TestCase):
         self.assertEqual(forbidden.status_code, 403)
         self.assertFalse(Message.objects.filter(chat=channel).exists())
 
+        source_chat = get_or_create_direct_chat(self.charlie, self.bob)
+        source = Message.objects.create(
+            chat=source_chat,
+            sender=self.charlie,
+            text="Обход через пересылку",
+        )
+        forwarded = self.client.post(
+            reverse(
+                "messenger:forward_message",
+                args=[source_chat.pk, source.pk],
+            ),
+            {"target_chat_id": channel.pk},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(forwarded.status_code, 403)
+        self.assertFalse(Message.objects.filter(chat=channel).exists())
+
         self.client.force_login(self.alice)
         allowed = self.client.post(
             reverse("messenger:send_message", args=[channel.pk]),
