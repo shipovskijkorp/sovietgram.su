@@ -136,7 +136,7 @@
                   <button type="submit"><span>▣</span>{% if active_membership.is_archived %}Вернуть из архива{% else %}В архив{% endif %}</button>
                 </form>
               {% endif %}
-              <form method="post" action="{% url 'messenger:chat_action' selected_chat.pk %}" data-confirm-form="Очистить всю историю у обоих участников? Это действие нельзя отменить.">
+              <form method="post" action="{% url 'messenger:chat_action' selected_chat.pk %}" data-confirm-form="{% if selected_chat.type == 'private' %}Очистить историю переписки?{% else %}Очистить историю чата для всех участников?{% endif %} Это действие нельзя отменить.">
                 {% csrf_token %}<input type="hidden" name="action" value="clear">
                 <button class="chat-menu__danger" type="submit"><span>×</span>Очистить историю</button>
               </form>
