@@ -27,6 +27,54 @@ from .multiaccount import (
 )
 
 
+def _subscriber_label(count):
+    count = int(count or 0)
+    mod10 = count % 10
+    mod100 = count % 100
+    if mod10 == 1 and mod100 != 11:
+        word = "подписчик"
+    elif mod10 in {2, 3, 4} and mod100 not in {12, 13, 14}:
+        word = "подписчика"
+    else:
+        word = "подписчиков"
+    return f"{count} {word}"
+
+
+def _personal_channel_payload(channel):
+    if channel is None:
+        return None
+
+    last_message = (
+        channel.messages.filter(is_deleted=False)
+        .select_related("sender")
+        .prefetch_related("attachments")
+        .order_by("-id")
+        .first()
+    )
+    if last_message:
+        created = timezone.localtime(last_message.created_at)
+        if created.date() == timezone.localdate():
+            last_message_time = f"{created:%H:%M}"
+        else:
+            last_message_time = f"{created:%d.%m.%Y}"
+        preview = last_message.preview
+    else:
+        last_message_time = ""
+        preview = channel.description.strip() or "Публикаций пока нет"
+
+    subscriber_count = channel.memberships.count()
+    return {
+        "id": channel.pk,
+        "title": channel.title,
+        "username": channel.username or "",
+        "avatar_url": channel.avatar.url if channel.avatar else "",
+        "last_message_preview": preview,
+        "last_message_time": last_message_time,
+        "subscriber_count": subscriber_count,
+        "subscriber_text": _subscriber_label(subscriber_count),
+    }
+
+
 class StalingramLoginView(LoginView):
     authentication_form = IdentifierAuthenticationForm
     template_name = "accounts/login.html"
@@ -128,16 +176,7 @@ def profile(request):
                 "initials": user.initials,
                 "birthday": user.birthday.isoformat() if user.birthday else "",
                 "birthday_display": user.birthday.strftime("%d.%m.%Y") if user.birthday else "",
-                "personal_channel": (
-                    {
-                        "id": user.personal_channel_id,
-                        "title": user.personal_channel.title,
-                        "username": user.personal_channel.username or "",
-                        "avatar_url": user.personal_channel.avatar.url if user.personal_channel.avatar else "",
-                    }
-                    if user.personal_channel_id
-                    else None
-                ),
+                "personal_channel": _personal_channel_payload(user.personal_channel),
             }
         )
 
@@ -210,16 +249,7 @@ def public_profile(request, username):
                     if profile_user.birthday
                     else ""
                 ),
-                "personal_channel": (
-                    {
-                        "id": profile_user.personal_channel_id,
-                        "title": profile_user.personal_channel.title,
-                        "username": profile_user.personal_channel.username or "",
-                        "avatar_url": profile_user.personal_channel.avatar.url if profile_user.personal_channel.avatar else "",
-                    }
-                    if profile_user.personal_channel_id
-                    else None
-                ),
+                "personal_channel": _personal_channel_payload(profile_user.personal_channel),
                 "initials": profile_user.initials,
                 "is_contact": is_contact,
                 "is_self": bool(
