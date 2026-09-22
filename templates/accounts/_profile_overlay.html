@@ -1,86 +1,180 @@
 <div class="user-profile-overlay" id="userProfileOverlay" hidden>
-  <section class="user-profile-card" role="dialog" aria-modal="true" aria-labelledby="userProfileName">
-    <div class="user-profile-view" id="userProfileView">
-      <header class="user-profile-card__header">
+  <section class="tg-profile" role="dialog" aria-modal="true" aria-labelledby="userProfileName">
+    <div class="tg-profile__view" id="userProfileView">
+      <header class="tg-profile__topbar">
         <strong>Информация</strong>
-        <div class="user-profile-card__header-actions">
-          <button class="user-profile-card__edit" id="userProfileEdit" type="button" aria-label="Редактировать" hidden>✎</button>
-          <button class="user-profile-card__close" id="userProfileClose" type="button" aria-label="Закрыть">×</button>
+        <div class="tg-profile__topbar-actions">
+          <button class="tg-profile__icon-button" id="userProfileEdit" type="button" aria-label="Редактировать" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 20 4.2-1 10-10a2.4 2.4 0 0 0-3.4-3.4l-10 10L4 20Z"/><path d="m13.8 6.6 3.6 3.6"/></svg>
+          </button>
+          <button class="tg-profile__icon-button" id="userProfileClose" type="button" aria-label="Закрыть">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          </button>
         </div>
       </header>
 
-      <section class="user-profile-card__hero">
-        <div class="user-profile-card__avatar" id="userProfileAvatar"></div>
+      <section class="tg-profile__hero">
+        <div class="tg-profile__avatar" id="userProfileAvatar"></div>
         <h2 id="userProfileName"></h2>
         <p id="userProfileStatus"></p>
       </section>
 
-      <section class="user-profile-card__section user-profile-card__bio" id="userProfileBioSection" hidden>
+      <section class="tg-profile__bio" id="userProfileBioSection" hidden>
         <p id="userProfileBio"></p>
         <small>О себе</small>
       </section>
 
-      <section class="user-profile-card__section user-profile-card__details">
-        <div class="user-profile-card__row">
-          <span class="user-profile-card__icon">@</span>
-          <span>
+      <section class="tg-profile__rows">
+        <div class="tg-profile__row">
+          <span class="tg-profile__row-icon">@</span>
+          <div>
             <strong id="userProfileUsername"></strong>
             <small>Имя пользователя</small>
-          </span>
+          </div>
+        </div>
+
+        <div class="tg-profile__row" id="userProfileChannelRow" hidden>
+          <span class="tg-profile__row-icon">◉</span>
+          <div>
+            <strong id="userProfileChannel"></strong>
+            <small>Личный канал</small>
+          </div>
+        </div>
+
+        <div class="tg-profile__row" id="userProfileBirthdayRow" hidden>
+          <span class="tg-profile__row-icon">✥</span>
+          <div>
+            <strong id="userProfileBirthday"></strong>
+            <small>День рождения</small>
+          </div>
         </div>
       </section>
 
-      <footer class="user-profile-card__actions" id="userProfileActions">
-        <button class="user-profile-card__action user-profile-card__action--primary" id="userProfileMessage" type="button">Написать</button>
-        <button class="user-profile-card__action" id="userProfileContact" type="button">Добавить в контакты</button>
-      </footer>
+      <section class="tg-profile__actions" id="userProfileActions">
+        <button id="userProfileMessage" type="button">Написать</button>
+        <button id="userProfileContact" type="button">Добавить в контакты</button>
+      </section>
+
+      <section class="tg-profile__accounts" id="userProfileAccounts" hidden>
+        {% for slot in account_slots %}
+          {% if slot.is_current %}
+            <div class="tg-profile-account is-current">
+              <span class="tg-profile-account__avatar">
+                {% if slot.user.avatar %}<img src="{{ slot.user.avatar.url }}" alt="">{% else %}<span>{{ slot.user.initials }}</span>{% endif %}
+              </span>
+              <strong>{{ slot.user.display_name }}</strong>
+              {% if slot.unread_count %}<b>{{ slot.unread_count }}</b>{% endif %}
+            </div>
+          {% else %}
+            <form method="post" action="{% url 'accounts:switch_account' slot.user.pk %}">
+              {% csrf_token %}
+              <button class="tg-profile-account" type="submit">
+                <span class="tg-profile-account__avatar">
+                  {% if slot.user.avatar %}<img src="{{ slot.user.avatar.url }}" alt="">{% else %}<span>{{ slot.user.initials }}</span>{% endif %}
+                </span>
+                <strong>{{ slot.user.display_name }}</strong>
+                {% if slot.unread_count %}<b>{{ slot.unread_count }}</b>{% endif %}
+              </button>
+            </form>
+          {% endif %}
+        {% endfor %}
+        <a class="tg-profile-account tg-profile-account--add" href="{% url 'accounts:add_account' %}">
+          <span class="tg-profile-account__plus">＋</span>
+          <strong>Добавить аккаунт</strong>
+        </a>
+      </section>
     </div>
 
-    <form class="user-profile-edit" id="userProfileEditForm" enctype="multipart/form-data" hidden>
+    <form class="tg-profile-edit" id="userProfileEditForm" enctype="multipart/form-data" hidden>
       {% csrf_token %}
-      <header class="user-profile-card__header">
-        <button class="user-profile-edit__back" id="userProfileEditBack" type="button" aria-label="Назад">←</button>
+      <header class="tg-profile__topbar tg-profile-edit__topbar">
+        <button class="tg-profile__icon-button" id="userProfileEditBack" type="button" aria-label="Назад">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 6-6 6 6 6"/></svg>
+        </button>
         <strong>Информация</strong>
-        <button class="user-profile-card__close" id="userProfileEditClose" type="button" aria-label="Закрыть">×</button>
+        <button class="tg-profile__icon-button" id="userProfileEditClose" type="button" aria-label="Закрыть">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+        </button>
       </header>
 
-      <section class="user-profile-edit__hero">
-        <label class="user-profile-edit__avatar" for="userProfileAvatarInput">
+      <section class="tg-profile-edit__hero">
+        <label class="tg-profile-edit__avatar" for="userProfileAvatarInput">
           <input id="userProfileAvatarInput" name="avatar" type="file" accept="image/png,image/jpeg,image/webp" hidden>
           <span id="userProfileEditAvatar"></span>
-          <b aria-hidden="true">📷</b>
+          <i aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M8.5 6.5 10 4h4l1.5 2.5H18a3 3 0 0 1 3 3V17a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V9.5a3 3 0 0 1 3-3h2.5Z"/><circle cx="12" cy="13" r="4"/></svg>
+          </i>
         </label>
         <strong id="userProfileEditDisplayName"></strong>
         <small id="userProfileEditStatus"></small>
       </section>
 
-      <section class="user-profile-edit__section">
-        <label class="user-profile-edit__bio">
+      <section class="tg-profile-edit__bio-section">
+        <label>
           <span>О себе</span>
           <textarea id="userProfileBioInput" name="bio" maxlength="160" rows="3"></textarea>
           <small><span id="userProfileBioCount">0</span>/160</small>
         </label>
       </section>
 
-      <section class="user-profile-edit__section user-profile-edit__fields">
-        <label>
+      <section class="tg-profile-edit__rows">
+        <label class="tg-profile-edit__row">
           <span>Имя</span>
           <input id="userProfileFirstNameInput" name="first_name" type="text" maxlength="150">
         </label>
-        <label>
+        <label class="tg-profile-edit__row">
           <span>Фамилия</span>
           <input id="userProfileLastNameInput" name="last_name" type="text" maxlength="150">
         </label>
-        <label>
+        <label class="tg-profile-edit__row">
           <span>Имя пользователя</span>
-          <span class="user-profile-edit__username"><b>@</b><input id="userProfileUsernameInput" name="username" type="text" maxlength="150"></span>
+          <span class="tg-profile-edit__username"><b>@</b><input id="userProfileUsernameInput" name="username" type="text" maxlength="150"></span>
+        </label>
+        <label class="tg-profile-edit__row">
+          <span>Личный канал</span>
+          <select id="userProfileChannelInput" name="personal_channel">
+            <option value="">Не выбран</option>
+          </select>
+        </label>
+        <label class="tg-profile-edit__row">
+          <span>День рождения</span>
+          <input id="userProfileBirthdayInput" name="birthday" type="date">
         </label>
       </section>
 
-      <div class="user-profile-edit__error" id="userProfileEditError" hidden></div>
+      <div class="tg-profile-edit__error" id="userProfileEditError" hidden></div>
 
-      <footer class="user-profile-edit__footer">
-        <button class="user-profile-edit__save" id="userProfileEditSave" type="submit">Сохранить</button>
+      <section class="tg-profile__accounts tg-profile__accounts--edit">
+        {% for slot in account_slots %}
+          {% if slot.is_current %}
+            <div class="tg-profile-account is-current">
+              <span class="tg-profile-account__avatar">
+                {% if slot.user.avatar %}<img src="{{ slot.user.avatar.url }}" alt="">{% else %}<span>{{ slot.user.initials }}</span>{% endif %}
+              </span>
+              <strong>{{ slot.user.display_name }}</strong>
+              {% if slot.unread_count %}<b>{{ slot.unread_count }}</b>{% endif %}
+            </div>
+          {% else %}
+            <form method="post" action="{% url 'accounts:switch_account' slot.user.pk %}">
+              {% csrf_token %}
+              <button class="tg-profile-account" type="submit">
+                <span class="tg-profile-account__avatar">
+                  {% if slot.user.avatar %}<img src="{{ slot.user.avatar.url }}" alt="">{% else %}<span>{{ slot.user.initials }}</span>{% endif %}
+                </span>
+                <strong>{{ slot.user.display_name }}</strong>
+                {% if slot.unread_count %}<b>{{ slot.unread_count }}</b>{% endif %}
+              </button>
+            </form>
+          {% endif %}
+        {% endfor %}
+        <a class="tg-profile-account tg-profile-account--add" href="{% url 'accounts:add_account' %}">
+          <span class="tg-profile-account__plus">＋</span>
+          <strong>Добавить аккаунт</strong>
+        </a>
+      </section>
+
+      <footer class="tg-profile-edit__footer">
+        <button id="userProfileEditSave" type="submit">Сохранить</button>
       </footer>
     </form>
   </section>
