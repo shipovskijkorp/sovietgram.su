@@ -124,9 +124,15 @@ class ProfileForm(forms.ModelForm):
         widget=forms.FileInput(attrs={"accept": "image/png,image/jpeg,image/webp"}),
     )
 
+    birthday = forms.DateField(
+        label="День рождения",
+        required=False,
+        widget=forms.DateInput(attrs={"type": "date"}),
+    )
+
     class Meta:
         model = User
-        fields = ("first_name", "last_name", "username", "bio", "email", "avatar")
+        fields = ("first_name", "last_name", "username", "bio", "email", "avatar", "birthday")
 
     def clean_username(self):
         username = self.cleaned_data["username"].strip()
@@ -203,10 +209,37 @@ class OverlayProfileForm(forms.ModelForm):
     username = forms.CharField(max_length=150)
     bio = forms.CharField(required=False, max_length=160)
     avatar = forms.ImageField(required=False)
+    birthday = forms.DateField(required=False)
+    personal_channel = forms.ModelChoiceField(queryset=None, required=False)
 
     class Meta:
         model = User
-        fields = ("first_name", "last_name", "username", "bio", "avatar")
+        fields = (
+            "first_name",
+            "last_name",
+            "username",
+            "bio",
+            "avatar",
+            "birthday",
+            "personal_channel",
+        )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from apps.messenger.models import Chat, ChatParticipant
+
+        if self.instance and self.instance.pk:
+            channel_ids = ChatParticipant.objects.filter(
+                user=self.instance,
+                role=ChatParticipant.Role.OWNER,
+                chat__type=Chat.Type.CHANNEL,
+            ).values_list("chat_id", flat=True)
+            self.fields["personal_channel"].queryset = Chat.objects.filter(
+                pk__in=channel_ids,
+                type=Chat.Type.CHANNEL,
+            ).order_by("title", "pk")
+        else:
+            self.fields["personal_channel"].queryset = Chat.objects.none()
 
     def clean_username(self):
         username = self.cleaned_data["username"].strip()
