@@ -508,7 +508,7 @@ async function toggleMessagePin(article) {
 
 async function deleteMessage(article) {
   if (!article?.dataset.deleteUrl) return;
-  if (!window.confirm("Удалить это сообщение у обоих участников?")) return;
+  if (!window.confirm("Удалить это сообщение?")) return;
   try {
     const payload = await postForm(article.dataset.deleteUrl);
     applyMessageUpdate(payload.message);
@@ -609,7 +609,7 @@ function renderSearchResults(results) {
   if (!results.length) {
     const empty = document.createElement("div");
     empty.className = "chat-search-empty";
-    empty.textContent = searchInput?.value.trim() ? "Совпадений нет." : "Введите текст или имя файла.";
+    empty.textContent = searchInput?.value.trim() ? "Ничего не нашлось." : "Введите текст сообщения или название файла.";
     searchResults.appendChild(empty);
     return;
   }
