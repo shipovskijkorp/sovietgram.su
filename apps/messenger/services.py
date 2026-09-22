@@ -95,7 +95,7 @@ def delete_message_content(message):
 def attachment_url(attachment):
     if attachment.kind == MessageAttachment.Kind.FILE:
         return reverse("messenger:download_attachment", args=[attachment.pk])
-    return attachment.file.url
+    return reverse("messenger:view_attachment", args=[attachment.pk])
 
 
 def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=None):
