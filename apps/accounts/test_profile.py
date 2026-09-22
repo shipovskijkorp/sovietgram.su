@@ -78,6 +78,48 @@ class ProfileTests(TestCase):
         self.assertContains(response, "Публичное описание")
         self.assertNotContains(response, self.user.email)
 
+    def test_public_profile_ajax_returns_compact_safe_payload(self):
+        self.user.first_name = "Иван"
+        self.user.bio = "Публичное описание"
+        self.user.save(update_fields=["first_name", "bio"])
+
+        self.client.force_login(self.user)
+        other = User.objects.create_user(
+            username="petr",
+            email="petr@example.com",
+            password=self.password,
+            first_name="Пётр",
+            bio="Собираю BuildCraft.",
+        )
+
+        response = self.client.get(
+            reverse("accounts:public_profile", args=[other.username]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["display_name"], "Пётр")
+        self.assertEqual(payload["username"], "petr")
+        self.assertEqual(payload["bio"], "Собираю BuildCraft.")
+        self.assertIn("status", payload)
+        self.assertNotIn("email", payload)
+        self.assertNotIn("phone", payload)
+        self.assertNotIn("birthday", payload)
+
+    def test_messenger_profile_overlay_omits_forbidden_telegram_extras(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("messenger:home"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="userProfileOverlay"', html=False)
+        self.assertContains(response, "Имя пользователя")
+        self.assertNotContains(response, "Номер телефона")
+        self.assertNotContains(response, "Подарки")
+        self.assertNotContains(response, "QR")
+        self.assertNotContains(response, "Истории")
+        self.assertNotContains(response, "Автоматизация чатов")
+        self.assertNotContains(response, "Цвет имени")
+
     def test_profile_rejects_oversized_avatar_dimensions(self):
         self.client.force_login(self.user)
         buffer = BytesIO()
