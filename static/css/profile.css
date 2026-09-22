@@ -1784,3 +1784,135 @@ body:not([data-theme="dark"]) .tg-profile-channel-picker__footer {
     border-radius: 16px 16px 0 0;
   }
 }
+
+
+/* Telegram-like personal channel card inside profile */
+.tg-profile__personal-channel {
+  margin-top: 7px;
+  min-height: 78px;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  background: #1d1916;
+}
+
+.tg-profile__personal-channel[hidden] {
+  display: none !important;
+}
+
+.tg-profile-channel-card__avatar {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #a52b34;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.tg-profile-channel-card__avatar img,
+.tg-profile-channel-card__avatar > span {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  object-fit: cover;
+}
+
+.tg-profile-channel-card__content {
+  min-width: 0;
+}
+
+.tg-profile-channel-card__head {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.tg-profile-channel-card__head strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #f0e5d8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tg-profile-channel-card__head time {
+  color: #a18d78;
+  font-size: 9.5px;
+  white-space: nowrap;
+}
+
+.tg-profile-channel-card__content p {
+  margin: 2px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #c9b9a8;
+  font-size: 10.5px;
+}
+
+.tg-profile-channel-card__content small {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #8f7d69;
+  font-size: 9.5px;
+}
+
+/* Long profile text must never escape the card. */
+.tg-profile__bio,
+.tg-profile__bio p,
+.tg-profile__bio small,
+.tg-profile-edit__bio-section,
+.tg-profile-edit__bio-section label,
+.tg-profile-edit__bio-section textarea {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.tg-profile__bio {
+  overflow: hidden;
+}
+
+.tg-profile__bio p {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.tg-profile-edit__bio-section textarea {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+body:not([data-theme="dark"]) .tg-profile__personal-channel {
+  background: #fffaf1;
+}
+
+body:not([data-theme="dark"]) .tg-profile-channel-card__head strong {
+  color: #493d32;
+}
+
+body:not([data-theme="dark"]) .tg-profile-channel-card__head time,
+body:not([data-theme="dark"]) .tg-profile-channel-card__content small {
+  color: #8f7c67;
+}
+
+body:not([data-theme="dark"]) .tg-profile-channel-card__content p {
+  color: #6f5c4b;
+}
