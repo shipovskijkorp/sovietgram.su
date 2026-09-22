@@ -27,6 +27,8 @@
         <a class="chat-row{% if selected_chat and selected_chat.pk == chat.pk %} is-active{% endif %}" href="{% url 'messenger:chat' chat.pk %}" data-chat-row data-search="{{ chat.search_text_ui }}">
           {% if chat.type == 'private' and chat.other_user.avatar %}
             <img class="chat-row__avatar" src="{{ chat.other_user.avatar.url }}" alt="">
+          {% elif chat.type != 'private' and chat.avatar %}
+            <img class="chat-row__avatar" src="{{ chat.avatar.url }}" alt="">
           {% else %}
             <span class="chat-row__avatar chat-row__avatar--fallback">{{ chat.avatar_text_ui }}</span>
           {% endif %}
@@ -94,7 +96,11 @@
           </a>
         {% else %}
           <span class="conversation-header__identity conversation-header__identity--saved">
-            <span class="conversation-header__avatar conversation-header__avatar--fallback">{{ selected_chat.avatar_text_ui }}</span>
+            {% if selected_chat.avatar %}
+              <img class="conversation-header__avatar" src="{{ selected_chat.avatar.url }}" alt="">
+            {% else %}
+              <span class="conversation-header__avatar conversation-header__avatar--fallback">{{ selected_chat.avatar_text_ui }}</span>
+            {% endif %}
             <span class="conversation-header__text">
               <strong>{{ selected_chat.display_name_ui }}</strong>
               <small id="conversationStatus">{{ selected_chat.other_status_ui }}</small>
@@ -171,7 +177,11 @@
               <small>@{{ selected_chat.username_ui }}</small>
               <p>Начало вашей переписки. Архивы пока чисты.</p>
             {% else %}
-              <span>{{ selected_chat.avatar_text_ui }}</span>
+              {% if selected_chat.avatar %}
+                <img src="{{ selected_chat.avatar.url }}" alt="">
+              {% else %}
+                <span>{{ selected_chat.avatar_text_ui }}</span>
+              {% endif %}
               <strong>{{ selected_chat.display_name_ui }}</strong>
               {% if selected_chat.username_ui %}<small>@{{ selected_chat.username_ui }}</small>{% else %}<small>{{ selected_chat.status_ui }}</small>{% endif %}
               <p>{% if selected_chat.is_saved_ui %}Складируйте здесь важное. Госплан не возражает.{% elif selected_chat.type == 'channel' %}Линия вещания открыта.{% else %}Общее собрание объявляется открытым.{% endif %}</p>
@@ -359,7 +369,11 @@
       <h2>{{ selected_chat.display_name_ui }}</h2><p>@{{ selected_chat.username_ui }}</p>
       <a href="{% url 'accounts:public_profile' selected_chat.other_user.username %}">Открыть профиль</a>
     {% else %}
-      <span class="chat-info-avatar chat-info-avatar--fallback">{{ selected_chat.avatar_text_ui }}</span>
+      {% if selected_chat.avatar %}
+        <img class="chat-info-avatar" src="{{ selected_chat.avatar.url }}" alt="">
+      {% else %}
+        <span class="chat-info-avatar chat-info-avatar--fallback">{{ selected_chat.avatar_text_ui }}</span>
+      {% endif %}
       <h2>{{ selected_chat.display_name_ui }}</h2>
       <p>{% if selected_chat.username_ui %}@{{ selected_chat.username_ui }} · {% endif %}{{ selected_chat.status_ui }}</p>
       {% if selected_chat.description %}<p>{{ selected_chat.description }}</p>{% endif %}
