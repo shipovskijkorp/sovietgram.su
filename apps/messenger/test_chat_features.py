@@ -66,6 +66,77 @@ class ChatFeatureTests(TestCase):
         self.assertEqual(admin.role, "admin")
         self.assertEqual(member.role, "member")
 
+    def test_group_creation_adds_owner_and_requested_members(self):
+        response = self.client.post(
+            reverse("messenger:create_community"),
+            {
+                "type": Chat.Type.GROUP,
+                "title": "Совет разработчиков",
+                "username": "",
+                "description": "Обсуждаем великие стройки.",
+                "members": "@bob, @charlie",
+            },
+        )
+        group = Chat.objects.get(type=Chat.Type.GROUP)
+        self.assertRedirects(response, reverse("messenger:chat", args=[group.pk]))
+        self.assertEqual(group.title, "Совет разработчиков")
+        self.assertEqual(group.memberships.count(), 3)
+        self.assertEqual(
+            group.memberships.get(user=self.alice).role,
+            ChatParticipant.Role.OWNER,
+        )
+        self.assertEqual(
+            group.memberships.get(user=self.bob).role,
+            ChatParticipant.Role.MEMBER,
+        )
+
+    def test_channel_can_be_found_joined_and_is_read_only_for_member(self):
+        response = self.client.post(
+            reverse("messenger:create_community"),
+            {
+                "type": Chat.Type.CHANNEL,
+                "title": "Радио Stalingram",
+                "username": "radio_stalingram",
+                "description": "Вести с цифровых полей.",
+                "members": "",
+            },
+        )
+        channel = Chat.objects.get(type=Chat.Type.CHANNEL)
+        self.assertRedirects(response, reverse("messenger:chat", args=[channel.pk]))
+
+        search = self.client.get(
+            reverse("messenger:contacts"),
+            {"q": "radio_stalingram"},
+        )
+        self.assertContains(search, "Радио Stalingram")
+        self.assertContains(search, "@radio_stalingram")
+
+        self.client.force_login(self.charlie)
+        join = self.client.post(
+            reverse("messenger:join_public_chat", args=[channel.username])
+        )
+        self.assertRedirects(join, reverse("messenger:chat", args=[channel.pk]))
+        membership = channel.memberships.get(user=self.charlie)
+        self.assertEqual(membership.role, ChatParticipant.Role.MEMBER)
+
+        forbidden = self.client.post(
+            reverse("messenger:send_message", args=[channel.pk]),
+            {"text": "Попытка захватить эфир"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(forbidden.status_code, 403)
+        self.assertFalse(Message.objects.filter(chat=channel).exists())
+
+        self.client.force_login(self.alice)
+        allowed = self.client.post(
+            reverse("messenger:send_message", args=[channel.pk]),
+            {"text": "Говорит Stalingram."},
+        )
+        self.assertEqual(allowed.status_code, 302)
+        self.assertTrue(
+            Message.objects.filter(chat=channel, text="Говорит Stalingram.").exists()
+        )
+
     def test_saved_messages_chat_is_single_participant_chat(self):
         response = self.client.get(reverse("messenger:saved_messages"))
         self.assertEqual(response.status_code, 302)
