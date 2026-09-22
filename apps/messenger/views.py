@@ -457,7 +457,12 @@ def edit_message(request, chat_id, message_id):
 @require_POST
 def delete_message(request, chat_id, message_id):
     chat = _chat_for_user(request.user, chat_id)
-    message = get_object_or_404(_base_message_queryset(chat), pk=message_id, is_deleted=False)
+    message = get_object_or_404(
+        _base_message_queryset(chat),
+        pk=message_id,
+        sender=request.user,
+        is_deleted=False,
+    )
     with transaction.atomic():
         delete_message_content(message)
     message = _base_message_queryset(chat).get(pk=message.pk)
@@ -618,15 +623,55 @@ def typing(request, chat_id):
     return JsonResponse({"ok": True})
 
 
+def _attachment_for_user(user, attachment_id):
+    return get_object_or_404(
+        MessageAttachment.objects.select_related("message", "message__chat"),
+        pk=attachment_id,
+        message__chat__participants=user,
+        message__is_deleted=False,
+    )
+
+
+INLINE_MEDIA_TYPES = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".mp4": "video/mp4",
+    ".webm": "video/webm",
+    ".mov": "video/quicktime",
+    ".m4v": "video/x-m4v",
+}
+
+
+@login_required
+@require_GET
+def view_attachment(request, attachment_id):
+    attachment = _attachment_for_user(request.user, attachment_id)
+    if attachment.kind not in {
+        MessageAttachment.Kind.IMAGE,
+        MessageAttachment.Kind.VIDEO,
+    }:
+        return JsonResponse({"ok": False, "error": "Вложение нельзя открыть inline."}, status=404)
+
+    extension = Path(attachment.original_name).suffix.lower()
+    content_type = INLINE_MEDIA_TYPES.get(extension)
+    if content_type is None:
+        return JsonResponse({"ok": False, "error": "Неподдерживаемый тип медиа."}, status=404)
+
+    attachment.file.open("rb")
+    return FileResponse(
+        attachment.file,
+        as_attachment=False,
+        filename=Path(attachment.original_name).name or "media",
+        content_type=content_type,
+    )
+
+
 @login_required
 @require_GET
 def download_attachment(request, attachment_id):
-    attachment = get_object_or_404(
-        MessageAttachment.objects.select_related("message", "message__chat"),
-        pk=attachment_id,
-        message__chat__participants=request.user,
-        message__is_deleted=False,
-    )
+    attachment = _attachment_for_user(request.user, attachment_id)
     attachment.file.open("rb")
     return FileResponse(
         attachment.file,
