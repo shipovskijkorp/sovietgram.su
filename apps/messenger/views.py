@@ -212,7 +212,8 @@ def _forward_targets(user):
     return targets
 
 
-def _messenger_context(user, selected_chat=None, chat_messages=None, archived=False, focus_id=0):
+def _messenger_context(request, selected_chat=None, chat_messages=None, archived=False, focus_id=0):
+    user = request.user
     context = {
         "chats": _prepare_sidebar_chats(user, archived=archived),
         "selected_chat": selected_chat,
@@ -223,7 +224,7 @@ def _messenger_context(user, selected_chat=None, chat_messages=None, archived=Fa
         "forward_targets": _forward_targets(user),
         "message_focus_id": focus_id,
         "server_time": timezone.now().isoformat(),
-        "account_slots": account_slots(request=None) if False else None,
+        "account_slots": account_slots(request),
     }
     if selected_chat is None:
         return context
@@ -304,7 +305,7 @@ def home(request):
     return render(
         request,
         "messenger/index.html",
-        _messenger_context(request.user, archived=archived),
+        _messenger_context(request, archived=archived),
     )
 
 
@@ -337,7 +338,7 @@ def chat_detail(request, chat_id):
         request,
         "messenger/index.html",
         _messenger_context(
-            request.user,
+            request,
             chat,
             chat_messages,
             archived=membership.is_archived,
