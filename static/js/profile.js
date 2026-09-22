@@ -113,8 +113,12 @@ const userProfileStatus = document.getElementById("userProfileStatus");
 const userProfileBioSection = document.getElementById("userProfileBioSection");
 const userProfileBio = document.getElementById("userProfileBio");
 const userProfileUsername = document.getElementById("userProfileUsername");
-const userProfileChannelRow = document.getElementById("userProfileChannelRow");
-const userProfileChannel = document.getElementById("userProfileChannel");
+const userProfileChannelCard = document.getElementById("userProfileChannelCard");
+const userProfileChannelAvatar = document.getElementById("userProfileChannelAvatar");
+const userProfileChannelTitle = document.getElementById("userProfileChannelTitle");
+const userProfileChannelTime = document.getElementById("userProfileChannelTime");
+const userProfileChannelPreview = document.getElementById("userProfileChannelPreview");
+const userProfileChannelMeta = document.getElementById("userProfileChannelMeta");
 const userProfileBirthdayRow = document.getElementById("userProfileBirthdayRow");
 const userProfileBirthday = document.getElementById("userProfileBirthday");
 const userProfileActions = document.getElementById("userProfileActions");
@@ -198,9 +202,35 @@ function renderUserProfile(profile) {
   }
 
   const hasChannel = Boolean(profile.personal_channel);
-  if (userProfileChannelRow) userProfileChannelRow.hidden = !hasChannel;
-  if (userProfileChannel && hasChannel) {
-    userProfileChannel.textContent = profile.personal_channel.title || profile.personal_channel.username || "";
+  if (userProfileChannelCard) userProfileChannelCard.hidden = !hasChannel;
+  if (hasChannel) {
+    const channel = profile.personal_channel;
+    if (userProfileChannelAvatar) {
+      userProfileChannelAvatar.replaceChildren();
+      if (channel.avatar_url) {
+        const image = document.createElement("img");
+        image.src = channel.avatar_url;
+        image.alt = "";
+        userProfileChannelAvatar.appendChild(image);
+      } else {
+        const fallback = document.createElement("span");
+        fallback.textContent = (channel.title || channel.username || "К").trim().slice(0, 2).toUpperCase();
+        userProfileChannelAvatar.appendChild(fallback);
+      }
+    }
+    if (userProfileChannelTitle) {
+      userProfileChannelTitle.textContent = channel.title || (channel.username ? `@${channel.username}` : "Канал");
+    }
+    if (userProfileChannelTime) {
+      userProfileChannelTime.textContent = channel.last_message_time || "";
+      userProfileChannelTime.hidden = !channel.last_message_time;
+    }
+    if (userProfileChannelPreview) {
+      userProfileChannelPreview.textContent = channel.last_message_preview || "";
+    }
+    if (userProfileChannelMeta) {
+      userProfileChannelMeta.textContent = `Канал · ${channel.subscriber_text || "0 подписчиков"}`;
+    }
   }
 
   const hasBirthday = Boolean(profile.birthday_display);
