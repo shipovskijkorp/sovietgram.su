@@ -3,8 +3,10 @@ from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView, PasswordChangeView
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .forms import (
@@ -139,6 +141,55 @@ def public_profile(request, username):
     is_contact = False
     if request.user.is_authenticated and request.user.pk != profile_user.pk:
         is_contact = Contact.objects.filter(owner=request.user, user=profile_user).exists()
+
+    if request.headers.get("x-requested-with") == "XMLHttpRequest":
+        if profile_user.is_online:
+            status = "в сети"
+        elif profile_user.last_seen_at:
+            seen = timezone.localtime(profile_user.last_seen_at)
+            if seen.date() == timezone.localdate():
+                status = f"был(а) сегодня в {seen:%H:%M}"
+            elif seen.date() == timezone.localdate() - timezone.timedelta(days=1):
+                status = f"был(а) вчера в {seen:%H:%M}"
+            else:
+                status = f"был(а) {seen:%d.%m.%Y}"
+        else:
+            status = "был(а) давно"
+
+        return JsonResponse(
+            {
+                "ok": True,
+                "display_name": profile_user.display_name,
+                "username": profile_user.username,
+                "bio": profile_user.bio,
+                "status": status,
+                "avatar_url": profile_user.avatar.url if profile_user.avatar else "",
+                "initials": profile_user.initials,
+                "is_contact": is_contact,
+                "is_self": bool(
+                    request.user.is_authenticated
+                    and request.user.pk == profile_user.pk
+                ),
+                "start_chat_url": (
+                    reverse("messenger:start_chat", args=[profile_user.username])
+                    if request.user.is_authenticated
+                    and request.user.pk != profile_user.pk
+                    else ""
+                ),
+                "add_contact_url": (
+                    reverse("messenger:add_contact", args=[profile_user.username])
+                    if request.user.is_authenticated
+                    and request.user.pk != profile_user.pk
+                    else ""
+                ),
+                "remove_contact_url": (
+                    reverse("messenger:remove_contact", args=[profile_user.username])
+                    if request.user.is_authenticated
+                    and request.user.pk != profile_user.pk
+                    else ""
+                ),
+            }
+        )
 
     return render(
         request,
