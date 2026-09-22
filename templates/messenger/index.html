@@ -449,8 +449,8 @@
   <nav class="profile-drawer__nav profile-drawer__nav--telegram" aria-label="Главное меню">
     <a href="{% url 'messenger:home' %}?archived=1"><span>▣</span><strong>Архив</strong>{% if archived_count %}<b>{{ archived_count }}</b>{% endif %}</a>
     <a href="{% url 'accounts:profile' %}"><span>◎</span><strong>Мой профиль</strong></a>
-    <a href="{% url 'messenger:create_community' %}?type=group"><span>♙</span><strong>Создать группу</strong></a>
-    <a href="{% url 'messenger:create_community' %}?type=channel"><span>◉</span><strong>Создать канал</strong></a>
+    <a href="{% url 'messenger:create_community' %}?type=group" data-community-open="group"><span>♙</span><strong>Создать группу</strong></a>
+    <a href="{% url 'messenger:create_community' %}?type=channel" data-community-open="channel"><span>◉</span><strong>Создать канал</strong></a>
     <a href="{% url 'messenger:contacts' %}"><span>♧</span><strong>Контакты</strong></a>
     <a href="{% url 'messenger:calls' %}"><span>☎</span><strong>Звонки</strong></a>
     <a href="{% url 'messenger:saved_messages' %}"><span>☆</span><strong>Избранное</strong></a>
@@ -465,6 +465,113 @@
     <small>Stalingram · связь трудящихся</small>
   </div>
 </aside>
+
+<div class="community-wizard-backdrop"
+     id="communityWizard"
+     data-create-url="{{ community_create_url }}"
+     data-auto-open="{{ request.GET.create|default:'' }}"
+     hidden>
+  <section class="community-wizard" role="dialog" aria-modal="true" aria-labelledby="communityWizardTitle">
+    <form id="communityWizardForm" enctype="multipart/form-data" novalidate>
+      {% csrf_token %}
+      <input id="communityWizardType" type="hidden" name="type" value="group">
+      <input id="communityWizardMembers" type="hidden" name="members" value="">
+      <input id="communityWizardVisibility" type="hidden" name="visibility" value="public">
+
+      <div class="community-wizard-step" data-community-step="details">
+        <div class="community-wizard__body community-wizard__body--details">
+          <label class="community-avatar-picker" for="communityAvatarInput" title="Выбрать аватар">
+            <input id="communityAvatarInput" type="file" name="avatar" accept="image/png,image/jpeg,image/webp" hidden>
+            <span class="community-avatar-picker__preview" id="communityAvatarPreview">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 6.5 10 4h4l1.5 2.5H18a3 3 0 0 1 3 3V17a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V9.5a3 3 0 0 1 3-3h2.5Z"/><circle cx="12" cy="13" r="4"/></svg>
+            </span>
+          </label>
+
+          <div class="community-wizard__fields">
+            <label class="community-line-field">
+              <span id="communityTitleLabel">Название группы</span>
+              <input id="communityTitleInput" type="text" name="title" maxlength="120" autocomplete="off">
+            </label>
+            <label class="community-line-field community-line-field--description">
+              <span>Описание <small>(необязательно)</small></span>
+              <textarea id="communityDescriptionInput" name="description" maxlength="500" rows="2"></textarea>
+            </label>
+          </div>
+        </div>
+        <div class="community-wizard-error" id="communityDetailsError" hidden></div>
+        <footer class="community-wizard__footer">
+          <button class="community-wizard__secondary" type="button" data-community-close>Отмена</button>
+          <button class="community-wizard__primary" id="communityDetailsNext" type="button">Далее</button>
+        </footer>
+      </div>
+
+      <div class="community-wizard-step" data-community-step="members" hidden>
+        <header class="community-wizard__header">
+          <strong>Добавить участников</strong>
+          <small id="communitySelectedCount">0 выбрано</small>
+        </header>
+        <label class="community-member-search">
+          <span>⌕</span>
+          <input id="communityMemberSearch" type="search" placeholder="Поиск" autocomplete="off">
+        </label>
+        <div class="community-member-list" id="communityMemberList">
+          {% for person in community_candidates %}
+            <label class="community-member-row" data-member-row data-member-search="{{ person.display_name|lower }} {{ person.username|lower }}">
+              <input type="checkbox" value="{{ person.username }}" hidden>
+              {% if person.avatar %}
+                <img src="{{ person.avatar.url }}" alt="">
+              {% else %}
+                <span class="community-member-row__avatar">{{ person.initials }}</span>
+              {% endif %}
+              <span class="community-member-row__copy">
+                <strong>{{ person.display_name }}</strong>
+                <small>{% if person.is_online %}в сети{% else %}@{{ person.username }}{% endif %}</small>
+              </span>
+              <span class="community-member-row__check">✓</span>
+            </label>
+          {% empty %}
+            <div class="community-member-empty">Пока некого добавлять.</div>
+          {% endfor %}
+        </div>
+        <div class="community-wizard-error" id="communityMembersError" hidden></div>
+        <footer class="community-wizard__footer">
+          <button class="community-wizard__secondary" type="button" data-community-back>Назад</button>
+          <button class="community-wizard__primary" id="communityCreateGroup" type="button">Создать</button>
+        </footer>
+      </div>
+
+      <div class="community-wizard-step" data-community-step="privacy" hidden>
+        <header class="community-wizard__header">
+          <strong>Тип канала</strong>
+          <small>Кто сможет найти канал</small>
+        </header>
+        <div class="community-privacy-options">
+          <label class="community-privacy-option">
+            <input type="radio" name="wizard_visibility" value="public" checked>
+            <span class="community-radio"></span>
+            <span><strong>Публичный канал</strong><small>Его можно найти через поиск и подписаться.</small></span>
+          </label>
+          <label class="community-privacy-option">
+            <input type="radio" name="wizard_visibility" value="private">
+            <span class="community-radio"></span>
+            <span><strong>Частный канал</strong><small>Доступ только по приглашению.</small></span>
+          </label>
+        </div>
+        <label class="community-line-field community-line-field--username" id="communityUsernameField">
+          <span>Публичная ссылка</span>
+          <span class="community-username-shell"><b>@</b><input id="communityUsernameInput" type="text" name="username" maxlength="64" placeholder="channel_name" autocomplete="off"></span>
+        </label>
+        <div class="community-private-note" id="communityPrivateNote" hidden>Публичный адрес не потребуется. Приглашения можно будет добавить позже.</div>
+        <div class="community-wizard-error" id="communityPrivacyError" hidden></div>
+        <footer class="community-wizard__footer">
+          <button class="community-wizard__secondary" type="button" data-community-back>Назад</button>
+          <button class="community-wizard__primary" id="communityCreateChannel" type="button">Создать</button>
+        </footer>
+      </div>
+    </form>
+  </section>
+</div>
+
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 {% endblock %}
 
