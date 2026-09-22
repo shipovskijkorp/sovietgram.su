@@ -173,6 +173,7 @@ function setUserProfileMode(mode) {
 
 function closeUserProfile() {
   if (!userProfileOverlay) return;
+  if (userProfileChannelPicker) userProfileChannelPicker.hidden = true;
   userProfileOverlay.hidden = true;
   setUserProfileMode("view");
   openedProfile = null;
