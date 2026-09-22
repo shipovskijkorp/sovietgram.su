@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
@@ -149,7 +151,7 @@ def public_profile(request, username):
             seen = timezone.localtime(profile_user.last_seen_at)
             if seen.date() == timezone.localdate():
                 status = f"был(а) сегодня в {seen:%H:%M}"
-            elif seen.date() == timezone.localdate() - timezone.timedelta(days=1):
+            elif seen.date() == timezone.localdate() - timedelta(days=1):
                 status = f"был(а) вчера в {seen:%H:%M}"
             else:
                 status = f"был(а) {seen:%d.%m.%Y}"
