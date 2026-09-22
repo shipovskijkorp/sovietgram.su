@@ -374,11 +374,16 @@ def create_community(request):
 
             if chat.type == Chat.Type.GROUP:
                 requested = form.cleaned_data["members"]
-                users = list(
-                    User.objects.filter(
-                        username__in=requested,
-                        is_active=True,
-                    ).exclude(pk=request.user.pk)
+                member_query = Q()
+                for username in requested:
+                    member_query |= Q(username__iexact=username)
+                users = (
+                    list(
+                        User.objects.filter(member_query, is_active=True)
+                        .exclude(pk=request.user.pk)
+                    )
+                    if requested
+                    else []
                 )
                 ChatParticipant.objects.bulk_create(
                     [
@@ -789,7 +794,12 @@ def chat_action(request, chat_id):
                 draft_updated_at=None,
                 last_typing_at=None,
             )
-        messages.success(request, "История очищена у обоих участников.")
+        messages.success(
+            request,
+            "История чата очищена для всех."
+            if chat.type != Chat.Type.PRIVATE
+            else "История переписки очищена.",
+        )
     else:
         messages.error(request, "Неизвестное действие с чатом.")
 
