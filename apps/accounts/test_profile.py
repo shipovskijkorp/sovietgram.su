@@ -1,4 +1,8 @@
+from io import BytesIO
+
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
+from PIL import Image
 from django.urls import reverse
 
 from .models import User
@@ -73,6 +77,29 @@ class ProfileTests(TestCase):
         self.assertContains(response, "Иван")
         self.assertContains(response, "Публичное описание")
         self.assertNotContains(response, self.user.email)
+
+    def test_profile_rejects_oversized_avatar_dimensions(self):
+        self.client.force_login(self.user)
+        buffer = BytesIO()
+        Image.new("RGB", (5000, 1), "white").save(buffer, format="PNG")
+        avatar = SimpleUploadedFile(
+            "too-wide.png",
+            buffer.getvalue(),
+            content_type="image/png",
+        )
+        response = self.client.post(
+            reverse("accounts:profile"),
+            {
+                "first_name": "",
+                "last_name": "",
+                "username": self.user.username,
+                "bio": "",
+                "email": self.user.email,
+                "avatar": avatar,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Фотография слишком большая")
 
     def test_password_can_be_changed(self):
         self.client.force_login(self.user)
