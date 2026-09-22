@@ -205,7 +205,6 @@ class UserSettingsForm(forms.ModelForm):
 
 class OverlayProfileForm(forms.ModelForm):
     first_name = forms.CharField(required=False, max_length=150)
-    last_name = forms.CharField(required=False, max_length=150)
     username = forms.CharField(max_length=150)
     bio = forms.CharField(required=False, max_length=160)
     avatar = forms.ImageField(required=False)
@@ -216,7 +215,6 @@ class OverlayProfileForm(forms.ModelForm):
         model = User
         fields = (
             "first_name",
-            "last_name",
             "username",
             "bio",
             "avatar",
