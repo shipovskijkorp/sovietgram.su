@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Новый чат — Stalingram{% endblock %}
+{% block body_class %}contacts-body{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/messenger.css' %}">{% endblock %}
+
+{% block content %}
+<main class="contacts-shell">
+  <section class="contacts-card">
+    <header class="contacts-topbar">
+      <a class="icon-button" href="{% url 'messenger:contacts' %}" aria-label="Назад">←</a>
+      <div>
+        <strong>Новый коллектив</strong>
+        <small>Группа для разговора, канал — для вещания. Госплан одобряет ясные назначения.</small>
+      </div>
+    </header>
+
+    <form method="post" class="community-form" novalidate>
+      {% csrf_token %}
+      {% if form.non_field_errors %}<div class="form-alert">{{ form.non_field_errors|striptags }}</div>{% endif %}
+
+      <fieldset class="community-type">
+        <legend>Что создаём</legend>
+        {% for radio in form.type %}
+          <label>{{ radio.tag }}<span><strong>{{ radio.choice_label }}</strong><small>{% if radio.data.value == 'group' %}Все участники могут писать.{% else %}Публикуют владелец и администраторы, остальные читают.{% endif %}</small></span></label>
+        {% endfor %}
+      </fieldset>
+
+      <label class="community-field">
+        <span>{{ form.title.label }}</span>
+        {{ form.title }}
+        {% for error in form.title.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </label>
+
+      <label class="community-field">
+        <span>{{ form.username.label }} <small>@username</small></span>
+        {{ form.username }}
+        <small>Для канала обязателен. По нему канал находится в общем поиске.</small>
+        {% for error in form.username.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </label>
+
+      <label class="community-field">
+        <span>{{ form.description.label }}</span>
+        {{ form.description }}
+        {% for error in form.description.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </label>
+
+      <label class="community-field" id="communityMembersField">
+        <span>{{ form.members.label }}</span>
+        {{ form.members }}
+        <small>Можно перечислить несколько @username через запятую. Для канала это поле не используется.</small>
+        {% for error in form.members.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </label>
+
+      <div class="community-actions">
+        <a class="person-action" href="{% url 'messenger:contacts' %}">Отмена</a>
+        <button class="person-action person-action--primary" type="submit">Создать</button>
+      </div>
+    </form>
+  </section>
+</main>
+{% endblock %}
