@@ -66,7 +66,7 @@
     </section>
 
     <footer class="sidebar__footer">
-      <a class="account-mini" href="{% url 'accounts:profile' %}" title="Открыть профиль">
+      <a class="account-mini" href="{% url 'accounts:public_profile' request.user.username %}" data-user-profile title="Открыть профиль">
         {% if request.user.avatar %}
           <img class="account-mini__avatar account-mini__avatar--image" src="{{ request.user.avatar.url }}" alt="">
         {% else %}
@@ -462,7 +462,7 @@
 
   <nav class="profile-drawer__nav profile-drawer__nav--telegram" aria-label="Главное меню">
     <a href="{% url 'messenger:home' %}?archived=1"><span>▣</span><strong>Архив</strong>{% if archived_count %}<b>{{ archived_count }}</b>{% endif %}</a>
-    <a href="{% url 'accounts:profile' %}"><span>◎</span><strong>Мой профиль</strong></a>
+    <a href="{% url 'accounts:public_profile' request.user.username %}" data-user-profile><span>◎</span><strong>Мой профиль</strong></a>
     <a href="{% url 'messenger:create_community' %}?type=group" data-community-open="group"><span>♙</span><strong>Создать группу</strong></a>
     <a href="{% url 'messenger:create_community' %}?type=channel" data-community-open="channel"><span>◉</span><strong>Создать канал</strong></a>
     <a href="{% url 'messenger:contacts' %}"><span>♧</span><strong>Контакты</strong></a>
