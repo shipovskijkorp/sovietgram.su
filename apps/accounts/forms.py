@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from django import forms
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 
@@ -152,10 +154,30 @@ class ProfileForm(forms.ModelForm):
         if getattr(avatar, "size", 0) > 5 * 1024 * 1024:
             raise forms.ValidationError("Фотография должна быть не больше 5 МБ.")
 
-        content_type = getattr(avatar, "content_type", "")
-        allowed_types = {"image/jpeg", "image/png", "image/webp"}
-        if content_type and content_type not in allowed_types:
+        content_type = (getattr(avatar, "content_type", "") or "").lower()
+        extension = Path(avatar.name).suffix.lower()
+        allowed_types = {
+            ".jpg": ("image/jpeg", "JPEG"),
+            ".jpeg": ("image/jpeg", "JPEG"),
+            ".png": ("image/png", "PNG"),
+            ".webp": ("image/webp", "WEBP"),
+        }
+        expected = allowed_types.get(extension)
+        if expected is None or content_type != expected[0]:
             raise forms.ValidationError("Поддерживаются только PNG, JPEG и WebP.")
+
+        image = getattr(avatar, "image", None)
+        if image is None:
+            raise forms.ValidationError("Не удалось проверить изображение.")
+        width, height = image.size
+        if width > 4096 or height > 4096 or width * height > 16_000_000:
+            raise forms.ValidationError(
+                "Фотография слишком большая: максимум 4096×4096 и 16 мегапикселей."
+            )
+        if (image.format or "").upper() != expected[1]:
+            raise forms.ValidationError(
+                "Расширение фотографии не соответствует её реальному формату."
+            )
         return avatar
 
 
