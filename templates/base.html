@@ -7,13 +7,13 @@
   <meta name="theme-color" content="{% if request.user.is_authenticated and request.user.theme == 'dark' %}#171412{% else %}#cc0000{% endif %}">
   <link rel="icon" type="image/png" href="{% static 'img/stalingram-icon.png' %}">
   <title>{% block title %}Stalingram{% endblock %}</title>
-  <link rel="stylesheet" href="{% static 'css/styles.css' %}">
-  <link rel="stylesheet" href="{% static 'css/brand.css' %}">
-  <link rel="stylesheet" href="{% static 'css/responsive.css' %}">
-  <link rel="stylesheet" href="{% static 'css/profile.css' %}">
+  <link rel="stylesheet" href="{% static 'css/styles.css' %}?v={{ static_version }}">
+  <link rel="stylesheet" href="{% static 'css/brand.css' %}?v={{ static_version }}">
+  <link rel="stylesheet" href="{% static 'css/responsive.css' %}?v={{ static_version }}">
+  <link rel="stylesheet" href="{% static 'css/profile.css' %}?v={{ static_version }}">
   {% block extra_head %}{% endblock %}
-  <link rel="stylesheet" href="{% static 'css/theme.css' %}">
-  <link rel="stylesheet" href="{% static 'css/palette.css' %}">
+  <link rel="stylesheet" href="{% static 'css/theme.css' %}?v={{ static_version }}">
+  <link rel="stylesheet" href="{% static 'css/palette.css' %}?v={{ static_version }}">
 </head>
 <body class="{% block body_class %}{% endblock %}"{% if request.user.is_authenticated %} data-theme="{{ request.user.theme }}" data-enter-to-send="{{ request.user.enter_to_send|yesno:'true,false' }}"{% endif %}>
   {% if messages %}
@@ -22,8 +22,8 @@
     </div>
   {% endif %}
   {% block content %}{% endblock %}
-  <script src="{% static 'js/app.js' %}"></script>
-  <script src="{% static 'js/profile.js' %}"></script>
+  <script src="{% static 'js/app.js' %}?v={{ static_version }}"></script>
+  <script src="{% static 'js/profile.js' %}?v={{ static_version }}"></script>
   {% block extra_scripts %}{% endblock %}
 </body>
 </html>
