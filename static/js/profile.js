@@ -14,10 +14,6 @@ function setAccountList(open) {
 function setProfileMenu(open) {
   if (!profileMenu || !profileMenuBackdrop || !profileMenuButton) return;
   if (open) setAccountList(false);
-  if (open) {
-    const accountToggle = document.getElementById("profileAccountToggleInput");
-    if (accountToggle) accountToggle.checked = false;
-  }
   profileMenu.classList.toggle("is-open", open);
   profileMenuBackdrop.classList.toggle("is-open", open);
   profileMenu.setAttribute("aria-hidden", String(!open));
