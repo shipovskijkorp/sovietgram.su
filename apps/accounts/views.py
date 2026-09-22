@@ -13,6 +13,7 @@ from django.views.decorators.http import require_POST
 
 from .forms import (
     IdentifierAuthenticationForm,
+    OverlayProfileForm,
     ProfileForm,
     RegisterForm,
     UserSettingsForm,
@@ -102,6 +103,31 @@ def switch_account(request, user_id):
 def profile(request):
     old_avatar_name = request.user.avatar.name if request.user.avatar else ""
     old_avatar_storage = request.user.avatar.storage if request.user.avatar else None
+    wants_json = request.headers.get("x-requested-with") == "XMLHttpRequest"
+
+    if wants_json and request.method == "POST":
+        form = OverlayProfileForm(request.POST, request.FILES, instance=request.user)
+        if not form.is_valid():
+            return JsonResponse(
+                {"ok": False, "errors": form.errors.get_json_data()},
+                status=400,
+            )
+        user = form.save()
+        if request.FILES.get("avatar") and old_avatar_name and old_avatar_storage:
+            if old_avatar_name != user.avatar.name:
+                old_avatar_storage.delete(old_avatar_name)
+        return JsonResponse(
+            {
+                "ok": True,
+                "display_name": user.display_name,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "username": user.username,
+                "bio": user.bio,
+                "avatar_url": user.avatar.url if user.avatar else "",
+                "initials": user.initials,
+            }
+        )
 
     form = ProfileForm(request.POST or None, request.FILES or None, instance=request.user)
     if request.method == "POST" and form.is_valid():
@@ -171,6 +197,14 @@ def public_profile(request, username):
                 "is_self": bool(
                     request.user.is_authenticated
                     and request.user.pk == profile_user.pk
+                ),
+                "first_name": profile_user.first_name,
+                "last_name": profile_user.last_name,
+                "edit_url": (
+                    reverse("accounts:profile")
+                    if request.user.is_authenticated
+                    and request.user.pk == profile_user.pk
+                    else ""
                 ),
                 "start_chat_url": (
                     reverse("messenger:start_chat", args=[profile_user.username])
