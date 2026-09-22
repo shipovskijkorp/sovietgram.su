@@ -599,3 +599,21 @@ body:not([data-theme="dark"]) .sidebar-searchbar__field input {
 body:not([data-theme="dark"]) .sidebar-searchbar__field input::placeholder {
   color: #8f7c67;
 }
+
+
+/* Warm Stalingram empty-state palette */
+.conversation-empty-hint {
+  background: rgba(58, 48, 41, .78);
+  color: #f3e7d8;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .12);
+}
+
+body:not([data-theme="dark"]) .conversation-empty-hint {
+  background: rgba(92, 72, 57, .72);
+  color: #fff8ee;
+}
+
+body[data-theme="dark"] .conversation-empty-hint {
+  background: rgba(55, 44, 38, .84);
+  color: #f1e6d9;
+}
