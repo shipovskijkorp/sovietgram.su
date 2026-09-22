@@ -12,6 +12,7 @@ urlpatterns = [
     path("contacts/<str:username>/add/", views.add_contact, name="add_contact"),
     path("contacts/<str:username>/remove/", views.remove_contact, name="remove_contact"),
     path("saved/", views.saved_messages, name="saved_messages"),
+    path("calls/", views.calls, name="calls"),
     path("chat/start/<str:username>/", views.start_chat, name="start_chat"),
     path("chat/<int:chat_id>/", views.chat_detail, name="chat"),
     path("chat/<int:chat_id>/send/", views.send_message, name="send_message"),
