@@ -230,6 +230,8 @@ class CommunityForm(forms.Form):
         chat_type = cleaned.get("type")
         visibility = cleaned.get("visibility") or self.VISIBILITY_PUBLIC
         username = cleaned.get("username")
+        if chat_type == Chat.Type.GROUP and not cleaned.get("members"):
+            self.add_error("members", "Выберите хотя бы одного участника.")
         if chat_type == Chat.Type.CHANNEL:
             cleaned["members"] = []
             if visibility == self.VISIBILITY_PUBLIC and not username:
