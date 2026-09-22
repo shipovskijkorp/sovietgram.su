@@ -557,83 +557,145 @@
 /* Telegram-like main drawer */
 .profile-drawer--telegram {
   width: min(340px, 94vw);
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
 }
+
 .profile-drawer__hero--telegram {
-  padding: max(20px, env(safe-area-inset-top, 0px)) 16px 12px;
+  position: relative;
+  min-height: 182px;
+  padding: max(20px, env(safe-area-inset-top, 0px)) 20px 16px;
 }
-.profile-drawer__identity-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 38px;
-  align-items: end;
-  gap: 8px;
+
+.profile-drawer__avatar-link {
+  display: inline-block;
+  color: inherit;
+  text-decoration: none;
 }
-.profile-drawer__hero--telegram .profile-drawer__identity {
-  min-width: 0;
-  width: 100%;
-}
+
 .profile-drawer__hero--telegram .profile-drawer__avatar,
 .profile-drawer__hero--telegram .profile-drawer__avatar--fallback {
-  width: 54px;
-  height: 54px;
-  margin-bottom: 12px;
+  width: 64px;
+  height: 64px;
+  margin: 0 0 18px;
   border-width: 2px;
-  font-size: 16px;
+  font-size: 18px;
 }
+
+.profile-drawer__summary {
+  min-width: 0;
+  padding-right: 44px;
+}
+
+.profile-drawer__identity-text {
+  display: grid;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
 .profile-drawer__hero--telegram .profile-drawer__name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 14px;
+  font-size: 16px;
+  line-height: 1.25;
 }
+
 .profile-drawer__hero--telegram .profile-drawer__username {
   margin-top: 3px;
+  color: rgba(255,247,233,.72);
   font-size: 11px;
+  line-height: 1.2;
 }
-.profile-account-toggle {
-  width: 38px;
-  height: 38px;
-  margin-bottom: 1px;
+
+.profile-accounts {
+  position: relative;
+  margin: 0;
+  padding: 0;
+}
+
+.profile-accounts__toggle {
+  position: absolute;
+  top: -48px;
+  right: 18px;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
   border: 0;
-  border-radius: 50%;
   background: transparent;
   color: rgba(255,255,255,.78);
   cursor: pointer;
-  font-size: 20px;
-  transition: transform .16s ease, background .16s ease;
+  list-style: none;
+  outline: 0;
 }
-.profile-account-toggle:hover { background: rgba(255,255,255,.1); }
-.profile-account-toggle.is-open { transform: rotate(180deg); }
+
+.profile-accounts__toggle::-webkit-details-marker {
+  display: none;
+}
+
+.profile-accounts__toggle::marker {
+  display: none;
+  content: "";
+}
+
+.profile-accounts__toggle > span {
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg) translateY(-2px);
+  transform-origin: center;
+  transition: transform .16s ease;
+}
+
+.profile-accounts[open] .profile-accounts__toggle > span {
+  transform: rotate(225deg) translate(-1px, -1px);
+}
+
+.profile-accounts__toggle:hover {
+  color: #fff;
+}
 
 .profile-account-list {
-  margin: 12px -16px -12px;
-  border-top: 1px solid rgba(255,255,255,.12);
-  background: rgba(28, 11, 13, .13);
+  margin: 0;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+  background: #fffaf1;
 }
-.profile-account-list[hidden] { display: none; }
+
 .profile-account-row,
 .profile-account-row > button {
   width: 100%;
-  min-height: 54px;
+  min-height: 52px;
   display: grid;
-  grid-template-columns: 36px minmax(0,1fr) auto;
+  grid-template-columns: 38px minmax(0,1fr) auto;
   grid-template-rows: auto auto;
   align-items: center;
   column-gap: 10px;
-  padding: 6px 16px;
+  padding: 6px 18px;
   border: 0;
   background: transparent;
-  color: inherit;
+  color: #4d4034;
   text-align: left;
 }
-.profile-account-row { position: relative; }
+
+.profile-account-row {
+  position: relative;
+}
+
 .profile-account-row > button {
   grid-column: 1 / -1;
   padding: 0;
   cursor: pointer;
 }
+
 .profile-account-row img,
-.profile-account-row > span {
+.profile-account-row > span,
+.profile-account-row > button > img,
+.profile-account-row > button > span {
   grid-row: 1 / 3;
   width: 36px;
   height: 36px;
@@ -641,56 +703,87 @@
   place-items: center;
   border-radius: 50%;
   object-fit: cover;
-  background: rgba(255,255,255,.18);
+  background: var(--red-soft);
   color: #fff;
   font-size: 11px;
   font-weight: 800;
 }
-.profile-account-row strong { align-self: end; font-size: 12px; }
+
+.profile-account-row strong {
+  align-self: end;
+  font-size: 12px;
+}
+
 .profile-account-row small {
   grid-column: 2;
   align-self: start;
-  color: rgba(255,255,255,.64);
+  color: #8f7d69;
   font-size: 9.5px;
 }
-.profile-account-row b {
+
+.profile-account-row > b,
+.profile-account-row > button > b {
   grid-column: 3;
   grid-row: 1 / 3;
-  color: #f1c95b;
+}
+
+.profile-account-row:not(.is-current):hover,
+.profile-account-row--switch:hover {
+  background: #f4eadc;
+}
+
+.profile-account-check {
+  color: var(--red);
   font-size: 13px;
 }
-.profile-account-row:not(.is-current):hover { background: rgba(255,255,255,.075); }
+
 .profile-account-add {
   min-height: 48px;
   display: grid;
-  grid-template-columns: 36px 1fr;
+  grid-template-columns: 38px 1fr;
   align-items: center;
   gap: 10px;
-  padding: 6px 16px;
-  color: #fff7e9;
+  padding: 6px 18px;
+  color: #4d4034;
   text-decoration: none;
 }
-.profile-account-add:hover { background: rgba(255,255,255,.075); }
-.profile-account-add > span {
-  width: 30px; height: 30px; display:grid; place-items:center;
-  border-radius:50%; background:rgba(255,255,255,.14); font-size:18px;
+
+.profile-account-add:hover {
+  background: #f4eadc;
 }
-.profile-account-add strong { font-size: 12px; }
+
+.profile-account-add > span {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--red);
+  color: #fff;
+  font-size: 18px;
+}
+
+.profile-account-add strong {
+  font-size: 12px;
+}
 
 .profile-drawer__nav--telegram {
   overflow-y: auto;
   padding: 6px 0;
 }
+
 .profile-drawer__nav--telegram a {
   min-height: 46px;
   grid-template-columns: 34px minmax(0,1fr) auto;
   padding: 0 18px;
   font-size: 12.5px;
 }
+
 .profile-drawer__nav--telegram a > span {
   color: #776653;
   font-size: 17px;
 }
+
 .profile-drawer__nav--telegram a > b {
   min-width: 24px;
   height: 20px;
@@ -702,10 +795,14 @@
   color: white;
   font-size: 9px;
 }
+
 .profile-drawer__footer--telegram {
   padding-top: 8px;
 }
-.profile-drawer__footer--telegram form { margin-bottom: 7px; }
+
+.profile-drawer__footer--telegram form {
+  margin-bottom: 7px;
+}
 
 .calls-card { min-height: 430px; }
 .calls-empty {
@@ -742,4 +839,36 @@
   color: white !important;
   font-size: 9px !important;
   font-weight: 800;
+}
+
+body[data-theme="dark"] .profile-account-list {
+  background: #1d1916;
+  border-color: var(--line);
+}
+
+body[data-theme="dark"] .profile-account-row,
+body[data-theme="dark"] .profile-account-row > button,
+body[data-theme="dark"] .profile-account-add {
+  color: #e2d6c8;
+}
+
+body[data-theme="dark"] .profile-account-row small {
+  color: #8f7f6e;
+}
+
+body[data-theme="dark"] .profile-account-row:not(.is-current):hover,
+body[data-theme="dark"] .profile-account-row--switch:hover,
+body[data-theme="dark"] .profile-account-add:hover {
+  background: #2a2420;
+}
+
+@media (max-width: 500px) {
+  .profile-drawer__hero--telegram {
+    min-height: 170px;
+    padding-inline: 18px;
+  }
+
+  .profile-accounts__toggle {
+    right: 16px;
+  }
 }
