@@ -195,3 +195,54 @@ class UserSettingsForm(forms.ModelForm):
     class Meta:
         model = User
         fields = ("theme", "enter_to_send")
+
+
+class OverlayProfileForm(forms.ModelForm):
+    first_name = forms.CharField(required=False, max_length=150)
+    last_name = forms.CharField(required=False, max_length=150)
+    username = forms.CharField(max_length=150)
+    bio = forms.CharField(required=False, max_length=160)
+    avatar = forms.ImageField(required=False)
+
+    class Meta:
+        model = User
+        fields = ("first_name", "last_name", "username", "bio", "avatar")
+
+    def clean_username(self):
+        username = self.cleaned_data["username"].strip()
+        users = User.objects.exclude(pk=self.instance.pk)
+        if users.filter(username__iexact=username).exists():
+            raise forms.ValidationError("Пользователь с таким именем уже существует.")
+        if users.filter(email__iexact=username).exists():
+            raise forms.ValidationError("Это имя совпадает с почтой другого пользователя.")
+        return username
+
+    def clean_avatar(self):
+        avatar = self.cleaned_data.get("avatar")
+        if not avatar:
+            return avatar
+
+        if getattr(avatar, "size", 0) > 5 * 1024 * 1024:
+            raise forms.ValidationError("Фотография должна быть не больше 5 МБ.")
+
+        content_type = (getattr(avatar, "content_type", "") or "").lower()
+        extension = Path(avatar.name).suffix.lower()
+        allowed_types = {
+            ".jpg": ("image/jpeg", "JPEG"),
+            ".jpeg": ("image/jpeg", "JPEG"),
+            ".png": ("image/png", "PNG"),
+            ".webp": ("image/webp", "WEBP"),
+        }
+        expected = allowed_types.get(extension)
+        if expected is None or content_type != expected[0]:
+            raise forms.ValidationError("Поддерживаются только PNG, JPEG и WebP.")
+
+        image = getattr(avatar, "image", None)
+        if image is None:
+            raise forms.ValidationError("Не удалось проверить изображение.")
+        width, height = image.size
+        if width > 4096 or height > 4096 or width * height > 16_000_000:
+            raise forms.ValidationError("Фотография слишком большая.")
+        if (image.format or "").upper() != expected[1]:
+            raise forms.ValidationError("Расширение фотографии не соответствует формату.")
+        return avatar
