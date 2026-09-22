@@ -317,13 +317,9 @@
   {% else %}
     <main class="conversation conversation--empty">
       <div class="wallpaper" aria-hidden="true"></div>
-      <section class="conversation-empty">
-        <span class="conversation-empty__star">★</span>
-        <h1>{% if show_archived %}Архив{% else %}Stalingram{% endif %}</h1>
-        <p>{% if show_archived %}Выберите архивный диалог слева.{% else %}Выберите чат или найдите человека либо канал.{% endif %}</p>
-        {% if not show_archived %}<a class="empty-primary" href="{% url 'messenger:contacts' %}?focus=search">Новый чат</a>{% endif %}
-        <small>{% if show_archived %}Архив хранит тихие чаты. Никаких комиссий и актов приёмки.{% else %}Пятилетний план по сообщениям начинается с первого «привет».{% endif %}</small>
-      </section>
+      <div class="conversation-empty-hint">
+        {% if show_archived %}Выберите чат из архива{% else %}Выберите, кому хотели бы написать{% endif %}
+      </div>
     </main>
   {% endif %}
 </div>
