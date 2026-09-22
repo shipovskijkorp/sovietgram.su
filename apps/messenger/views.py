@@ -236,11 +236,14 @@ def _account_slots_with_unread(request):
 
 
 def _community_candidates(user):
-    return list(
+    candidates = list(
         User.objects.filter(is_active=True)
         .exclude(pk=user.pk)
         .order_by("-last_seen_at", "username")[:200]
     )
+    for candidate in candidates:
+        candidate.presence_ui = _presence_text(candidate)
+    return candidates
 
 
 def _messenger_context(request, selected_chat=None, chat_messages=None, archived=False, focus_id=0):
