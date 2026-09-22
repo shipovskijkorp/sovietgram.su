@@ -25,6 +25,8 @@ from django.utils.dateparse import parse_datetime
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_POST
 
+from apps.accounts.multiaccount import account_slots
+
 from .forms import CommunityForm, EditMessageForm, MessageForm
 from .models import Chat, ChatParticipant, Contact, Message, MessageAttachment, PinnedMessage
 from .ratelimit import rate_limit
@@ -221,6 +223,7 @@ def _messenger_context(user, selected_chat=None, chat_messages=None, archived=Fa
         "forward_targets": _forward_targets(user),
         "message_focus_id": focus_id,
         "server_time": timezone.now().isoformat(),
+        "account_slots": account_slots(request=None) if False else None,
     }
     if selected_chat is None:
         return context
