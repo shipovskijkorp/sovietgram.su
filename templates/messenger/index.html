@@ -20,23 +20,6 @@
         <span class="brand__mark" aria-hidden="true">★</span>
         <span class="brand__word">STALINGRAM</span>
       </a>
-      <div class="sidebar-compose">
-        <button class="icon-button compose-button" id="sidebarComposeButton" type="button" aria-label="Создать" title="Создать" aria-expanded="false" aria-controls="sidebarComposeMenu">✎</button>
-        <div class="sidebar-compose-menu" id="sidebarComposeMenu" hidden>
-          <a href="{% url 'messenger:contacts' %}?focus=search">
-            <span class="sidebar-compose-menu__icon">✉</span>
-            <span><strong>Новый чат</strong><small>Найти человека или канал</small></span>
-          </a>
-          <a href="{% url 'messenger:create_community' %}?type=group">
-            <span class="sidebar-compose-menu__icon">◎</span>
-            <span><strong>Новая группа</strong><small>Общий чат для нескольких людей</small></span>
-          </a>
-          <a href="{% url 'messenger:create_community' %}?type=channel">
-            <span class="sidebar-compose-menu__icon">◉</span>
-            <span><strong>Новый канал</strong><small>Публикации для подписчиков</small></span>
-          </a>
-        </div>
-      </div>
     </header>
 
     <div class="search-wrap">
@@ -91,6 +74,24 @@
       {% endfor %}
       <div class="chat-filter-empty" id="chatFilterEmpty" hidden>Ничего не найдено.</div>
     </section>
+
+    <div class="sidebar-compose">
+      <button class="compose-button compose-button--floating" id="sidebarComposeButton" type="button" aria-label="Создать" title="Создать" aria-expanded="false" aria-controls="sidebarComposeMenu">✎</button>
+      <div class="sidebar-compose-menu" id="sidebarComposeMenu" hidden>
+        <a href="{% url 'messenger:contacts' %}?focus=search">
+          <span class="sidebar-compose-menu__icon">✉</span>
+          <span><strong>Новый чат</strong><small>Найти человека или канал</small></span>
+        </a>
+        <a href="{% url 'messenger:create_community' %}?type=group">
+          <span class="sidebar-compose-menu__icon">◎</span>
+          <span><strong>Новая группа</strong><small>Общий чат для нескольких людей</small></span>
+        </a>
+        <a href="{% url 'messenger:create_community' %}?type=channel">
+          <span class="sidebar-compose-menu__icon">◉</span>
+          <span><strong>Новый канал</strong><small>Публикации для подписчиков</small></span>
+        </a>
+      </div>
+    </div>
 
     <footer class="sidebar__footer">
       <a class="account-mini" href="{% url 'accounts:profile' %}" title="Открыть профиль">
