@@ -365,8 +365,8 @@ def remove_contact(request, username):
 
 
 @login_required
-@rate_limit("send_message")
 @require_POST
+@rate_limit("send_message")
 def send_message(request, chat_id):
     chat = _chat_for_user(request.user, chat_id)
     form = MessageForm(request.POST, request.FILES)
@@ -532,8 +532,8 @@ def pin_message(request, chat_id, message_id):
 
 
 @login_required
-@rate_limit("search_messages")
 @require_GET
+@rate_limit("search_messages")
 def search_messages(request, chat_id):
     chat = _chat_for_user(request.user, chat_id)
     query = request.GET.get("q", "").strip()[:120]
@@ -639,8 +639,8 @@ def save_draft(request, chat_id):
 
 
 @login_required
-@rate_limit("typing")
 @require_POST
+@rate_limit("typing")
 def typing(request, chat_id):
     chat = _chat_for_user(request.user, chat_id)
     ChatParticipant.objects.filter(chat=chat, user=request.user).update(last_typing_at=timezone.now())
