@@ -904,6 +904,11 @@ document.getElementById("communityDetailsNext")?.addEventListener("click", () =>
 });
 
 document.getElementById("communityCreateGroup")?.addEventListener("click", () => {
+  const members = selectedCommunityMembers();
+  if (!members.length) {
+    setCommunityError("members", "Выберите хотя бы одного участника.");
+    return;
+  }
   submitCommunity("members");
 });
 
