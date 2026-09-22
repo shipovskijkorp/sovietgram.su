@@ -86,15 +86,3 @@ document.querySelectorAll("[data-confirm-form]").forEach((form) => {
   });
 });
 
-
-const profileAccountToggle = document.getElementById("profileAccountToggle");
-const profileAccountList = document.getElementById("profileAccountList");
-
-if (profileAccountToggle && profileAccountList) {
-  profileAccountToggle.addEventListener("click", () => {
-    const open = profileAccountList.hidden;
-    profileAccountList.hidden = !open;
-    profileAccountToggle.classList.toggle("is-open", open);
-    profileAccountToggle.setAttribute("aria-expanded", String(open));
-  });
-}
