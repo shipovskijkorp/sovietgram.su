@@ -235,6 +235,14 @@ def _account_slots_with_unread(request):
     return slots
 
 
+def _community_candidates(user):
+    return list(
+        User.objects.filter(is_active=True)
+        .exclude(pk=user.pk)
+        .order_by("-last_seen_at", "username")[:200]
+    )
+
+
 def _messenger_context(request, selected_chat=None, chat_messages=None, archived=False, focus_id=0):
     user = request.user
     context = {
@@ -248,6 +256,8 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
         "message_focus_id": focus_id,
         "server_time": timezone.now().isoformat(),
         "account_slots": _account_slots_with_unread(request),
+        "community_candidates": _community_candidates(user),
+        "community_create_url": reverse("messenger:create_community"),
     }
     if selected_chat is None:
         return context
@@ -386,68 +396,80 @@ def create_community(request):
     initial_type = request.GET.get("type")
     if initial_type not in {Chat.Type.GROUP, Chat.Type.CHANNEL}:
         initial_type = Chat.Type.GROUP
-    form = CommunityForm(
-        request.POST or None,
-        initial={"type": initial_type},
-    )
-    if request.method == "POST" and form.is_valid():
-        with transaction.atomic():
-            chat = Chat.objects.create(
-                type=form.cleaned_data["type"],
-                title=form.cleaned_data["title"],
-                username=form.cleaned_data["username"] or None,
-                description=form.cleaned_data["description"],
-            )
-            ChatParticipant.objects.create(
-                chat=chat,
-                user=request.user,
-                role=ChatParticipant.Role.OWNER,
-            )
 
-            if chat.type == Chat.Type.GROUP:
-                requested = form.cleaned_data["members"]
-                member_query = Q()
-                for username in requested:
-                    member_query |= Q(username__iexact=username)
-                users = (
-                    list(
-                        User.objects.filter(member_query, is_active=True)
-                        .exclude(pk=request.user.pk)
-                    )
-                    if requested
-                    else []
-                )
-                ChatParticipant.objects.bulk_create(
-                    [
-                        ChatParticipant(
-                            chat=chat,
-                            user=user,
-                            role=ChatParticipant.Role.MEMBER,
-                        )
-                        for user in users
-                    ],
-                    ignore_conflicts=True,
-                )
-                found = {user.username.lower() for user in users}
-                missing = [name for name in requested if name.lower() not in found]
-                if missing:
-                    messages.warning(
-                        request,
-                        "Не нашли: " + ", ".join(f"@{name}" for name in missing[:8]),
-                    )
+    if request.method != "POST":
+        return redirect(f"{reverse('messenger:home')}?create={initial_type}")
 
-        messages.success(
-            request,
-            "Канал вышел в эфир." if chat.type == Chat.Type.CHANNEL
-            else "Группа собрана. Можно начинать собрание.",
+    form = CommunityForm(request.POST, request.FILES)
+    if not form.is_valid():
+        if _wants_json(request):
+            return JsonResponse(
+                {"ok": False, "errors": form.errors.get_json_data()},
+                status=400,
+            )
+        for field_errors in form.errors.values():
+            for error in field_errors:
+                messages.error(request, error)
+        return redirect(f"{reverse('messenger:home')}?create={initial_type}")
+
+    with transaction.atomic():
+        chat = Chat.objects.create(
+            type=form.cleaned_data["type"],
+            title=form.cleaned_data["title"],
+            username=form.cleaned_data["username"] or None,
+            description=form.cleaned_data["description"],
         )
-        return redirect("messenger:chat", chat_id=chat.pk)
+        avatar = form.cleaned_data.get("avatar")
+        if avatar is not None:
+            chat.avatar = avatar
+            chat.save(update_fields=["avatar", "updated_at"])
 
-    return render(
+        ChatParticipant.objects.create(
+            chat=chat,
+            user=request.user,
+            role=ChatParticipant.Role.OWNER,
+        )
+
+        if chat.type == Chat.Type.GROUP:
+            requested = form.cleaned_data["members"]
+            member_query = Q()
+            for username in requested:
+                member_query |= Q(username__iexact=username)
+            users = (
+                list(
+                    User.objects.filter(member_query, is_active=True)
+                    .exclude(pk=request.user.pk)
+                )
+                if requested
+                else []
+            )
+            ChatParticipant.objects.bulk_create(
+                [
+                    ChatParticipant(
+                        chat=chat,
+                        user=user,
+                        role=ChatParticipant.Role.MEMBER,
+                    )
+                    for user in users
+                ],
+                ignore_conflicts=True,
+            )
+
+    redirect_url = reverse("messenger:chat", args=[chat.pk])
+    if _wants_json(request):
+        return JsonResponse(
+            {
+                "ok": True,
+                "chat_id": chat.pk,
+                "redirect_url": redirect_url,
+            }
+        )
+
+    messages.success(
         request,
-        "messenger/create_community.html",
-        {"form": form},
+        "Канал создан." if chat.type == Chat.Type.CHANNEL else "Группа создана.",
     )
+    return redirect(redirect_url)
 
 
 @login_required
