@@ -66,6 +66,83 @@ class ChatFeatureTests(TestCase):
         self.assertEqual(admin.role, "admin")
         self.assertEqual(member.role, "member")
 
+    def test_community_creation_is_exposed_as_overlay_on_messenger(self):
+        response = self.client.get(reverse("messenger:home"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="communityWizard"', html=False)
+        self.assertContains(response, 'data-community-open="group"', html=False)
+        self.assertContains(response, 'data-community-open="channel"', html=False)
+        self.assertContains(response, "Добавить участников")
+        self.assertContains(response, self.bob.display_name)
+
+    def test_community_creation_get_redirects_to_overlay(self):
+        response = self.client.get(
+            reverse("messenger:create_community"),
+            {"type": Chat.Type.CHANNEL},
+        )
+        self.assertRedirects(
+            response,
+            f"{reverse('messenger:home')}?create=channel",
+            fetch_redirect_response=False,
+        )
+
+    def test_group_creation_ajax_returns_chat_url(self):
+        response = self.client.post(
+            reverse("messenger:create_community"),
+            {
+                "type": Chat.Type.GROUP,
+                "title": "Группа из виджета",
+                "description": "",
+                "username": "",
+                "members": "@bob",
+                "visibility": "public",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        group = Chat.objects.get(title="Группа из виджета")
+        self.assertEqual(payload["redirect_url"], reverse("messenger:chat", args=[group.pk]))
+        self.assertTrue(group.memberships.filter(user=self.bob).exists())
+
+    def test_private_channel_does_not_require_public_username(self):
+        response = self.client.post(
+            reverse("messenger:create_community"),
+            {
+                "type": Chat.Type.CHANNEL,
+                "title": "Закрытый канал",
+                "description": "",
+                "username": "",
+                "members": "",
+                "visibility": "private",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        channel = Chat.objects.get(title="Закрытый канал")
+        self.assertIsNone(channel.username)
+
+        search = self.client.get(reverse("messenger:contacts"), {"q": "Закрытый"})
+        self.assertNotContains(search, "Закрытый канал")
+
+    def test_public_channel_ajax_requires_username(self):
+        response = self.client.post(
+            reverse("messenger:create_community"),
+            {
+                "type": Chat.Type.CHANNEL,
+                "title": "Публичный канал",
+                "description": "",
+                "username": "",
+                "members": "",
+                "visibility": "public",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("username", response.json()["errors"])
+        self.assertFalse(Chat.objects.filter(title="Публичный канал").exists())
+
     def test_group_creation_adds_owner_and_requested_members(self):
         response = self.client.post(
             reverse("messenger:create_community"),
