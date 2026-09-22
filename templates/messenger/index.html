@@ -424,24 +424,64 @@
 {% endif %}
 
 <div class="profile-drawer-backdrop" id="profileMenuBackdrop" aria-hidden="true"></div>
-<aside class="profile-drawer" id="profileMenu" aria-hidden="true">
-  <header class="profile-drawer__hero">
+<aside class="profile-drawer profile-drawer--telegram" id="profileMenu" aria-hidden="true">
+  <header class="profile-drawer__hero profile-drawer__hero--telegram">
     <button class="profile-drawer__close" id="profileMenuClose" type="button" aria-label="Закрыть меню">×</button>
-    <a class="profile-drawer__identity" href="{% url 'accounts:profile' %}">
-      {% if request.user.avatar %}<img class="profile-drawer__avatar" src="{{ request.user.avatar.url }}" alt="Фотография {{ request.user.display_name }}">{% else %}<span class="profile-drawer__avatar profile-drawer__avatar--fallback">{{ request.user.initials }}</span>{% endif %}
-      <span class="profile-drawer__name">{{ request.user.display_name }}</span><span class="profile-drawer__username">@{{ request.user.username }}</span>
-    </a>
+    <div class="profile-drawer__identity-row">
+      <a class="profile-drawer__identity" href="{% url 'accounts:profile' %}">
+        {% if request.user.avatar %}
+          <img class="profile-drawer__avatar" src="{{ request.user.avatar.url }}" alt="Фотография {{ request.user.display_name }}">
+        {% else %}
+          <span class="profile-drawer__avatar profile-drawer__avatar--fallback">{{ request.user.initials }}</span>
+        {% endif %}
+        <span class="profile-drawer__name">{{ request.user.display_name }}</span>
+        <span class="profile-drawer__username">@{{ request.user.username }}</span>
+      </a>
+      <button class="profile-account-toggle" id="profileAccountToggle" type="button" aria-label="Показать аккаунты" aria-expanded="false">⌄</button>
+    </div>
+
+    <div class="profile-account-list" id="profileAccountList" hidden>
+      {% for slot in account_slots %}
+        {% if slot.is_current %}
+          <div class="profile-account-row is-current">
+            {% if slot.user.avatar %}<img src="{{ slot.user.avatar.url }}" alt="">{% else %}<span>{{ slot.user.initials }}</span>{% endif %}
+            <strong>{{ slot.user.display_name }}</strong>
+            <small>@{{ slot.user.username }}</small>
+            <b>✓</b>
+          </div>
+        {% else %}
+          <form method="post" action="{% url 'accounts:switch_account' slot.user.pk %}" class="profile-account-row">
+            {% csrf_token %}
+            <button type="submit">
+              {% if slot.user.avatar %}<img src="{{ slot.user.avatar.url }}" alt="">{% else %}<span>{{ slot.user.initials }}</span>{% endif %}
+              <strong>{{ slot.user.display_name }}</strong>
+              <small>@{{ slot.user.username }}</small>
+            </button>
+          </form>
+        {% endif %}
+      {% endfor %}
+      <a class="profile-account-add" href="{% url 'accounts:add_account' %}">
+        <span>＋</span><strong>Добавить аккаунт</strong>
+      </a>
+    </div>
   </header>
-  <nav class="profile-drawer__nav" aria-label="Главное меню">
-    <a href="{% url 'messenger:saved_messages' %}"><span>★</span><strong>Избранное</strong></a>
-    <a href="{% url 'messenger:contacts' %}"><span>⌕</span><strong>Поиск</strong></a>
-    <a href="{% url 'accounts:profile' %}"><span>●</span><strong>Мой профиль</strong></a>
-    <a href="{% url 'accounts:public_profile' request.user.username %}"><span>↗</span><strong>Публичная страница</strong></a>
+
+  <nav class="profile-drawer__nav profile-drawer__nav--telegram" aria-label="Главное меню">
+    <a href="{% url 'messenger:home' %}?archived=1"><span>▣</span><strong>Архив</strong>{% if archived_count %}<b>{{ archived_count }}</b>{% endif %}</a>
+    <a href="{% url 'accounts:profile' %}"><span>◎</span><strong>Мой профиль</strong></a>
+    <a href="{% url 'messenger:create_community' %}?type=group"><span>♙</span><strong>Создать группу</strong></a>
+    <a href="{% url 'messenger:create_community' %}?type=channel"><span>◉</span><strong>Создать канал</strong></a>
+    <a href="{% url 'messenger:contacts' %}"><span>♧</span><strong>Контакты</strong></a>
+    <a href="{% url 'messenger:calls' %}"><span>☎</span><strong>Звонки</strong></a>
+    <a href="{% url 'messenger:saved_messages' %}"><span>☆</span><strong>Избранное</strong></a>
     <a href="{% url 'accounts:settings' %}"><span>⚙</span><strong>Настройки</strong></a>
-    <a href="{% url 'accounts:password_change' %}"><span>⌁</span><strong>Сменить пароль</strong></a>
   </nav>
-  <div class="profile-drawer__footer">
-    <form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}<button type="submit"><span>↪</span> Выйти</button></form>
+
+  <div class="profile-drawer__footer profile-drawer__footer--telegram">
+    <form method="post" action="{% url 'accounts:logout' %}">
+      {% csrf_token %}
+      <button type="submit"><span>↪</span> Выйти из аккаунта</button>
+    </form>
     <small>Stalingram · связь трудящихся</small>
   </div>
 </aside>
