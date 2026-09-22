@@ -137,6 +137,36 @@ class ChatFeatureTests(TestCase):
             Message.objects.filter(chat=channel, text="Говорит Stalingram.").exists()
         )
 
+    def test_group_and_channel_pages_render_without_private_chat_assumptions(self):
+        group = Chat.objects.create(type=Chat.Type.GROUP, title="Монтажный отдел")
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.alice,
+            role=ChatParticipant.Role.OWNER,
+        )
+        channel = Chat.objects.create(
+            type=Chat.Type.CHANNEL,
+            title="Красный эфир",
+            username="red_air",
+        )
+        ChatParticipant.objects.create(
+            chat=channel,
+            user=self.alice,
+            role=ChatParticipant.Role.OWNER,
+        )
+
+        group_response = self.client.get(
+            reverse("messenger:chat", args=[group.pk])
+        )
+        channel_response = self.client.get(
+            reverse("messenger:chat", args=[channel.pk])
+        )
+        self.assertEqual(group_response.status_code, 200)
+        self.assertContains(group_response, "Монтажный отдел")
+        self.assertEqual(channel_response.status_code, 200)
+        self.assertContains(channel_response, "Красный эфир")
+        self.assertContains(channel_response, "@red_air")
+
     def test_saved_messages_chat_is_single_participant_chat(self):
         response = self.client.get(reverse("messenger:saved_messages"))
         self.assertEqual(response.status_code, 302)
