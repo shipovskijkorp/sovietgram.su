@@ -562,49 +562,68 @@
   overflow: hidden;
 }
 
-.profile-drawer__hero--telegram {
-  position: relative;
+.profile-account-header {
   flex: 0 0 auto;
   width: 100%;
   min-height: 164px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: max(20px, env(safe-area-inset-top, 0px)) 20px 15px;
+  padding: max(22px, env(safe-area-inset-top, 0px)) 20px 16px;
   border: 0;
+  border-radius: 0;
+  outline: 0;
+  box-shadow: none;
+  appearance: none;
+  -webkit-appearance: none;
   background: linear-gradient(155deg, #d31313, #9c0000 72%);
   color: #fff7e9;
   text-align: left;
   cursor: pointer;
   user-select: none;
-  outline: none;
-  box-shadow: none;
 }
 
-.profile-drawer__avatar-static {
-  width: fit-content;
+.profile-account-header:focus,
+.profile-account-header:focus-visible,
+.profile-account-header:active {
+  outline: 0 !important;
+  box-shadow: none !important;
 }
 
-.profile-drawer__hero--telegram .profile-drawer__avatar,
-.profile-drawer__hero--telegram .profile-drawer__avatar--fallback {
+.profile-account-header__avatar {
   width: 64px;
   height: 64px;
-  margin: 0 0 17px;
-  border-width: 2px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 2px solid rgba(255,255,255,.38);
+  border-radius: 50%;
+  background: #df3d3d;
+  color: #fff;
   font-size: 18px;
+  font-weight: 850;
   pointer-events: none;
 }
 
-.profile-drawer__summary {
+.profile-account-header__avatar > img,
+.profile-account-header__avatar > span {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  object-fit: cover;
+}
+
+.profile-account-header__bottom {
   width: 100%;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 28px;
   align-items: center;
   gap: 10px;
-  min-width: 0;
+  pointer-events: none;
 }
 
-.profile-drawer__hero--telegram .profile-drawer__name {
+.profile-account-header__bottom strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -612,70 +631,92 @@
   line-height: 1.25;
 }
 
-.profile-accounts__arrow {
-  width: 9px;
-  height: 9px;
-  align-self: center;
+.profile-account-header__chevron {
+  width: 22px;
+  height: 22px;
   justify-self: end;
-  margin-right: 3px;
-  border-right: 2px solid rgba(255,255,255,.82);
-  border-bottom: 2px solid rgba(255,255,255,.82);
-  transform: rotate(45deg) translate(-1px, -1px);
-  transform-origin: center;
-  transition: transform .16s ease, border-color .16s ease;
+  color: rgba(255,255,255,.82);
+  transition: transform .16s ease, color .16s ease;
 }
 
-.profile-drawer__hero--telegram:hover .profile-accounts__arrow {
-  border-color: #fff;
+.profile-account-header__chevron path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.profile-account-toggle-input:checked ~ .profile-drawer__hero .profile-accounts__arrow {
-  transform: rotate(225deg) translate(-1px, -1px);
+.profile-account-header:hover .profile-account-header__chevron {
+  color: #fff;
+}
+
+.profile-account-header.is-open .profile-account-header__chevron {
+  transform: rotate(180deg);
 }
 
 .profile-account-list {
-  display: none;
   flex: 0 0 auto;
-  max-height: min(300px, 42vh);
+  max-height: min(320px, 44vh);
   overflow-y: auto;
-  padding: 4px 0;
+  padding: 6px 0;
   border-bottom: 1px solid var(--line);
   background: #fffaf1;
 }
 
-.profile-account-toggle-input:checked ~ .profile-account-list {
-  display: block;
+.profile-account-list[hidden] {
+  display: none !important;
 }
 
-.profile-account-row,
-.profile-account-row > button {
+.profile-account-switch {
+  margin: 0;
+}
+
+.profile-account-item,
+.profile-account-add {
   width: 100%;
   min-height: 52px;
   display: grid;
   grid-template-columns: 38px minmax(0, 1fr) auto;
-  grid-template-rows: auto auto;
   align-items: center;
-  column-gap: 10px;
+  gap: 10px;
   padding: 6px 18px;
   border: 0;
   background: transparent;
   color: #4d4034;
   text-align: left;
+  text-decoration: none;
 }
 
-.profile-account-row {
-  position: relative;
-  margin: 0;
-}
-
-.profile-account-row > button {
-  grid-column: 1 / -1;
-  padding: 0;
+button.profile-account-item {
   cursor: pointer;
 }
 
-.profile-account-avatar {
-  grid-row: 1 / 3;
+.profile-account-item:hover,
+.profile-account-add:hover {
+  background: #f4eadc;
+}
+
+.profile-account-item__avatar,
+.profile-account-add__icon {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  max-width: 36px;
+  max-height: 36px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--red-soft);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.profile-account-item__avatar > img,
+.profile-account-item__avatar > span {
   width: 36px !important;
   height: 36px !important;
   min-width: 36px !important;
@@ -684,77 +725,37 @@
   max-height: 36px !important;
   display: grid;
   place-items: center;
-  border-radius: 50%;
   object-fit: cover;
-  overflow: hidden;
-  background: var(--red-soft);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 800;
 }
 
-img.profile-account-avatar {
-  aspect-ratio: 1 / 1;
+.profile-account-item--current .profile-account-item__avatar {
+  box-shadow: 0 0 0 2px #4d88bd;
 }
 
-.profile-account-row strong {
-  align-self: end;
+.profile-account-item strong,
+.profile-account-add strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
 }
 
-.profile-account-row small {
-  grid-column: 2;
-  align-self: start;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #8f7d69;
-  font-size: 9.5px;
-}
-
-.profile-account-row > b,
-.profile-account-row > button > b {
-  grid-column: 3;
-  grid-row: 1 / 3;
-}
-
-.profile-account-row--switch:hover,
-.profile-account-add:hover {
-  background: #f4eadc;
-}
-
-.profile-account-check {
-  color: var(--red);
-  font-size: 13px;
-}
-
-.profile-account-add {
-  min-height: 48px;
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  padding: 6px 18px;
-  color: #4d4034;
-  text-decoration: none;
-}
-
-.profile-account-add > span {
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--red);
-  color: #fff;
+.profile-account-add__icon {
+  background: #4d88bd;
   font-size: 18px;
 }
 
-.profile-account-add strong {
-  font-size: 12px;
+.profile-account-badge {
+  min-width: 24px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #526b82;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
 }
 
 .profile-drawer__nav--telegram {
@@ -797,37 +798,19 @@ img.profile-account-avatar {
   margin-bottom: 7px;
 }
 
-.profile-account-badge {
-  min-width: 24px;
-  height: 20px;
-  display: grid;
-  place-items: center;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: #4d88bd;
-  color: #fff !important;
-  font-size: 9px !important;
-  font-weight: 800;
-}
-
 body[data-theme="dark"] .profile-account-list {
-  background: #1d1916;
-  border-color: var(--line);
+  background: #18242f;
+  border-color: rgba(255,255,255,.08);
 }
 
-body[data-theme="dark"] .profile-account-row,
-body[data-theme="dark"] .profile-account-row > button,
+body[data-theme="dark"] .profile-account-item,
 body[data-theme="dark"] .profile-account-add {
-  color: #e2d6c8;
+  color: #eef4f8;
 }
 
-body[data-theme="dark"] .profile-account-row small {
-  color: #8f7f6e;
-}
-
-body[data-theme="dark"] .profile-account-row--switch:hover,
+body[data-theme="dark"] .profile-account-item:hover,
 body[data-theme="dark"] .profile-account-add:hover {
-  background: #2a2420;
+  background: #1f303e;
 }
 
 .calls-card { min-height: 430px; }
@@ -859,17 +842,8 @@ body[data-theme="dark"] .profile-account-add:hover {
     width: min(330px, 94vw);
   }
 
-  .profile-drawer__hero--telegram {
+  .profile-account-header {
     min-height: 156px;
     padding-inline: 18px;
   }
-}
-
-.profile-drawer--telegram .profile-drawer__close { display: none !important; }
-
-.profile-drawer__hero--telegram:focus,
-.profile-drawer__hero--telegram:focus-visible,
-.profile-drawer__hero--telegram:active {
-  outline: none !important;
-  box-shadow: none !important;
 }
