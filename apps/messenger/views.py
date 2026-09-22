@@ -254,9 +254,18 @@ def _messenger_context(user, selected_chat=None, chat_messages=None, archived=Fa
         attachment.ui_url = attachment_url(attachment)
         shared_items.append(attachment)
 
+    can_post = not (
+        selected_chat.type == Chat.Type.CHANNEL
+        and membership.role not in {
+            ChatParticipant.Role.OWNER,
+            ChatParticipant.Role.ADMIN,
+        }
+    )
+
     context.update(
         {
             "active_membership": membership,
+            "can_post": can_post,
             "other_last_read_id": other_last_read_id,
             "pinned_records": pins,
             "pinned_message_ids": pinned_ids,
@@ -338,7 +347,13 @@ def saved_messages(request):
 
 @login_required
 def create_community(request):
-    form = CommunityForm(request.POST or None)
+    initial_type = request.GET.get("type")
+    if initial_type not in {Chat.Type.GROUP, Chat.Type.CHANNEL}:
+        initial_type = Chat.Type.GROUP
+    form = CommunityForm(
+        request.POST or None,
+        initial={"type": initial_type},
+    )
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
             chat = Chat.objects.create(
@@ -652,6 +667,18 @@ def forward_message(request, chat_id, message_id):
 @require_POST
 def pin_message(request, chat_id, message_id):
     chat = _chat_for_user(request.user, chat_id)
+    membership = _membership(chat, request.user)
+    if (
+        chat.type != Chat.Type.PRIVATE
+        and membership.role not in {
+            ChatParticipant.Role.OWNER,
+            ChatParticipant.Role.ADMIN,
+        }
+    ):
+        return JsonResponse(
+            {"ok": False, "error": "Закреплять сообщения здесь могут только администраторы."},
+            status=403,
+        )
     message = get_object_or_404(chat.messages, pk=message_id, is_deleted=False)
     pin = PinnedMessage.objects.filter(chat=chat, message=message).first()
     if pin is None:
@@ -739,6 +766,15 @@ def chat_action(request, chat_id):
             return redirect(f"{reverse('messenger:home')}?archived=1")
         return redirect("messenger:home")
     elif action == "clear":
+        if (
+            chat.type != Chat.Type.PRIVATE
+            and membership.role not in {
+                ChatParticipant.Role.OWNER,
+                ChatParticipant.Role.ADMIN,
+            }
+        ):
+            messages.error(request, "Очищать историю здесь могут только администраторы.")
+            return redirect("messenger:chat", chat_id=chat.pk)
         with transaction.atomic():
             for message in _base_message_queryset(chat).filter(is_deleted=False):
                 delete_message_content(message)
