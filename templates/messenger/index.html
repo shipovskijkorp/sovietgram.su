@@ -425,27 +425,23 @@
 
 <div class="profile-drawer-backdrop" id="profileMenuBackdrop" aria-hidden="true"></div>
 <aside class="profile-drawer profile-drawer--telegram" id="profileMenu" aria-hidden="true">
-  <header class="profile-drawer__hero profile-drawer__hero--telegram">
-    <button class="profile-drawer__close" id="profileMenuClose" type="button" aria-label="Закрыть меню">×</button>
-
-    <div class="profile-drawer__avatar-static">
+  <button class="profile-drawer__hero profile-drawer__hero--telegram" id="profileAccountToggle" type="button" aria-label="Показать аккаунты" aria-controls="profileAccountList" aria-expanded="false">
+    <span class="profile-drawer__avatar-static">
       {% if request.user.avatar %}
         <img class="profile-drawer__avatar" src="{{ request.user.avatar.url }}" alt="">
       {% else %}
         <span class="profile-drawer__avatar profile-drawer__avatar--fallback">{{ request.user.initials }}</span>
       {% endif %}
-    </div>
+    </span>
 
-    <div class="profile-drawer__summary">
-      <div class="profile-drawer__identity-text">
+    <span class="profile-drawer__summary">
+      <span class="profile-drawer__identity-text">
         <strong class="profile-drawer__name">{{ request.user.display_name }}</strong>
         <small class="profile-drawer__username">@{{ request.user.username }}</small>
-      </div>
-      <button class="profile-accounts__toggle" id="profileAccountToggle" type="button" aria-label="Показать аккаунты" aria-controls="profileAccountList" aria-expanded="false" title="Аккаунты">
-        <span aria-hidden="true"></span>
-      </button>
-    </div>
-  </header>
+      </span>
+      <span class="profile-accounts__arrow" aria-hidden="true"></span>
+    </span>
+  </button>
 
   <div class="profile-account-list" id="profileAccountList" hidden>
     {% for slot in account_slots %}
