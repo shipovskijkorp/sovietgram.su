@@ -100,3 +100,156 @@ document.querySelectorAll("[data-confirm-form]").forEach((form) => {
   });
 });
 
+
+
+const userProfileOverlay = document.getElementById("userProfileOverlay");
+const userProfileClose = document.getElementById("userProfileClose");
+const userProfileAvatar = document.getElementById("userProfileAvatar");
+const userProfileName = document.getElementById("userProfileName");
+const userProfileStatus = document.getElementById("userProfileStatus");
+const userProfileBioSection = document.getElementById("userProfileBioSection");
+const userProfileBio = document.getElementById("userProfileBio");
+const userProfileUsername = document.getElementById("userProfileUsername");
+const userProfileActions = document.getElementById("userProfileActions");
+const userProfileMessage = document.getElementById("userProfileMessage");
+const userProfileContact = document.getElementById("userProfileContact");
+
+let openedProfile = null;
+
+function csrfToken() {
+  return document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || "";
+}
+
+function closeUserProfile() {
+  if (!userProfileOverlay) return;
+  userProfileOverlay.hidden = true;
+  openedProfile = null;
+  document.body.classList.remove("has-profile-overlay");
+}
+
+function renderUserProfile(profile) {
+  if (!userProfileOverlay) return;
+  openedProfile = profile;
+
+  if (userProfileAvatar) {
+    userProfileAvatar.replaceChildren();
+    if (profile.avatar_url) {
+      const image = document.createElement("img");
+      image.src = profile.avatar_url;
+      image.alt = "";
+      userProfileAvatar.appendChild(image);
+    } else {
+      const fallback = document.createElement("span");
+      fallback.textContent = profile.initials || "?";
+      userProfileAvatar.appendChild(fallback);
+    }
+  }
+
+  if (userProfileName) userProfileName.textContent = profile.display_name || profile.username || "";
+  if (userProfileStatus) userProfileStatus.textContent = profile.status || "";
+  if (userProfileUsername) userProfileUsername.textContent = `@${profile.username || ""}`;
+
+  if (userProfileBioSection && userProfileBio) {
+    const hasBio = Boolean(profile.bio?.trim());
+    userProfileBioSection.hidden = !hasBio;
+    userProfileBio.textContent = hasBio ? profile.bio.trim() : "";
+  }
+
+  if (userProfileActions) userProfileActions.hidden = Boolean(profile.is_self);
+  if (userProfileContact) {
+    userProfileContact.textContent = profile.is_contact
+      ? "Удалить из контактов"
+      : "Добавить в контакты";
+    userProfileContact.classList.toggle("is-danger", Boolean(profile.is_contact));
+  }
+
+  userProfileOverlay.hidden = false;
+  document.body.classList.add("has-profile-overlay");
+}
+
+async function openUserProfile(url) {
+  if (!userProfileOverlay || !url) {
+    window.location.assign(url);
+    return;
+  }
+
+  try {
+    const response = await fetch(url, {
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+      credentials: "same-origin",
+    });
+    if (!response.ok) throw new Error("profile fetch failed");
+    const profile = await response.json();
+    if (!profile.ok) throw new Error("invalid profile payload");
+    renderUserProfile(profile);
+  } catch (_error) {
+    window.location.assign(url);
+  }
+}
+
+document.querySelectorAll("[data-user-profile]").forEach((link) => {
+  link.addEventListener("click", (event) => {
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    openUserProfile(link.href);
+  });
+});
+
+userProfileClose?.addEventListener("click", closeUserProfile);
+
+userProfileOverlay?.addEventListener("click", (event) => {
+  if (event.target === userProfileOverlay) closeUserProfile();
+});
+
+userProfileMessage?.addEventListener("click", () => {
+  if (!openedProfile?.start_chat_url) return;
+  const form = document.createElement("form");
+  form.method = "post";
+  form.action = openedProfile.start_chat_url;
+  const token = document.createElement("input");
+  token.type = "hidden";
+  token.name = "csrfmiddlewaretoken";
+  token.value = csrfToken();
+  form.appendChild(token);
+  document.body.appendChild(form);
+  form.submit();
+});
+
+userProfileContact?.addEventListener("click", async () => {
+  if (!openedProfile) return;
+  const url = openedProfile.is_contact
+    ? openedProfile.remove_contact_url
+    : openedProfile.add_contact_url;
+  if (!url) return;
+
+  userProfileContact.disabled = true;
+  try {
+    const body = new URLSearchParams();
+    body.set("csrfmiddlewaretoken", csrfToken());
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+      },
+      body,
+      credentials: "same-origin",
+    });
+    if (!response.ok) throw new Error("contact action failed");
+    openedProfile.is_contact = !openedProfile.is_contact;
+    userProfileContact.textContent = openedProfile.is_contact
+      ? "Удалить из контактов"
+      : "Добавить в контакты";
+    userProfileContact.classList.toggle("is-danger", openedProfile.is_contact);
+  } catch (_error) {
+    if (typeof showToast === "function") showToast("Не удалось изменить контакт.");
+  } finally {
+    userProfileContact.disabled = false;
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && userProfileOverlay && !userProfileOverlay.hidden) {
+    closeUserProfile();
+  }
+});
