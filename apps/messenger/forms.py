@@ -149,10 +149,18 @@ class EditMessageForm(forms.Form):
 
 
 class CommunityForm(forms.Form):
+    VISIBILITY_PUBLIC = "public"
+    VISIBILITY_PRIVATE = "private"
+
     type = forms.ChoiceField(
         choices=((Chat.Type.GROUP, "Группа"), (Chat.Type.CHANNEL, "Канал")),
-        widget=forms.RadioSelect,
     )
+    visibility = forms.ChoiceField(
+        required=False,
+        choices=((VISIBILITY_PUBLIC, "Публичный"), (VISIBILITY_PRIVATE, "Частный")),
+        initial=VISIBILITY_PUBLIC,
+    )
+    avatar = forms.ImageField(required=False)
     title = forms.CharField(
         label="Название",
         max_length=120,
@@ -177,6 +185,21 @@ class CommunityForm(forms.Form):
             attrs={"placeholder": "@ivan, @maria — только для группы"}
         ),
     )
+
+    def clean_avatar(self):
+        avatar = self.cleaned_data.get("avatar")
+        if avatar is None:
+            return None
+        if avatar.size > 5 * 1024 * 1024:
+            raise forms.ValidationError("Аватар должен быть не больше 5 МБ.")
+        extension = Path(avatar.name).suffix.lower()
+        if extension not in IMAGE_FORMATS:
+            raise forms.ValidationError("Поддерживаются PNG, JPEG и WebP.")
+        content_type = (getattr(avatar, "content_type", "") or "").lower()
+        if content_type not in MEDIA_CONTENT_TYPES.get(extension, set()):
+            raise forms.ValidationError("MIME-тип аватара не соответствует расширению.")
+        _validate_inline_image(avatar, extension)
+        return avatar
 
     def clean_username(self):
         username = self.cleaned_data.get("username", "").strip().lstrip("@").lower()
@@ -205,9 +228,12 @@ class CommunityForm(forms.Form):
     def clean(self):
         cleaned = super().clean()
         chat_type = cleaned.get("type")
+        visibility = cleaned.get("visibility") or self.VISIBILITY_PUBLIC
         username = cleaned.get("username")
-        if chat_type == Chat.Type.CHANNEL and not username:
-            self.add_error("username", "У канала должен быть @адрес, чтобы его можно было найти.")
         if chat_type == Chat.Type.CHANNEL:
             cleaned["members"] = []
+            if visibility == self.VISIBILITY_PUBLIC and not username:
+                self.add_error("username", "У публичного канала должен быть @адрес.")
+            if visibility == self.VISIBILITY_PRIVATE:
+                cleaned["username"] = ""
         return cleaned
