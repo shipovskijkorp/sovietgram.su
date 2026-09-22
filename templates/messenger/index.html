@@ -4,9 +4,9 @@
 {% block title %}{% if selected_chat %}{{ selected_chat.display_name_ui }} — Stalingram{% else %}Stalingram{% endif %}{% endblock %}
 {% block body_class %}app-body{% endblock %}
 {% block extra_head %}
-<link rel="stylesheet" href="{% static 'css/messenger.css' %}">
-<link rel="stylesheet" href="{% static 'css/media.css' %}">
-<link rel="stylesheet" href="{% static 'css/chat.css' %}">
+<link rel="stylesheet" href="{% static 'css/messenger.css' %}?v={{ static_version }}">
+<link rel="stylesheet" href="{% static 'css/media.css' %}?v={{ static_version }}">
+<link rel="stylesheet" href="{% static 'css/chat.css' %}?v={{ static_version }}">
 {% endblock %}
 
 {% block content %}
@@ -503,6 +503,6 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/messenger.js' %}"></script>
-<script src="{% static 'js/chat.js' %}"></script>
+<script src="{% static 'js/messenger.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/chat.js' %}?v={{ static_version }}"></script>
 {% endblock %}
