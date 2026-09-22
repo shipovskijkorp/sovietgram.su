@@ -40,7 +40,7 @@ def _subscriber_label(count):
     return f"{count} {word}"
 
 
-def _personal_channel_payload(channel):
+def _personal_channel_payload(channel, viewer=None):
     if channel is None:
         return None
 
@@ -63,6 +63,22 @@ def _personal_channel_payload(channel):
         preview = channel.description.strip() or "Публикаций пока нет"
 
     subscriber_count = channel.memberships.count()
+
+    is_member = bool(
+        viewer
+        and getattr(viewer, "is_authenticated", False)
+        and channel.memberships.filter(user=viewer).exists()
+    )
+    if is_member:
+        open_url = reverse("messenger:chat", args=[channel.pk])
+        open_method = "get"
+    elif channel.username and viewer and getattr(viewer, "is_authenticated", False):
+        open_url = reverse("messenger:join_public_chat", args=[channel.username])
+        open_method = "post"
+    else:
+        open_url = ""
+        open_method = ""
+
     return {
         "id": channel.pk,
         "title": channel.title,
@@ -72,6 +88,8 @@ def _personal_channel_payload(channel):
         "last_message_time": last_message_time,
         "subscriber_count": subscriber_count,
         "subscriber_text": _subscriber_label(subscriber_count),
+        "open_url": open_url,
+        "open_method": open_method,
     }
 
 
@@ -176,7 +194,7 @@ def profile(request):
                 "initials": user.initials,
                 "birthday": user.birthday.isoformat() if user.birthday else "",
                 "birthday_display": user.birthday.strftime("%d.%m.%Y") if user.birthday else "",
-                "personal_channel": _personal_channel_payload(user.personal_channel),
+                "personal_channel": _personal_channel_payload(user.personal_channel, request.user),
             }
         )
 
@@ -249,7 +267,10 @@ def public_profile(request, username):
                     if profile_user.birthday
                     else ""
                 ),
-                "personal_channel": _personal_channel_payload(profile_user.personal_channel),
+                "personal_channel": _personal_channel_payload(
+                    profile_user.personal_channel,
+                    request.user if request.user.is_authenticated else None,
+                ),
                 "initials": profile_user.initials,
                 "is_contact": is_contact,
                 "is_self": bool(
