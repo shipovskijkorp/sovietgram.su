@@ -425,44 +425,58 @@
 
 <div class="profile-drawer-backdrop" id="profileMenuBackdrop" aria-hidden="true"></div>
 <aside class="profile-drawer profile-drawer--telegram" id="profileMenu" aria-hidden="true">
-  <button class="profile-drawer__hero profile-drawer__hero--telegram" id="profileAccountToggle" type="button" aria-expanded="false" aria-controls="profileAccountList">
-    <span class="profile-drawer__avatar-static">
+  <button class="profile-account-header" id="profileAccountToggle" type="button" aria-expanded="false" aria-controls="profileAccountList">
+    <span class="profile-account-header__avatar">
       {% if request.user.avatar %}
-        <img class="profile-drawer__avatar" src="{{ request.user.avatar.url }}" alt="">
+        <img src="{{ request.user.avatar.url }}" alt="">
       {% else %}
-        <span class="profile-drawer__avatar profile-drawer__avatar--fallback">{{ request.user.initials }}</span>
+        <span>{{ request.user.initials }}</span>
       {% endif %}
     </span>
 
-    <span class="profile-drawer__summary">
-      <strong class="profile-drawer__name">{{ request.user.display_name }}</strong>
-      <span class="profile-accounts__arrow" aria-hidden="true"></span>
+    <span class="profile-account-header__bottom">
+      <strong>{{ request.user.display_name }}</strong>
+      <svg class="profile-account-header__chevron" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M7 10l5 5 5-5"></path>
+      </svg>
     </span>
   </button>
 
-  <div class="profile-account-list" id="profileAccountList" aria-hidden="true">
+  <div class="profile-account-list" id="profileAccountList" hidden>
     {% for slot in account_slots %}
       {% if slot.is_current %}
-        <div class="profile-account-row is-current">
-          {% if slot.user.avatar %}<img class="profile-account-avatar" src="{{ slot.user.avatar.url }}" alt="" width="36" height="36">{% else %}<span class="profile-account-avatar profile-account-avatar--fallback">{{ slot.user.initials }}</span>{% endif %}
+        <div class="profile-account-item profile-account-item--current">
+          <span class="profile-account-item__avatar">
+            {% if slot.user.avatar %}
+              <img src="{{ slot.user.avatar.url }}" alt="" width="36" height="36">
+            {% else %}
+              <span>{{ slot.user.initials }}</span>
+            {% endif %}
+          </span>
           <strong>{{ slot.user.display_name }}</strong>
-          <small>@{{ slot.user.username }}</small>
-          {% if slot.unread_count %}<b class="profile-account-badge">{{ slot.unread_count }}</b>{% else %}<b class="profile-account-check">✓</b>{% endif %}
+          {% if slot.unread_count %}<b class="profile-account-badge">{{ slot.unread_count }}</b>{% endif %}
         </div>
       {% else %}
-        <form method="post" action="{% url 'accounts:switch_account' slot.user.pk %}" class="profile-account-row profile-account-row--switch">
+        <form method="post" action="{% url 'accounts:switch_account' slot.user.pk %}" class="profile-account-switch">
           {% csrf_token %}
-          <button type="submit">
-            {% if slot.user.avatar %}<img class="profile-account-avatar" src="{{ slot.user.avatar.url }}" alt="" width="36" height="36">{% else %}<span class="profile-account-avatar profile-account-avatar--fallback">{{ slot.user.initials }}</span>{% endif %}
+          <button class="profile-account-item" type="submit">
+            <span class="profile-account-item__avatar">
+              {% if slot.user.avatar %}
+                <img src="{{ slot.user.avatar.url }}" alt="" width="36" height="36">
+              {% else %}
+                <span>{{ slot.user.initials }}</span>
+              {% endif %}
+            </span>
             <strong>{{ slot.user.display_name }}</strong>
-            <small>@{{ slot.user.username }}</small>
             {% if slot.unread_count %}<b class="profile-account-badge">{{ slot.unread_count }}</b>{% endif %}
           </button>
         </form>
       {% endif %}
     {% endfor %}
+
     <a class="profile-account-add" href="{% url 'accounts:add_account' %}">
-      <span>＋</span><strong>Добавить аккаунт</strong>
+      <span class="profile-account-add__icon">＋</span>
+      <strong>Добавить аккаунт</strong>
     </a>
   </div>
 
