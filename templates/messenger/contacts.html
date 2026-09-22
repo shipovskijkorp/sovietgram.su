@@ -1,37 +1,48 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Поиск — Stalingram{% endblock %}
+{% block title %}Новый чат — Stalingram{% endblock %}
 {% block body_class %}contacts-body{% endblock %}
 {% block extra_head %}<link rel="stylesheet" href="{% static 'css/messenger.css' %}">{% endblock %}
 
 {% block content %}
 <main class="contacts-shell">
-  <section class="contacts-card">
-    <header class="contacts-topbar">
+  <section class="contacts-card contacts-card--telegram">
+    <header class="contacts-topbar contacts-topbar--compact">
       <a class="icon-button" href="{% url 'messenger:home' %}" aria-label="Назад">←</a>
       <div>
-        <strong>Поиск</strong>
-        <small>Люди и каналы по @username. Без анкеты в трёх экземплярах.</small>
+        <strong>Новый чат</strong>
+        <small>Люди и каналы по @username</small>
       </div>
-      <a class="person-action person-action--primary contacts-create" href="{% url 'messenger:create_community' %}">＋ Создать</a>
     </header>
 
-    <form class="people-search" method="get" action="{% url 'messenger:contacts' %}">
-      <span>⌕</span>
-      <input id="peopleSearchInput" type="search" name="q" value="{{ query }}" placeholder="@username" autocomplete="off" {% if focus_search %}autofocus{% endif %}>
-      <button type="submit">Искать</button>
-    </form>
+    <div class="telegram-search-wrap">
+      <form class="telegram-search" method="get" action="{% url 'messenger:contacts' %}">
+        <span aria-hidden="true">⌕</span>
+        <input id="peopleSearchInput" type="search" name="q" value="{{ query }}" placeholder="Поиск" autocomplete="off" {% if focus_search %}autofocus{% endif %}>
+        {% if query %}<a href="{% url 'messenger:contacts' %}" aria-label="Очистить поиск">×</a>{% endif %}
+      </form>
+    </div>
+
+    <section class="telegram-actions">
+      <a href="{% url 'messenger:create_community' %}?type=group">
+        <span class="telegram-action-icon">◎</span>
+        <span><strong>Новая группа</strong><small>Собрать несколько человек в одном чате</small></span>
+        <b>›</b>
+      </a>
+      <a href="{% url 'messenger:create_community' %}?type=channel">
+        <span class="telegram-action-icon">◉</span>
+        <span><strong>Новый канал</strong><small>Публиковать записи для подписчиков</small></span>
+        <b>›</b>
+      </a>
+    </section>
 
     {% if query %}
-      <section class="people-section">
-        <div class="people-section__title">
-          <strong>Люди</strong>
-          <span>{{ search_results|length }}</span>
-        </div>
-        <div class="people-list">
+      <section class="telegram-section">
+        <div class="telegram-section__title">Люди</div>
+        <div class="people-list people-list--flat">
           {% for person in search_results %}
-            <article class="person-row">
+            <article class="person-row person-row--telegram">
               <a class="person-row__identity" href="{% url 'accounts:public_profile' person.username %}">
                 {% if person.avatar %}
                   <img class="person-row__avatar" src="{{ person.avatar.url }}" alt="">
@@ -40,99 +51,65 @@
                 {% endif %}
                 <span><strong>{{ person.display_name }}</strong><small>@{{ person.username }}</small></span>
               </a>
-              <div class="person-row__actions">
-                <form method="post" action="{% url 'messenger:start_chat' person.username %}">
-                  {% csrf_token %}<button class="person-action person-action--primary" type="submit">Написать</button>
-                </form>
-                {% if person.is_contact_ui %}
-                  <form method="post" action="{% url 'messenger:remove_contact' person.username %}">
-                    {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
-                    <button class="person-action" type="submit">Убрать</button>
-                  </form>
-                {% else %}
-                  <form method="post" action="{% url 'messenger:add_contact' person.username %}">
-                    {% csrf_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}">
-                    <button class="person-action" type="submit">В контакты</button>
-                  </form>
-                {% endif %}
-              </div>
+              <form method="post" action="{% url 'messenger:start_chat' person.username %}">
+                {% csrf_token %}<button class="telegram-row-button" type="submit">Написать</button>
+              </form>
             </article>
           {% empty %}
-            <div class="people-empty">Никого не нашли. Возможно, товарищ ещё не зарегистрировался.</div>
+            <div class="people-empty">Никого не нашли.</div>
           {% endfor %}
         </div>
       </section>
 
-      <section class="people-section">
-        <div class="people-section__title">
-          <strong>Каналы</strong>
-          <span>{{ channel_results|length }}</span>
-        </div>
-        <div class="people-list">
+      <section class="telegram-section">
+        <div class="telegram-section__title">Каналы</div>
+        <div class="people-list people-list--flat">
           {% for channel in channel_results %}
-            <article class="person-row">
+            <article class="person-row person-row--telegram">
               <span class="person-row__identity">
                 <span class="person-row__avatar person-row__avatar--fallback">К</span>
                 <span>
                   <strong>{{ channel.title }}</strong>
-                  <small>@{{ channel.username }}{% if channel.description %} · {{ channel.description|truncatechars:72 }}{% endif %}</small>
+                  <small>@{{ channel.username }}{% if channel.description %} · {{ channel.description|truncatechars:60 }}{% endif %}</small>
                 </span>
               </span>
-              <div class="person-row__actions">
-                {% if channel.is_joined_ui %}
-                  <a class="person-action person-action--primary" href="{% url 'messenger:chat' channel.pk %}">Открыть</a>
-                {% else %}
-                  <form method="post" action="{% url 'messenger:join_public_chat' channel.username %}">
-                    {% csrf_token %}<button class="person-action person-action--primary" type="submit">Подписаться</button>
-                  </form>
-                {% endif %}
-              </div>
+              {% if channel.is_joined_ui %}
+                <a class="telegram-row-button" href="{% url 'messenger:chat' channel.pk %}">Открыть</a>
+              {% else %}
+                <form method="post" action="{% url 'messenger:join_public_chat' channel.username %}">
+                  {% csrf_token %}<button class="telegram-row-button" type="submit">Подписаться</button>
+                </form>
+              {% endif %}
             </article>
           {% empty %}
-            <div class="people-empty">Каналов по такому адресу нет. Эфир свободен.</div>
+            <div class="people-empty">Каналов по такому адресу нет.</div>
           {% endfor %}
         </div>
       </section>
     {% else %}
-      <section class="people-section">
-        <div class="community-shortcuts">
-          <a href="{% url 'messenger:create_community' %}?type=group"><strong>Новая группа</strong><span>Собрать людей в одном чате</span></a>
-          <a href="{% url 'messenger:create_community' %}?type=channel"><strong>Новый канал</strong><span>Запустить собственную линию вещания</span></a>
+      <section class="telegram-section telegram-section--contacts">
+        <div class="telegram-section__title">Контакты</div>
+        <div class="people-list people-list--flat">
+          {% for contact in contacts %}
+            <article class="person-row person-row--telegram">
+              <a class="person-row__identity" href="{% url 'accounts:public_profile' contact.user.username %}">
+                {% if contact.user.avatar %}
+                  <img class="person-row__avatar" src="{{ contact.user.avatar.url }}" alt="">
+                {% else %}
+                  <span class="person-row__avatar person-row__avatar--fallback">{{ contact.user.initials }}</span>
+                {% endif %}
+                <span><strong>{{ contact.user.display_name }}</strong><small>@{{ contact.user.username }}</small></span>
+              </a>
+              <form method="post" action="{% url 'messenger:start_chat' contact.user.username %}">
+                {% csrf_token %}<button class="telegram-row-button" type="submit">Написать</button>
+              </form>
+            </article>
+          {% empty %}
+            <div class="people-empty">Контактов пока нет. Поиск сверху быстрее бумажной картотеки.</div>
+          {% endfor %}
         </div>
       </section>
     {% endif %}
-
-    <section class="people-section people-section--contacts">
-      <div class="people-section__title">
-        <strong>Контакты</strong>
-        <span>{{ contacts|length }}</span>
-      </div>
-      <div class="people-list">
-        {% for contact in contacts %}
-          <article class="person-row">
-            <a class="person-row__identity" href="{% url 'accounts:public_profile' contact.user.username %}">
-              {% if contact.user.avatar %}
-                <img class="person-row__avatar" src="{{ contact.user.avatar.url }}" alt="">
-              {% else %}
-                <span class="person-row__avatar person-row__avatar--fallback">{{ contact.user.initials }}</span>
-              {% endif %}
-              <span><strong>{{ contact.user.display_name }}</strong><small>@{{ contact.user.username }}</small></span>
-            </a>
-            <div class="person-row__actions">
-              <form method="post" action="{% url 'messenger:start_chat' contact.user.username %}">
-                {% csrf_token %}<button class="person-action person-action--primary" type="submit">Написать</button>
-              </form>
-              <form method="post" action="{% url 'messenger:remove_contact' contact.user.username %}">
-                {% csrf_token %}<input type="hidden" name="next" value="{% url 'messenger:contacts' %}">
-                <button class="person-action" type="submit">Убрать</button>
-              </form>
-            </div>
-          </article>
-        {% empty %}
-          <div class="people-empty">Контактов пока нет. Найдите нужного человека выше — телефонную книгу национализируем в другой пятилетке.</div>
-        {% endfor %}
-      </div>
-    </section>
   </section>
 </main>
 {% endblock %}
