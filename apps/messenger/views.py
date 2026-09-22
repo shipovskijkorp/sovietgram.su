@@ -348,6 +348,11 @@ def chat_detail(request, chat_id):
 
 
 @login_required
+def calls(request):
+    return render(request, "messenger/calls.html")
+
+
+@login_required
 def saved_messages(request):
     chat = get_or_create_direct_chat(request.user, request.user)
     return redirect("messenger:chat", chat_id=chat.pk)
