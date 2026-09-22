@@ -4,7 +4,7 @@ from pathlib import Path
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import (
     BigIntegerField,
     BooleanField,
@@ -27,6 +27,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from .forms import EditMessageForm, MessageForm
 from .models import Chat, ChatParticipant, Contact, Message, MessageAttachment, PinnedMessage
+from .ratelimit import rate_limit
 from .services import (
     attachment_kind,
     attachment_url,
@@ -364,6 +365,7 @@ def remove_contact(request, username):
 
 
 @login_required
+@rate_limit("send_message")
 @require_POST
 def send_message(request, chat_id):
     chat = _chat_for_user(request.user, chat_id)
@@ -530,6 +532,7 @@ def pin_message(request, chat_id, message_id):
 
 
 @login_required
+@rate_limit("search_messages")
 @require_GET
 def search_messages(request, chat_id):
     chat = _chat_for_user(request.user, chat_id)
@@ -537,13 +540,33 @@ def search_messages(request, chat_id):
     if not query:
         return JsonResponse({"ok": True, "results": []})
 
-    results = list(
-        _base_message_queryset(chat)
-        .filter(is_deleted=False)
-        .filter(Q(text__icontains=query) | Q(attachments__original_name__icontains=query))
-        .distinct()
-        .order_by("-id")[:50]
-    )
+    base = _base_message_queryset(chat).filter(is_deleted=False)
+    if connection.vendor == "postgresql":
+        from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
+
+        search_query = SearchQuery(query, config="simple", search_type="websearch")
+        search_vector = SearchVector("text", config="simple")
+        results = list(
+            base.annotate(
+                search_document=search_vector,
+                search_rank=SearchRank(search_vector, search_query),
+            )
+            .filter(
+                Q(search_document=search_query)
+                | Q(attachments__original_name__icontains=query)
+            )
+            .distinct()
+            .order_by("-search_rank", "-id")[:50]
+        )
+    else:
+        results = list(
+            base.filter(
+                Q(text__icontains=query)
+                | Q(attachments__original_name__icontains=query)
+            )
+            .distinct()
+            .order_by("-id")[:50]
+        )
     return JsonResponse(
         {
             "ok": True,
@@ -616,6 +639,7 @@ def save_draft(request, chat_id):
 
 
 @login_required
+@rate_limit("typing")
 @require_POST
 def typing(request, chat_id):
     chat = _chat_for_user(request.user, chat_id)
