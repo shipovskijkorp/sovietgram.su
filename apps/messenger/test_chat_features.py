@@ -184,6 +184,11 @@ class ChatFeatureTests(TestCase):
         self.assertContains(channel_response, "Красный эфир")
         self.assertContains(channel_response, "@red_air")
 
+    def test_calls_page_is_available_without_call_history(self):
+        response = self.client.get(reverse("messenger:calls"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Звонков пока нет")
+
     def test_saved_messages_chat_is_single_participant_chat(self):
         response = self.client.get(reverse("messenger:saved_messages"))
         self.assertEqual(response.status_code, 302)
