@@ -59,7 +59,6 @@ class ProfileTests(TestCase):
             reverse("accounts:profile"),
             {
                 "first_name": "",
-                "last_name": "",
                 "username": "PETROV",
                 "bio": "",
                 "email": self.user.email,
@@ -117,6 +116,14 @@ class ProfileTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'id="userProfileOverlay"', html=False)
         self.assertContains(response, "Имя пользователя")
+        self.assertNotContains(response, ">Фамилия<", html=False)
+        self.assertContains(response, 'id="userProfileChannelPicker"', html=False)
+        self.assertContains(response, 'id="userProfileChannelOpen"', html=False)
+        self.assertContains(
+            response,
+            'id="userProfileEdit" type="button" aria-label="Редактировать" hidden',
+            html=False,
+        )
         self.assertNotContains(response, "Номер телефона")
         self.assertNotContains(response, "Подарки")
         self.assertNotContains(response, "QR")
@@ -145,12 +152,13 @@ class ProfileTests(TestCase):
         self.assertNotContains(response, "Цвет имени")
 
     def test_overlay_profile_edit_updates_public_fields_without_email(self):
+        self.user.last_name = "Сохранённая"
+        self.user.save(update_fields=["last_name"])
         self.client.force_login(self.user)
         response = self.client.post(
             reverse("accounts:profile"),
             {
                 "first_name": "Иван",
-                "last_name": "Шиповский",
                 "username": "ivan_overlay",
                 "bio": "Редактировано из виджета.",
             },
@@ -159,13 +167,13 @@ class ProfileTests(TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertTrue(payload["ok"])
-        self.assertEqual(payload["display_name"], "Иван Шиповский")
+        self.assertEqual(payload["display_name"], "Иван Сохранённая")
         self.assertEqual(payload["username"], "ivan_overlay")
         self.assertNotIn("email", payload)
 
         self.user.refresh_from_db()
         self.assertEqual(self.user.first_name, "Иван")
-        self.assertEqual(self.user.last_name, "Шиповский")
+        self.assertEqual(self.user.last_name, "Сохранённая")
         self.assertEqual(self.user.username, "ivan_overlay")
         self.assertEqual(self.user.bio, "Редактировано из виджета.")
         self.assertEqual(self.user.email, "ivan@example.com")
@@ -202,7 +210,6 @@ class ProfileTests(TestCase):
             reverse("accounts:profile"),
             {
                 "first_name": "",
-                "last_name": "",
                 "username": self.user.username,
                 "bio": "",
                 "birthday": "2000-09-10",
@@ -242,7 +249,6 @@ class ProfileTests(TestCase):
             reverse("accounts:profile"),
             {
                 "first_name": "",
-                "last_name": "",
                 "username": self.user.username,
                 "bio": "",
                 "birthday": "",
@@ -266,7 +272,6 @@ class ProfileTests(TestCase):
             reverse("accounts:profile"),
             {
                 "first_name": "",
-                "last_name": "",
                 "username": self.user.username,
                 "bio": "",
                 "email": self.user.email,
