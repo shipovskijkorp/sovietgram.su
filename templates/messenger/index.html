@@ -20,7 +20,23 @@
         <span class="brand__mark" aria-hidden="true">★</span>
         <span class="brand__word">STALINGRAM</span>
       </a>
-      <a class="icon-button compose-button" href="{% url 'messenger:contacts' %}?focus=search" aria-label="Новый чат" title="Новый чат">✎</a>
+      <div class="sidebar-compose">
+        <button class="icon-button compose-button" id="sidebarComposeButton" type="button" aria-label="Создать" title="Создать" aria-expanded="false" aria-controls="sidebarComposeMenu">✎</button>
+        <div class="sidebar-compose-menu" id="sidebarComposeMenu" hidden>
+          <a href="{% url 'messenger:contacts' %}?focus=search">
+            <span class="sidebar-compose-menu__icon">✉</span>
+            <span><strong>Новый чат</strong><small>Найти человека или канал</small></span>
+          </a>
+          <a href="{% url 'messenger:create_community' %}?type=group">
+            <span class="sidebar-compose-menu__icon">◎</span>
+            <span><strong>Новая группа</strong><small>Общий чат для нескольких людей</small></span>
+          </a>
+          <a href="{% url 'messenger:create_community' %}?type=channel">
+            <span class="sidebar-compose-menu__icon">◉</span>
+            <span><strong>Новый канал</strong><small>Публикации для подписчиков</small></span>
+          </a>
+        </div>
+      </div>
     </header>
 
     <div class="search-wrap">
@@ -85,7 +101,6 @@
         {% endif %}
         <span class="account-mini__name">{{ request.user.display_name }}</span>
       </a>
-      <a class="sidebar-footer-link" href="{% url 'messenger:contacts' %}" title="Поиск">Поиск</a>
       <button id="easterStar" class="footer-star" type="button" title="Одобрено Госпланом">★</button>
     </footer>
   </aside>
