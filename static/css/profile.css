@@ -847,3 +847,61 @@ body[data-theme="dark"] .profile-account-add:hover {
     padding-inline: 18px;
   }
 }
+
+
+/* Stalingram palette for multi-account switcher */
+.profile-account-list {
+  background: #fff8ee;
+  border-bottom-color: rgba(92, 63, 40, .10);
+}
+
+.profile-account-item,
+.profile-account-add {
+  color: #4b3e33;
+}
+
+.profile-account-item:hover,
+.profile-account-add:hover {
+  background: #f4e8d9;
+}
+
+.profile-account-item--current .profile-account-item__avatar {
+  box-shadow: 0 0 0 2px var(--red);
+}
+
+.profile-account-add__icon {
+  background: var(--red);
+  color: #fff;
+}
+
+.profile-account-badge {
+  background: #8f3b40;
+  color: #fff;
+}
+
+body[data-theme="dark"] .profile-account-list {
+  background: #211d1a;
+  border-color: rgba(236, 218, 194, .10);
+}
+
+body[data-theme="dark"] .profile-account-item,
+body[data-theme="dark"] .profile-account-add {
+  color: #eadfD2;
+}
+
+body[data-theme="dark"] .profile-account-item:hover,
+body[data-theme="dark"] .profile-account-add:hover {
+  background: #2b2521;
+}
+
+body[data-theme="dark"] .profile-account-item--current .profile-account-item__avatar {
+  box-shadow: 0 0 0 2px #d74750;
+}
+
+body[data-theme="dark"] .profile-account-add__icon {
+  background: #b52b35;
+}
+
+body[data-theme="dark"] .profile-account-badge {
+  background: #71363b;
+}
