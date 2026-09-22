@@ -565,8 +565,18 @@
 .profile-drawer__hero--telegram {
   position: relative;
   flex: 0 0 auto;
+  width: 100%;
   min-height: 164px;
+  display: block;
   padding: max(20px, env(safe-area-inset-top, 0px)) 20px 15px;
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(155deg, #d31313, #9c0000 72%);
+  color: #fff7e9;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .profile-drawer__avatar-static {
@@ -615,35 +625,25 @@
   line-height: 1.2;
 }
 
-.profile-accounts__toggle {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  align-self: end;
-  margin: 0;
-  padding: 0;
-  color: rgba(255,255,255,.8);
-  cursor: pointer;
-  user-select: none;
-}
-
-.profile-accounts__toggle > span {
+.profile-accounts__arrow {
   width: 9px;
   height: 9px;
-  border-right: 2px solid currentColor;
-  border-bottom: 2px solid currentColor;
+  align-self: center;
+  justify-self: end;
+  margin-right: 3px;
+  border-right: 2px solid rgba(255,255,255,.82);
+  border-bottom: 2px solid rgba(255,255,255,.82);
   transform: rotate(45deg) translate(-1px, -1px);
   transform-origin: center;
-  transition: transform .16s ease;
+  transition: transform .16s ease, border-color .16s ease;
 }
 
-.profile-accounts__toggle.is-open > span {
+.profile-drawer__hero--telegram:hover .profile-accounts__arrow {
+  border-color: #fff;
+}
+
+.profile-drawer__hero--telegram.is-open .profile-accounts__arrow {
   transform: rotate(225deg) translate(-1px, -1px);
-}
-
-.profile-accounts__toggle:hover {
-  color: #fff;
 }
 
 .profile-account-list {
@@ -876,3 +876,5 @@ body[data-theme="dark"] .profile-account-add:hover {
     padding-inline: 18px;
   }
 }
+
+.profile-drawer--telegram .profile-drawer__close { display: none !important; }
