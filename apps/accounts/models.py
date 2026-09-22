@@ -26,6 +26,15 @@ class User(AbstractUser):
     )
     enter_to_send = models.BooleanField("отправка по Enter", default=True)
     last_seen_at = models.DateTimeField("последняя активность", null=True, blank=True)
+    birthday = models.DateField("день рождения", null=True, blank=True)
+    personal_channel = models.ForeignKey(
+        "messenger.Chat",
+        verbose_name="личный канал",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="profile_owners",
+    )
 
     @property
     def display_name(self):
