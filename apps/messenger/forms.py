@@ -1,7 +1,10 @@
 from pathlib import Path
 
 from django import forms
+from django.contrib.auth import get_user_model
 from PIL import Image, UnidentifiedImageError
+
+from .models import Chat
 
 
 MAX_ATTACHMENTS = 10
@@ -143,3 +146,68 @@ class EditMessageForm(forms.Form):
 
     def clean_text(self):
         return self.cleaned_data.get("text", "").strip()
+
+
+class CommunityForm(forms.Form):
+    type = forms.ChoiceField(
+        choices=((Chat.Type.GROUP, "Группа"), (Chat.Type.CHANNEL, "Канал")),
+        widget=forms.RadioSelect,
+    )
+    title = forms.CharField(
+        label="Название",
+        max_length=120,
+        widget=forms.TextInput(attrs={"placeholder": "Например, Совет разработчиков"}),
+    )
+    username = forms.CharField(
+        label="Адрес",
+        required=False,
+        max_length=64,
+        widget=forms.TextInput(attrs={"placeholder": "bez_probela"}),
+    )
+    description = forms.CharField(
+        label="Описание",
+        required=False,
+        max_length=500,
+        widget=forms.Textarea(attrs={"rows": 3, "placeholder": "О чём здесь говорят"}),
+    )
+    members = forms.CharField(
+        label="Участники",
+        required=False,
+        widget=forms.TextInput(
+            attrs={"placeholder": "@ivan, @maria — только для группы"}
+        ),
+    )
+
+    def clean_username(self):
+        username = self.cleaned_data.get("username", "").strip().lstrip("@").lower()
+        if not username:
+            return ""
+        if len(username) < 5 or not username.replace("_", "").isalnum():
+            raise forms.ValidationError(
+                "Адрес: минимум 5 символов, только буквы, цифры и подчёркивание."
+            )
+        User = get_user_model()
+        if Chat.objects.filter(username__iexact=username).exists():
+            raise forms.ValidationError("Этот адрес уже занят другим чатом.")
+        if User.objects.filter(username__iexact=username).exists():
+            raise forms.ValidationError("Этот адрес уже занят пользователем.")
+        return username
+
+    def clean_members(self):
+        raw = self.cleaned_data.get("members", "")
+        usernames = []
+        for item in raw.replace(";", ",").split(","):
+            username = item.strip().lstrip("@")
+            if username and username.lower() not in [u.lower() for u in usernames]:
+                usernames.append(username)
+        return usernames[:100]
+
+    def clean(self):
+        cleaned = super().clean()
+        chat_type = cleaned.get("type")
+        username = cleaned.get("username")
+        if chat_type == Chat.Type.CHANNEL and not username:
+            self.add_error("username", "У канала должен быть @адрес, чтобы его можно было найти.")
+        if chat_type == Chat.Type.CHANNEL:
+            cleaned["members"] = []
+        return cleaned
