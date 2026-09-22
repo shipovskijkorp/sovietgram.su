@@ -113,7 +113,12 @@ const userProfileStatus = document.getElementById("userProfileStatus");
 const userProfileBioSection = document.getElementById("userProfileBioSection");
 const userProfileBio = document.getElementById("userProfileBio");
 const userProfileUsername = document.getElementById("userProfileUsername");
+const userProfileChannelRow = document.getElementById("userProfileChannelRow");
+const userProfileChannel = document.getElementById("userProfileChannel");
+const userProfileBirthdayRow = document.getElementById("userProfileBirthdayRow");
+const userProfileBirthday = document.getElementById("userProfileBirthday");
 const userProfileActions = document.getElementById("userProfileActions");
+const userProfileAccounts = document.getElementById("userProfileAccounts");
 const userProfileMessage = document.getElementById("userProfileMessage");
 const userProfileContact = document.getElementById("userProfileContact");
 
@@ -126,6 +131,8 @@ const userProfileEditStatus = document.getElementById("userProfileEditStatus");
 const userProfileFirstNameInput = document.getElementById("userProfileFirstNameInput");
 const userProfileLastNameInput = document.getElementById("userProfileLastNameInput");
 const userProfileUsernameInput = document.getElementById("userProfileUsernameInput");
+const userProfileChannelInput = document.getElementById("userProfileChannelInput");
+const userProfileBirthdayInput = document.getElementById("userProfileBirthdayInput");
 const userProfileBioInput = document.getElementById("userProfileBioInput");
 const userProfileBioCount = document.getElementById("userProfileBioCount");
 const userProfileEditError = document.getElementById("userProfileEditError");
@@ -171,8 +178,8 @@ function closeUserProfile() {
 function renderUserProfile(profile) {
   if (!userProfileOverlay) return;
   openedProfile = profile;
-  renderProfileAvatar(userProfileAvatar, profile);
 
+  renderProfileAvatar(userProfileAvatar, profile);
   if (userProfileName) userProfileName.textContent = profile.display_name || profile.username || "";
   if (userProfileStatus) userProfileStatus.textContent = profile.status || "";
   if (userProfileUsername) userProfileUsername.textContent = `@${profile.username || ""}`;
@@ -183,8 +190,21 @@ function renderUserProfile(profile) {
     userProfileBio.textContent = hasBio ? profile.bio.trim() : "";
   }
 
+  const hasChannel = Boolean(profile.personal_channel);
+  if (userProfileChannelRow) userProfileChannelRow.hidden = !hasChannel;
+  if (userProfileChannel && hasChannel) {
+    userProfileChannel.textContent = profile.personal_channel.title || profile.personal_channel.username || "";
+  }
+
+  const hasBirthday = Boolean(profile.birthday_display);
+  if (userProfileBirthdayRow) userProfileBirthdayRow.hidden = !hasBirthday;
+  if (userProfileBirthday && hasBirthday) {
+    userProfileBirthday.textContent = profile.birthday_display;
+  }
+
   if (userProfileEdit) userProfileEdit.hidden = !profile.is_self;
   if (userProfileActions) userProfileActions.hidden = Boolean(profile.is_self);
+  if (userProfileAccounts) userProfileAccounts.hidden = !profile.is_self;
 
   if (userProfileContact) {
     userProfileContact.textContent = profile.is_contact
@@ -198,15 +218,43 @@ function renderUserProfile(profile) {
   document.body.classList.add("has-profile-overlay");
 }
 
+function fillPersonalChannelOptions(profile) {
+  if (!userProfileChannelInput) return;
+  userProfileChannelInput.replaceChildren();
+
+  const empty = document.createElement("option");
+  empty.value = "";
+  empty.textContent = "Не выбран";
+  userProfileChannelInput.appendChild(empty);
+
+  (profile.owned_channels || []).forEach((channel) => {
+    const option = document.createElement("option");
+    option.value = String(channel.id);
+    option.textContent = channel.title || (channel.username ? `@${channel.username}` : `Канал #${channel.id}`);
+    userProfileChannelInput.appendChild(option);
+  });
+
+  userProfileChannelInput.value = profile.personal_channel?.id
+    ? String(profile.personal_channel.id)
+    : "";
+}
+
 function fillUserProfileEdit() {
   if (!openedProfile?.is_self) return;
+
   if (userProfileFirstNameInput) userProfileFirstNameInput.value = openedProfile.first_name || "";
   if (userProfileLastNameInput) userProfileLastNameInput.value = openedProfile.last_name || "";
   if (userProfileUsernameInput) userProfileUsernameInput.value = openedProfile.username || "";
+  if (userProfileBirthdayInput) userProfileBirthdayInput.value = openedProfile.birthday || "";
   if (userProfileBioInput) userProfileBioInput.value = openedProfile.bio || "";
   if (userProfileBioCount) userProfileBioCount.textContent = String((openedProfile.bio || "").length);
-  if (userProfileEditDisplayName) userProfileEditDisplayName.textContent = openedProfile.display_name || openedProfile.username || "";
+  if (userProfileEditDisplayName) {
+    userProfileEditDisplayName.textContent = openedProfile.display_name || openedProfile.username || "";
+  }
   if (userProfileEditStatus) userProfileEditStatus.textContent = openedProfile.status || "";
+
+  fillPersonalChannelOptions(openedProfile);
+
   if (userProfileEditError) {
     userProfileEditError.hidden = true;
     userProfileEditError.textContent = "";
@@ -217,7 +265,16 @@ function fillUserProfileEdit() {
 
 function profileErrorsToText(errors) {
   if (!errors || typeof errors !== "object") return "Не удалось сохранить профиль.";
-  const order = ["avatar", "first_name", "last_name", "username", "bio", "__all__"];
+  const order = [
+    "avatar",
+    "first_name",
+    "last_name",
+    "username",
+    "bio",
+    "personal_channel",
+    "birthday",
+    "__all__",
+  ];
   const used = new Set();
   const messages = [];
   [...order, ...Object.keys(errors)].forEach((key) => {
@@ -278,14 +335,18 @@ userProfileEditBack?.addEventListener("click", () => {
 });
 
 userProfileBioInput?.addEventListener("input", () => {
-  if (userProfileBioCount) userProfileBioCount.textContent = String(userProfileBioInput.value.length);
+  if (userProfileBioCount) {
+    userProfileBioCount.textContent = String(userProfileBioInput.value.length);
+  }
 });
 
 userProfileAvatarInput?.addEventListener("change", () => {
   const file = userProfileAvatarInput.files?.[0];
   if (!file || !userProfileEditAvatar) return;
+
   if (profileAvatarPreviewUrl) URL.revokeObjectURL(profileAvatarPreviewUrl);
   profileAvatarPreviewUrl = URL.createObjectURL(file);
+
   userProfileEditAvatar.replaceChildren();
   const image = document.createElement("img");
   image.src = profileAvatarPreviewUrl;
@@ -297,7 +358,7 @@ userProfileEditForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!openedProfile?.is_self || !openedProfile.edit_url) return;
 
-  const submit = userProfileEditForm.querySelector('button[type="submit"]');
+  const submit = document.getElementById("userProfileEditSave");
   if (submit) submit.disabled = true;
   if (userProfileEditError) {
     userProfileEditError.hidden = true;
@@ -313,7 +374,9 @@ userProfileEditForm?.addEventListener("submit", async (event) => {
     });
     const payload = await response.json();
     if (!response.ok || !payload.ok) {
-      throw { profileErrors: payload.errors };
+      const error = new Error("profile validation failed");
+      error.profileErrors = payload.errors;
+      throw error;
     }
 
     openedProfile = {
@@ -321,7 +384,9 @@ userProfileEditForm?.addEventListener("submit", async (event) => {
       ...payload,
       is_self: true,
       edit_url: openedProfile.edit_url,
+      owned_channels: openedProfile.owned_channels || [],
     };
+
     renderUserProfile(openedProfile);
 
     document.querySelectorAll(".account-mini__name").forEach((element) => {
@@ -342,13 +407,16 @@ userProfileEditForm?.addEventListener("submit", async (event) => {
 
 userProfileMessage?.addEventListener("click", () => {
   if (!openedProfile?.start_chat_url) return;
+
   const form = document.createElement("form");
   form.method = "post";
   form.action = openedProfile.start_chat_url;
+
   const token = document.createElement("input");
   token.type = "hidden";
   token.name = "csrfmiddlewaretoken";
   token.value = csrfToken();
+
   form.appendChild(token);
   document.body.appendChild(form);
   form.submit();
@@ -356,15 +424,18 @@ userProfileMessage?.addEventListener("click", () => {
 
 userProfileContact?.addEventListener("click", async () => {
   if (!openedProfile) return;
+
   const url = openedProfile.is_contact
     ? openedProfile.remove_contact_url
     : openedProfile.add_contact_url;
   if (!url) return;
 
   userProfileContact.disabled = true;
+
   try {
     const body = new URLSearchParams();
     body.set("csrfmiddlewaretoken", csrfToken());
+
     const response = await fetch(url, {
       method: "POST",
       headers: {
@@ -375,6 +446,7 @@ userProfileContact?.addEventListener("click", async () => {
       credentials: "same-origin",
     });
     if (!response.ok) throw new Error("contact action failed");
+
     openedProfile.is_contact = !openedProfile.is_contact;
     userProfileContact.textContent = openedProfile.is_contact
       ? "Удалить из контактов"
