@@ -112,6 +112,12 @@
           <small><span id="bioCounter">{{ request.user.bio|length }}</span>/160</small>
           {% for error in form.bio.errors %}<small class="profile-field-error">{{ error }}</small>{% endfor %}
         </label>
+
+        <label class="profile-field" for="{{ form.birthday.id_for_label }}">
+          <span>{{ form.birthday.label }}</span>
+          {{ form.birthday }}
+          {% for error in form.birthday.errors %}<small class="profile-field-error">{{ error }}</small>{% endfor %}
+        </label>
       </section>
 
       <section class="settings-card" id="account">
