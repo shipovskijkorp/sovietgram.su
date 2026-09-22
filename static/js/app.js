@@ -69,6 +69,8 @@ function isInternalSection(pathname) {
   return pathname === "/profile/"
     || pathname === "/settings/"
     || pathname === "/contacts/"
+    || pathname === "/calls/"
+    || pathname === "/accounts/add/"
     || pathname === "/profile/password/"
     || pathname.startsWith("/u/");
 }
