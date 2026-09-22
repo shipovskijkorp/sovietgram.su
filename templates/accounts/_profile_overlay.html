@@ -24,20 +24,24 @@
         <small>О себе</small>
       </section>
 
+      <section class="tg-profile__personal-channel" id="userProfileChannelCard" hidden>
+        <div class="tg-profile-channel-card__avatar" id="userProfileChannelAvatar"></div>
+        <div class="tg-profile-channel-card__content">
+          <div class="tg-profile-channel-card__head">
+            <strong id="userProfileChannelTitle"></strong>
+            <time id="userProfileChannelTime"></time>
+          </div>
+          <p id="userProfileChannelPreview"></p>
+          <small id="userProfileChannelMeta"></small>
+        </div>
+      </section>
+
       <section class="tg-profile__rows">
         <div class="tg-profile__row">
           <span class="tg-profile__row-icon">@</span>
           <div>
             <strong id="userProfileUsername"></strong>
             <small>Имя пользователя</small>
-          </div>
-        </div>
-
-        <div class="tg-profile__row" id="userProfileChannelRow" hidden>
-          <span class="tg-profile__row-icon">◉</span>
-          <div>
-            <strong id="userProfileChannel"></strong>
-            <small>Личный канал</small>
           </div>
         </div>
 
