@@ -286,7 +286,11 @@ def _serialized_message(message, user, chat):
     return serialize_message(
         message,
         user,
-        other_last_read_id=_other_last_read_id(chat, user),
+        other_last_read_id=(
+            _other_last_read_id(chat, user)
+            if chat.type == Chat.Type.PRIVATE
+            else 0
+        ),
         pinned_ids=pinned_ids,
     )
 
@@ -901,7 +905,11 @@ def poll_messages(request, chat_id):
         .order_by("updated_at", "id")[:100]
     )
     high_watermark = chat.messages.order_by("-id").values_list("id", flat=True).first() or after_id
-    other_last_read_id = _other_last_read_id(chat, request.user)
+    other_last_read_id = (
+        _other_last_read_id(chat, request.user)
+        if chat.type == Chat.Type.PRIVATE
+        else 0
+    )
     pinned_ids = set(
         PinnedMessage.objects.filter(chat=chat, message__is_deleted=False)
         .values_list("message_id", flat=True)
