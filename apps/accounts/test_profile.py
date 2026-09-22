@@ -1,9 +1,12 @@
+from datetime import date
 from io import BytesIO
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from PIL import Image
 from django.urls import reverse
+
+from apps.messenger.models import Chat, ChatParticipant
 
 from .models import User
 
@@ -103,9 +106,10 @@ class ProfileTests(TestCase):
         self.assertEqual(payload["username"], "petr")
         self.assertEqual(payload["bio"], "Собираю BuildCraft.")
         self.assertIn("status", payload)
+        self.assertIn("birthday", payload)
+        self.assertIn("personal_channel", payload)
         self.assertNotIn("email", payload)
         self.assertNotIn("phone", payload)
-        self.assertNotIn("birthday", payload)
 
     def test_messenger_profile_overlay_omits_forbidden_telegram_extras(self):
         self.client.force_login(self.user)
@@ -180,6 +184,74 @@ class ProfileTests(TestCase):
         self.assertIn("last_name", payload)
         self.assertNotIn("email", payload)
         self.assertNotIn("phone", payload)
+
+    def test_overlay_profile_edit_updates_birthday_and_owned_personal_channel(self):
+        channel = Chat.objects.create(
+            type=Chat.Type.CHANNEL,
+            title="Shipovskijkorp Technologies",
+            username="shiptech",
+        )
+        ChatParticipant.objects.create(
+            chat=channel,
+            user=self.user,
+            role=ChatParticipant.Role.OWNER,
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse("accounts:profile"),
+            {
+                "first_name": "",
+                "last_name": "",
+                "username": self.user.username,
+                "bio": "",
+                "birthday": "2000-09-10",
+                "personal_channel": str(channel.pk),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["birthday"], "2000-09-10")
+        self.assertEqual(payload["personal_channel"]["id"], channel.pk)
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.birthday, date(2000, 9, 10))
+        self.assertEqual(self.user.personal_channel_id, channel.pk)
+
+    def test_overlay_rejects_foreign_personal_channel(self):
+        other = User.objects.create_user(
+            username="other",
+            email="other@example.com",
+            password=self.password,
+        )
+        channel = Chat.objects.create(
+            type=Chat.Type.CHANNEL,
+            title="Чужой канал",
+            username="other_channel",
+        )
+        ChatParticipant.objects.create(
+            chat=channel,
+            user=other,
+            role=ChatParticipant.Role.OWNER,
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.post(
+            reverse("accounts:profile"),
+            {
+                "first_name": "",
+                "last_name": "",
+                "username": self.user.username,
+                "bio": "",
+                "birthday": "",
+                "personal_channel": str(channel.pk),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("personal_channel", response.json()["errors"])
 
     def test_profile_rejects_oversized_avatar_dimensions(self):
         self.client.force_login(self.user)
