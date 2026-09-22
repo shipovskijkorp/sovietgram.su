@@ -425,8 +425,6 @@
 
 <div class="profile-drawer-backdrop" id="profileMenuBackdrop" aria-hidden="true"></div>
 <aside class="profile-drawer profile-drawer--telegram" id="profileMenu" aria-hidden="true">
-  <input class="profile-account-toggle-input" id="profileAccountToggleInput" type="checkbox" hidden>
-
   <header class="profile-drawer__hero profile-drawer__hero--telegram">
     <button class="profile-drawer__close" id="profileMenuClose" type="button" aria-label="Закрыть меню">×</button>
 
@@ -443,17 +441,17 @@
         <strong class="profile-drawer__name">{{ request.user.display_name }}</strong>
         <small class="profile-drawer__username">@{{ request.user.username }}</small>
       </div>
-      <label class="profile-accounts__toggle" for="profileAccountToggleInput" aria-label="Показать аккаунты" title="Аккаунты">
+      <button class="profile-accounts__toggle" id="profileAccountToggle" type="button" aria-label="Показать аккаунты" aria-controls="profileAccountList" aria-expanded="false" title="Аккаунты">
         <span aria-hidden="true"></span>
-      </label>
+      </button>
     </div>
   </header>
 
-  <div class="profile-account-list">
+  <div class="profile-account-list" id="profileAccountList" hidden>
     {% for slot in account_slots %}
       {% if slot.is_current %}
         <div class="profile-account-row is-current">
-          {% if slot.user.avatar %}<img src="{{ slot.user.avatar.url }}" alt="">{% else %}<span>{{ slot.user.initials }}</span>{% endif %}
+          {% if slot.user.avatar %}<img class="profile-account-avatar" src="{{ slot.user.avatar.url }}" alt="" width="36" height="36">{% else %}<span class="profile-account-avatar profile-account-avatar--fallback">{{ slot.user.initials }}</span>{% endif %}
           <strong>{{ slot.user.display_name }}</strong>
           <small>@{{ slot.user.username }}</small>
           {% if slot.unread_count %}<b class="profile-account-badge">{{ slot.unread_count }}</b>{% else %}<b class="profile-account-check">✓</b>{% endif %}
@@ -462,7 +460,7 @@
         <form method="post" action="{% url 'accounts:switch_account' slot.user.pk %}" class="profile-account-row profile-account-row--switch">
           {% csrf_token %}
           <button type="submit">
-            {% if slot.user.avatar %}<img src="{{ slot.user.avatar.url }}" alt="">{% else %}<span>{{ slot.user.initials }}</span>{% endif %}
+            {% if slot.user.avatar %}<img class="profile-account-avatar" src="{{ slot.user.avatar.url }}" alt="" width="36" height="36">{% else %}<span class="profile-account-avatar profile-account-avatar--fallback">{{ slot.user.initials }}</span>{% endif %}
             <strong>{{ slot.user.display_name }}</strong>
             <small>@{{ slot.user.username }}</small>
             {% if slot.unread_count %}<b class="profile-account-badge">{{ slot.unread_count }}</b>{% endif %}
