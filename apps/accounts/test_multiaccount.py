@@ -69,16 +69,16 @@ class MultiAccountTests(TestCase):
         remaining = self.client.session["stalingram_accounts_v1"]
         self.assertEqual([int(item["user_id"]) for item in remaining], [self.first.pk])
 
-    def test_sidebar_uses_full_header_account_toggle_without_close_button(self):
+    def test_sidebar_uses_full_header_native_account_toggle(self):
         response = self.client.get(reverse("messenger:home"))
         self.assertContains(
             response,
-            'class="profile-drawer__hero profile-drawer__hero--telegram" id="profileAccountToggle" type="button"',
+            'id="profileAccountToggleInput" type="checkbox"',
             html=False,
         )
         self.assertContains(
             response,
-            'id="profileAccountList" hidden',
+            'class="profile-drawer__hero profile-drawer__hero--telegram" for="profileAccountToggleInput"',
             html=False,
         )
         self.assertContains(
@@ -87,10 +87,9 @@ class MultiAccountTests(TestCase):
             html=False,
         )
         self.assertNotContains(response, 'id="profileMenuClose"', html=False)
-        self.assertNotContains(response, 'profile-accounts__toggle', html=False)
+        self.assertNotContains(response, 'id="profileAccountToggle"', html=False)
         self.assertNotContains(response, "<details", html=False)
-        self.assertNotContains(response, 'profile-drawer__avatar-link', html=False)
-        self.assertNotContains(response, 'profile-drawer__identity-text" href=', html=False)
+        self.assertNotContains(response, 'profile-drawer__username', html=False)
         self.assertContains(response, "Создать группу")
         self.assertContains(response, "Создать канал")
         self.assertContains(response, "Звонки")
