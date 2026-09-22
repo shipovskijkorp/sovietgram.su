@@ -6,7 +6,7 @@ from django.urls import reverse
 
 from apps.accounts.models import User
 
-from .models import ChatParticipant, Message, MessageAttachment, PinnedMessage
+from .models import Chat, ChatParticipant, Message, MessageAttachment, PinnedMessage
 from .services import get_or_create_direct_chat
 
 
@@ -32,6 +32,37 @@ class ChatFeatureTests(TestCase):
         self.charlie = User.objects.create_user("charlie", "charlie@example.com", self.password)
         self.chat = get_or_create_direct_chat(self.alice, self.bob)
         self.client.force_login(self.alice)
+
+    def test_direct_chat_uses_private_type_and_member_roles(self):
+        self.assertEqual(self.chat.type, Chat.Type.PRIVATE)
+        roles = set(
+            self.chat.memberships.values_list("role", flat=True)
+        )
+        self.assertEqual(roles, {ChatParticipant.Role.MEMBER})
+
+    def test_group_and_channel_types_and_roles_are_available(self):
+        group = Chat.objects.create(type=Chat.Type.GROUP)
+        channel = Chat.objects.create(type=Chat.Type.CHANNEL)
+        owner = ChatParticipant.objects.create(
+            chat=group,
+            user=self.alice,
+            role=ChatParticipant.Role.OWNER,
+        )
+        admin = ChatParticipant.objects.create(
+            chat=group,
+            user=self.bob,
+            role=ChatParticipant.Role.ADMIN,
+        )
+        member = ChatParticipant.objects.create(
+            chat=channel,
+            user=self.charlie,
+        )
+
+        self.assertEqual(group.type, "group")
+        self.assertEqual(channel.type, "channel")
+        self.assertEqual(owner.role, "owner")
+        self.assertEqual(admin.role, "admin")
+        self.assertEqual(member.role, "member")
 
     def test_saved_messages_chat_is_single_participant_chat(self):
         response = self.client.get(reverse("messenger:saved_messages"))
