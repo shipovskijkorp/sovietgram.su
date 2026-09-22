@@ -81,8 +81,8 @@ function validateSelection(files, mode) {
   for (const file of files) {
     if (!allowed.has(fileExtension(file))) {
       return mode === "media"
-        ? "В режиме фото и видео поддерживаются PNG, JPEG, WebP, GIF, MP4, WebM и MOV."
-        : "Сейчас без сжатия можно отправлять изображения, видео и аудио.";
+        ? "В режиме фото и видео поддерживаются PNG, JPEG, WebP, MP4, WebM и MOV."
+        : "Как файл можно отправить исходник без обработки.";
     }
     if (mode === "media" && !isMediaFile(file)) {
       return "В режиме фото и видео можно выбрать только изображения и видео.";
