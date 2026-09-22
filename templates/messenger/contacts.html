@@ -43,7 +43,7 @@
         <div class="people-list people-list--flat">
           {% for person in search_results %}
             <article class="person-row person-row--telegram">
-              <a class="person-row__identity" href="{% url 'accounts:public_profile' person.username %}">
+              <a class="person-row__identity" data-user-profile href="{% url 'accounts:public_profile' person.username %}">
                 {% if person.avatar %}
                   <img class="person-row__avatar" src="{{ person.avatar.url }}" alt="">
                 {% else %}
@@ -92,7 +92,7 @@
         <div class="people-list people-list--flat">
           {% for contact in contacts %}
             <article class="person-row person-row--telegram">
-              <a class="person-row__identity" href="{% url 'accounts:public_profile' contact.user.username %}">
+              <a class="person-row__identity" data-user-profile href="{% url 'accounts:public_profile' contact.user.username %}">
                 {% if contact.user.avatar %}
                   <img class="person-row__avatar" src="{{ contact.user.avatar.url }}" alt="">
                 {% else %}
@@ -112,4 +112,5 @@
     {% endif %}
   </section>
 </main>
+{% include 'accounts/_profile_overlay.html' %}
 {% endblock %}
