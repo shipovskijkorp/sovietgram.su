@@ -425,7 +425,9 @@
 
 <div class="profile-drawer-backdrop" id="profileMenuBackdrop" aria-hidden="true"></div>
 <aside class="profile-drawer profile-drawer--telegram" id="profileMenu" aria-hidden="true">
-  <button class="profile-drawer__hero profile-drawer__hero--telegram" id="profileAccountToggle" type="button" aria-label="Показать аккаунты" aria-controls="profileAccountList" aria-expanded="false">
+  <input class="profile-account-toggle-input" id="profileAccountToggleInput" type="checkbox" hidden>
+
+  <label class="profile-drawer__hero profile-drawer__hero--telegram" for="profileAccountToggleInput" aria-label="Показать аккаунты">
     <span class="profile-drawer__avatar-static">
       {% if request.user.avatar %}
         <img class="profile-drawer__avatar" src="{{ request.user.avatar.url }}" alt="">
@@ -435,15 +437,12 @@
     </span>
 
     <span class="profile-drawer__summary">
-      <span class="profile-drawer__identity-text">
-        <strong class="profile-drawer__name">{{ request.user.display_name }}</strong>
-        <small class="profile-drawer__username">@{{ request.user.username }}</small>
-      </span>
+      <strong class="profile-drawer__name">{{ request.user.display_name }}</strong>
       <span class="profile-accounts__arrow" aria-hidden="true"></span>
     </span>
-  </button>
+  </label>
 
-  <div class="profile-account-list" id="profileAccountList" hidden>
+  <div class="profile-account-list" id="profileAccountList">
     {% for slot in account_slots %}
       {% if slot.is_current %}
         <div class="profile-account-row is-current">
