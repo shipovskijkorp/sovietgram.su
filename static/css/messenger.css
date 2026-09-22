@@ -435,3 +435,105 @@ body:not([data-theme="dark"]) .conversation-empty-hint {
 body[data-theme="dark"] .conversation-empty-hint {
   background: rgba(43, 61, 78, .78);
 }
+
+
+/* Telegram-like sidebar header */
+.sidebar-searchbar {
+  flex: 0 0 auto;
+  min-height: 64px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.sidebar-searchbar__menu {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #7a8794;
+  cursor: pointer;
+}
+
+.sidebar-searchbar__menu:hover {
+  background: rgba(95, 112, 128, .08);
+}
+
+.sidebar-searchbar__menu > span {
+  width: 16px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.sidebar-searchbar__field {
+  min-width: 0;
+  height: 40px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 20px;
+  background: #eef2f5;
+  color: #8b98a5;
+  cursor: text;
+}
+
+.sidebar-searchbar__icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.sidebar-searchbar__field input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.sidebar-searchbar__field input::placeholder {
+  color: #8b98a5;
+}
+
+body[data-theme="dark"] .sidebar-searchbar {
+  background: #101923;
+  border-color: rgba(255,255,255,.06);
+}
+
+body[data-theme="dark"] .sidebar-searchbar__menu {
+  color: #718090;
+}
+
+body[data-theme="dark"] .sidebar-searchbar__menu:hover {
+  background: rgba(255,255,255,.05);
+}
+
+body[data-theme="dark"] .sidebar-searchbar__field {
+  background: #202c39;
+  color: #78899b;
+}
+
+body[data-theme="dark"] .sidebar-searchbar__field input {
+  color: #dbe5ee;
+}
+
+body[data-theme="dark"] .sidebar-searchbar__field input::placeholder {
+  color: #78899b;
+}
