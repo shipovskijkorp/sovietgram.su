@@ -12,6 +12,11 @@ def message_attachment_path(instance, filename):
     return f"messages/{instance.message.chat_id}/{now:%Y/%m}/{uuid4().hex}{extension}"
 
 
+def chat_avatar_path(instance, filename):
+    extension = Path(filename).suffix.lower()[:12]
+    return f"chat_avatars/{instance.pk or 'new'}/{uuid4().hex}{extension}"
+
+
 class Contact(models.Model):
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -56,6 +61,7 @@ class Chat(models.Model):
     title = models.CharField(max_length=120, blank=True, default="")
     username = models.CharField(max_length=64, unique=True, null=True, blank=True)
     description = models.TextField(max_length=500, blank=True, default="")
+    avatar = models.ImageField(upload_to=chat_avatar_path, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, db_index=True)
 
