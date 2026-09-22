@@ -12,27 +12,15 @@
 {% block content %}
 <div class="app-shell{% if selected_chat %} chat-open{% endif %}">
   <aside class="sidebar">
-    <header class="sidebar__topbar">
-      <button class="icon-button menu-button" id="profileMenuButton" type="button" aria-label="Меню" aria-controls="profileMenu" aria-expanded="false" title="Меню">
+    <header class="sidebar-searchbar">
+      <button class="sidebar-searchbar__menu" id="profileMenuButton" type="button" aria-label="Меню" aria-controls="profileMenu" aria-expanded="false" title="Меню">
         <span></span><span></span><span></span>
       </button>
-      <a class="brand" href="{% url 'messenger:home' %}" aria-label="Stalingram">
-        <span class="brand__mark" aria-hidden="true">★</span>
-        <span class="brand__word">STALINGRAM</span>
-      </a>
-    </header>
-
-    <div class="search-wrap">
-      <label class="search" for="chatFilter">
-        <span aria-hidden="true">⌕</span>
+      <label class="sidebar-searchbar__field" for="chatFilter">
+        <span class="sidebar-searchbar__icon" aria-hidden="true">⌕</span>
         <input id="chatFilter" type="search" placeholder="Поиск" autocomplete="off">
       </label>
-    </div>
-
-    <nav class="chat-folder-tabs" aria-label="Папки чатов">
-      <a class="{% if not show_archived %}is-active{% endif %}" href="{% url 'messenger:home' %}">Все</a>
-      <a class="{% if show_archived %}is-active{% endif %}" href="{% url 'messenger:home' %}?archived=1">Архив{% if archived_count %}<span>{{ archived_count }}</span>{% endif %}</a>
-    </nav>
+    </header>
 
     <section class="chat-list{% if not chats %} chat-list--empty{% endif %}" id="chatList" aria-label="Чаты">
       {% for chat in chats %}
