@@ -3,13 +3,30 @@ const profileMenu = document.getElementById("profileMenu");
 const profileMenuBackdrop = document.getElementById("profileMenuBackdrop");
 const profileMenuClose = document.getElementById("profileMenuClose");
 
+const profileAccountToggle = document.getElementById("profileAccountToggle");
+const profileAccountList = document.getElementById("profileAccountList");
+
+function setAccountList(open) {
+  if (!profileAccountToggle || !profileAccountList) return;
+  profileAccountList.hidden = !open;
+  profileAccountToggle.classList.toggle("is-open", open);
+  profileAccountToggle.setAttribute("aria-expanded", String(open));
+}
+
 function setProfileMenu(open) {
   if (!profileMenu || !profileMenuBackdrop || !profileMenuButton) return;
+  if (open) setAccountList(false);
   profileMenu.classList.toggle("is-open", open);
   profileMenuBackdrop.classList.toggle("is-open", open);
   profileMenu.setAttribute("aria-hidden", String(!open));
   profileMenuBackdrop.setAttribute("aria-hidden", String(!open));
   profileMenuButton.setAttribute("aria-expanded", String(open));
+}
+
+if (profileAccountToggle && profileAccountList) {
+  profileAccountToggle.addEventListener("click", () => {
+    setAccountList(profileAccountList.hidden);
+  });
 }
 
 if (profileMenuButton && profileMenu && profileMenuBackdrop) {
