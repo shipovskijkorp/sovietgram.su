@@ -6,7 +6,7 @@ from django.test import TestCase
 from PIL import Image
 from django.urls import reverse
 
-from apps.messenger.models import Chat, ChatParticipant
+from apps.messenger.models import Chat, ChatParticipant, Message
 
 from .models import User
 
@@ -192,6 +192,58 @@ class ProfileTests(TestCase):
         self.assertIn("last_name", payload)
         self.assertNotIn("email", payload)
         self.assertNotIn("phone", payload)
+
+    def test_personal_channel_profile_payload_contains_telegram_summary(self):
+        channel = Chat.objects.create(
+            type=Chat.Type.CHANNEL,
+            title="Shipovskijkorp Technologies",
+            username="shiptech",
+            description="Новости проекта",
+        )
+        ChatParticipant.objects.create(
+            chat=channel,
+            user=self.user,
+            role=ChatParticipant.Role.OWNER,
+        )
+        other = User.objects.create_user(
+            username="subscriber",
+            email="subscriber@example.com",
+            password=self.password,
+        )
+        ChatParticipant.objects.create(
+            chat=channel,
+            user=other,
+            role=ChatParticipant.Role.MEMBER,
+        )
+        Message.objects.create(
+            chat=channel,
+            sender=self.user,
+            text="Industrial Legacy Version: Alpha 0.1.9 Dev Blog",
+        )
+        self.user.personal_channel = channel
+        self.user.save(update_fields=["personal_channel"])
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse("accounts:public_profile", args=[self.user.username]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        personal = response.json()["personal_channel"]
+        self.assertEqual(personal["title"], "Shipovskijkorp Technologies")
+        self.assertEqual(
+            personal["last_message_preview"],
+            "Industrial Legacy Version: Alpha 0.1.9 Dev Blog",
+        )
+        self.assertEqual(personal["subscriber_count"], 2)
+        self.assertEqual(personal["subscriber_text"], "2 подписчика")
+        self.assertTrue(personal["last_message_time"])
+
+        page = self.client.get(reverse("messenger:home"))
+        self.assertContains(page, 'id="userProfileChannelCard"', html=False)
+        self.assertContains(page, 'id="userProfileChannelPreview"', html=False)
+        self.assertContains(page, 'id="userProfileChannelMeta"', html=False)
+        self.assertNotContains(page, 'id="userProfileChannelRow"', html=False)
 
     def test_overlay_profile_edit_updates_birthday_and_owned_personal_channel(self):
         channel = Chat.objects.create(
