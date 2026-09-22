@@ -730,3 +730,16 @@
 }
 .calls-empty strong { color: #5e4d3c; font-size: 14px; }
 .calls-empty p { max-width: 300px; margin: 7px 0 0; line-height: 1.45; font-size: 11px; }
+
+.profile-account-badge {
+  min-width: 24px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #4d88bd;
+  color: white !important;
+  font-size: 9px !important;
+  font-weight: 800;
+}
