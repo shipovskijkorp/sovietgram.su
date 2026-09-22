@@ -133,6 +133,7 @@ def profile(request):
                         "id": user.personal_channel_id,
                         "title": user.personal_channel.title,
                         "username": user.personal_channel.username or "",
+                        "avatar_url": user.personal_channel.avatar.url if user.personal_channel.avatar else "",
                     }
                     if user.personal_channel_id
                     else None
@@ -214,6 +215,7 @@ def public_profile(request, username):
                         "id": profile_user.personal_channel_id,
                         "title": profile_user.personal_channel.title,
                         "username": profile_user.personal_channel.username or "",
+                        "avatar_url": profile_user.personal_channel.avatar.url if profile_user.personal_channel.avatar else "",
                     }
                     if profile_user.personal_channel_id
                     else None
@@ -238,6 +240,7 @@ def public_profile(request, username):
                             "id": membership.chat_id,
                             "title": membership.chat.title,
                             "username": membership.chat.username or "",
+                            "avatar_url": membership.chat.avatar.url if membership.chat.avatar else "",
                         }
                         for membership in profile_user.chat_memberships.select_related("chat")
                         .filter(
