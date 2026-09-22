@@ -120,6 +120,67 @@ class ProfileTests(TestCase):
         self.assertNotContains(response, "Автоматизация чатов")
         self.assertNotContains(response, "Цвет имени")
 
+    def test_own_profile_opens_in_messenger_overlay(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("messenger:home"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'href="{reverse("accounts:public_profile", args=[self.user.username])}" data-user-profile',
+            html=False,
+        )
+        self.assertContains(response, 'id="userProfileEdit"', html=False)
+        self.assertContains(response, 'id="userProfileEditForm"', html=False)
+        self.assertContains(response, "О себе")
+        self.assertContains(response, "Имя пользователя")
+        self.assertNotContains(response, "Номер телефона")
+        self.assertNotContains(response, "Подарки")
+        self.assertNotContains(response, "QR")
+        self.assertNotContains(response, "Истории")
+        self.assertNotContains(response, "Автоматизация чатов")
+        self.assertNotContains(response, "Цвет имени")
+
+    def test_overlay_profile_edit_updates_public_fields_without_email(self):
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("accounts:profile"),
+            {
+                "first_name": "Иван",
+                "last_name": "Шиповский",
+                "username": "ivan_overlay",
+                "bio": "Редактировано из виджета.",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["display_name"], "Иван Шиповский")
+        self.assertEqual(payload["username"], "ivan_overlay")
+        self.assertNotIn("email", payload)
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.first_name, "Иван")
+        self.assertEqual(self.user.last_name, "Шиповский")
+        self.assertEqual(self.user.username, "ivan_overlay")
+        self.assertEqual(self.user.bio, "Редактировано из виджета.")
+        self.assertEqual(self.user.email, "ivan@example.com")
+
+    def test_self_profile_ajax_exposes_edit_fields_but_not_private_account_data(self):
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse("accounts:public_profile", args=[self.user.username]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["is_self"])
+        self.assertEqual(payload["edit_url"], reverse("accounts:profile"))
+        self.assertIn("first_name", payload)
+        self.assertIn("last_name", payload)
+        self.assertNotIn("email", payload)
+        self.assertNotIn("phone", payload)
+
     def test_profile_rejects_oversized_avatar_dimensions(self):
         self.client.force_login(self.user)
         buffer = BytesIO()
