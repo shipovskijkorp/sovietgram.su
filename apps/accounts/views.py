@@ -1,8 +1,8 @@
 from django.contrib import messages
-from django.contrib.auth import login
+from django.contrib.auth import login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.auth.views import LoginView, LogoutView, PasswordChangeView
+from django.contrib.auth.views import LoginView, PasswordChangeView
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
 from django.views.decorators.http import require_POST
@@ -14,6 +14,12 @@ from .forms import (
     UserSettingsForm,
 )
 from .models import User
+from .multiaccount import (
+    activate_account,
+    add_authenticated_account,
+    remember_current_account,
+    remove_current_account,
+)
 
 
 class StalingramLoginView(LoginView):
@@ -21,9 +27,26 @@ class StalingramLoginView(LoginView):
     template_name = "accounts/login.html"
     redirect_authenticated_user = True
 
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        remember_current_account(self.request)
+        return response
 
-class StalingramLogoutView(LogoutView):
-    next_page = "accounts:login"
+
+class StalingramLogoutView:
+    @classmethod
+    def as_view(cls):
+        @login_required
+        @require_POST
+        def view(request):
+            switched = remove_current_account(request)
+            if switched is not None:
+                messages.success(request, f"Переключено на @{switched.username}.")
+                return redirect("messenger:home")
+            logout(request)
+            return redirect("accounts:login")
+
+        return view
 
 
 class StalingramPasswordChangeView(LoginRequiredMixin, PasswordChangeView):
@@ -47,6 +70,28 @@ def register(request):
         return redirect("messenger:home")
 
     return render(request, "accounts/register.html", {"form": form})
+
+
+@login_required
+def add_account(request):
+    form = IdentifierAuthenticationForm(request=request, data=request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        user = form.get_user()
+        backend = "apps.accounts.backends.EmailOrUsernameBackend"
+        add_authenticated_account(request, user, backend)
+        messages.success(request, f"Аккаунт @{user.username} добавлен.")
+        return redirect("messenger:home")
+    return render(request, "accounts/add_account.html", {"form": form})
+
+
+@login_required
+@require_POST
+def switch_account(request, user_id):
+    user = activate_account(request, user_id)
+    if user is None:
+        messages.error(request, "Сеанс этого аккаунта истёк. Войдите в него снова.")
+        return redirect("accounts:add_account")
+    return redirect("messenger:home")
 
 
 @login_required
