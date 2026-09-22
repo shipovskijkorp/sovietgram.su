@@ -123,19 +123,17 @@
           <input id="userProfileFirstNameInput" name="first_name" type="text" maxlength="150">
         </label>
         <label class="tg-profile-edit__row">
-          <span>Фамилия</span>
-          <input id="userProfileLastNameInput" name="last_name" type="text" maxlength="150">
-        </label>
-        <label class="tg-profile-edit__row">
           <span>Имя пользователя</span>
           <span class="tg-profile-edit__username"><b>@</b><input id="userProfileUsernameInput" name="username" type="text" maxlength="150"></span>
         </label>
-        <label class="tg-profile-edit__row">
+        <div class="tg-profile-edit__row tg-profile-edit__row--button">
           <span>Личный канал</span>
-          <select id="userProfileChannelInput" name="personal_channel">
-            <option value="">Не выбран</option>
-          </select>
-        </label>
+          <button class="tg-profile-edit__channel-button" id="userProfileChannelOpen" type="button">
+            <strong id="userProfileChannelChoice">Не выбран</strong>
+            <span aria-hidden="true">›</span>
+          </button>
+          <input id="userProfileChannelInput" name="personal_channel" type="hidden" value="">
+        </div>
         <label class="tg-profile-edit__row">
           <span>День рождения</span>
           <input id="userProfileBirthdayInput" name="birthday" type="date">
@@ -178,4 +176,19 @@
       </footer>
     </form>
   </section>
+
+  <div class="tg-profile-channel-picker" id="userProfileChannelPicker" hidden>
+    <section class="tg-profile-channel-picker__card" role="dialog" aria-modal="true" aria-labelledby="userProfileChannelPickerTitle">
+      <header class="tg-profile-channel-picker__header">
+        <strong id="userProfileChannelPickerTitle">Личный канал</strong>
+      </header>
+
+      <div class="tg-profile-channel-picker__list" id="userProfileChannelList"></div>
+
+      <footer class="tg-profile-channel-picker__footer">
+        <button class="tg-profile-channel-picker__remove" id="userProfileChannelRemove" type="button">Удалить</button>
+        <button class="tg-profile-channel-picker__done" id="userProfileChannelDone" type="button">Готово</button>
+      </footer>
+    </section>
+  </div>
 </div>
