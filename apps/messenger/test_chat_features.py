@@ -82,9 +82,20 @@ class ChatFeatureTests(TestCase):
         )
         self.assertEqual(response.status_code, 404)
 
-    def test_either_participant_can_delete_for_everyone(self):
-        message = Message.objects.create(chat=self.chat, sender=self.alice, text="Удалить")
+    def test_other_participant_cannot_delete_message(self):
+        message = Message.objects.create(chat=self.chat, sender=self.alice, text="Не трогать")
         self.client.force_login(self.bob)
+        response = self.client.post(
+            reverse("messenger:delete_message", args=[self.chat.pk, message.pk]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 404)
+        message.refresh_from_db()
+        self.assertFalse(message.is_deleted)
+        self.assertEqual(message.text, "Не трогать")
+
+    def test_sender_can_delete_own_message(self):
+        message = Message.objects.create(chat=self.chat, sender=self.alice, text="Удалить")
         response = self.client.post(
             reverse("messenger:delete_message", args=[self.chat.pk, message.pk]),
             HTTP_X_REQUESTED_WITH="XMLHttpRequest",
@@ -163,6 +174,56 @@ class ChatFeatureTests(TestCase):
         by_file = self.client.get(url, {"q": "report"}).json()["results"]
         self.assertEqual(by_text[0]["id"], text_message.pk)
         self.assertEqual(by_file[0]["id"], file_message.pk)
+
+    def test_inline_attachment_requires_chat_membership(self):
+        message = Message.objects.create(chat=self.chat, sender=self.alice, text="")
+        attachment = MessageAttachment.objects.create(
+            message=message,
+            file=SimpleUploadedFile("photo.png", b"stored-media", content_type="image/png"),
+            kind=MessageAttachment.Kind.IMAGE,
+            original_name="photo.png",
+            mime_type="image/png",
+            size=12,
+        )
+        view_url = reverse("messenger:view_attachment", args=[attachment.pk])
+        self.assertEqual(self.client.get(view_url).status_code, 200)
+
+        self.client.force_login(self.charlie)
+        self.assertEqual(self.client.get(view_url).status_code, 404)
+        self.assertEqual(
+            self.client.get(
+                reverse("messenger:download_attachment", args=[attachment.pk])
+            ).status_code,
+            404,
+        )
+
+    def test_media_upload_rejects_invalid_image_content(self):
+        upload = SimpleUploadedFile(
+            "fake.png",
+            b"<html>not an image</html>",
+            content_type="image/png",
+        )
+        response = self.client.post(
+            reverse("messenger:send_message", args=[self.chat.pk]),
+            {"attachment_mode": "media", "attachments": upload},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Message.objects.exists())
+
+    def test_media_upload_rejects_mime_extension_mismatch(self):
+        upload = SimpleUploadedFile(
+            "fake.png",
+            b"not-an-image",
+            content_type="image/jpeg",
+        )
+        response = self.client.post(
+            reverse("messenger:send_message", args=[self.chat.pk]),
+            {"attachment_mode": "media", "attachments": upload},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Message.objects.exists())
 
     def test_gif_upload_is_rejected(self):
         upload = SimpleUploadedFile("animation.gif", b"GIF89a", content_type="image/gif")
