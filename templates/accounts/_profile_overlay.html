@@ -1,0 +1,34 @@
+<div class="user-profile-overlay" id="userProfileOverlay" hidden>
+  <section class="user-profile-card" role="dialog" aria-modal="true" aria-labelledby="userProfileName">
+    <header class="user-profile-card__header">
+      <strong>Информация</strong>
+      <button class="user-profile-card__close" id="userProfileClose" type="button" aria-label="Закрыть">×</button>
+    </header>
+
+    <section class="user-profile-card__hero">
+      <div class="user-profile-card__avatar" id="userProfileAvatar"></div>
+      <h2 id="userProfileName"></h2>
+      <p id="userProfileStatus"></p>
+    </section>
+
+    <section class="user-profile-card__section" id="userProfileBioSection" hidden>
+      <p id="userProfileBio"></p>
+      <small>О себе</small>
+    </section>
+
+    <section class="user-profile-card__section user-profile-card__details">
+      <div class="user-profile-card__row">
+        <span class="user-profile-card__icon">@</span>
+        <span>
+          <strong id="userProfileUsername"></strong>
+          <small>Имя пользователя</small>
+        </span>
+      </div>
+    </section>
+
+    <footer class="user-profile-card__actions" id="userProfileActions">
+      <button class="user-profile-card__action user-profile-card__action--primary" id="userProfileMessage" type="button">Написать</button>
+      <button class="user-profile-card__action" id="userProfileContact" type="button">Добавить в контакты</button>
+    </footer>
+  </section>
+</div>
