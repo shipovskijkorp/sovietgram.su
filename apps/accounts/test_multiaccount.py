@@ -73,12 +73,12 @@ class MultiAccountTests(TestCase):
         response = self.client.get(reverse("messenger:home"))
         self.assertContains(
             response,
-            'id="profileAccountToggleInput" type="checkbox"',
+            'id="profileAccountToggle" type="button"',
             html=False,
         )
         self.assertContains(
             response,
-            'for="profileAccountToggleInput"',
+            'id="profileAccountList" hidden',
             html=False,
         )
         self.assertNotContains(response, "<details", html=False)
@@ -90,6 +90,18 @@ class MultiAccountTests(TestCase):
         self.assertNotContains(response, "Кошелёк")
         self.assertNotContains(response, "Ночной режим")
         self.assertNotContains(response, "эмодзи-статус")
+
+    def test_saved_account_avatar_has_hard_dimensions(self):
+        self.client.post(
+            reverse("accounts:add_account"),
+            {
+                "username": self.second.username,
+                "password": self.password,
+            },
+        )
+        response = self.client.get(reverse("messenger:home"))
+        self.assertContains(response, 'class="profile-account-avatar"', html=False)
+        self.assertContains(response, 'width="36" height="36"', html=False)
 
     def test_sidebar_lists_saved_accounts(self):
         self.client.post(
