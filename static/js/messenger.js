@@ -653,3 +653,302 @@ if (messageStage) {
     if (!document.hidden) pollMessages();
   });
 }
+
+
+// Group/channel creation wizard.
+const communityWizard = document.getElementById("communityWizard");
+const communityWizardForm = document.getElementById("communityWizardForm");
+const communityWizardType = document.getElementById("communityWizardType");
+const communityWizardMembers = document.getElementById("communityWizardMembers");
+const communityWizardVisibility = document.getElementById("communityWizardVisibility");
+const communityTitleInput = document.getElementById("communityTitleInput");
+const communityTitleLabel = document.getElementById("communityTitleLabel");
+const communityDescriptionInput = document.getElementById("communityDescriptionInput");
+const communityAvatarInput = document.getElementById("communityAvatarInput");
+const communityAvatarPreview = document.getElementById("communityAvatarPreview");
+const communityMemberSearch = document.getElementById("communityMemberSearch");
+const communitySelectedCount = document.getElementById("communitySelectedCount");
+const communityUsernameField = document.getElementById("communityUsernameField");
+const communityUsernameInput = document.getElementById("communityUsernameInput");
+const communityPrivateNote = document.getElementById("communityPrivateNote");
+const communityDetailsError = document.getElementById("communityDetailsError");
+const communityMembersError = document.getElementById("communityMembersError");
+const communityPrivacyError = document.getElementById("communityPrivacyError");
+const communitySteps = [...document.querySelectorAll("[data-community-step]")];
+const communityMemberRows = [...document.querySelectorAll("[data-member-row]")];
+const communityVisibilityRadios = [...document.querySelectorAll('input[name="wizard_visibility"]')];
+
+let communityAvatarUrl = "";
+let communityWizardMode = "group";
+let communitySubmitting = false;
+
+function communityErrorBox(step) {
+  if (step === "members") return communityMembersError;
+  if (step === "privacy") return communityPrivacyError;
+  return communityDetailsError;
+}
+
+function setCommunityError(step, message = "") {
+  const box = communityErrorBox(step);
+  if (!box) return;
+  box.textContent = message;
+  box.hidden = !message;
+}
+
+function showCommunityStep(step) {
+  communitySteps.forEach((element) => {
+    element.hidden = element.dataset.communityStep !== step;
+  });
+  setCommunityError("details");
+  setCommunityError("members");
+  setCommunityError("privacy");
+
+  if (step === "details") {
+    window.setTimeout(() => communityTitleInput?.focus(), 0);
+  } else if (step === "members") {
+    window.setTimeout(() => communityMemberSearch?.focus(), 0);
+  } else if (step === "privacy") {
+    window.setTimeout(() => {
+      const publicSelected = communityVisibilityRadios.find((radio) => radio.checked)?.value === "public";
+      if (publicSelected) communityUsernameInput?.focus();
+    }, 0);
+  }
+}
+
+function selectedCommunityMembers() {
+  return communityMemberRows
+    .map((row) => row.querySelector('input[type="checkbox"]'))
+    .filter((input) => input?.checked)
+    .map((input) => input.value);
+}
+
+function updateCommunityMemberCount() {
+  const count = selectedCommunityMembers().length;
+  if (communitySelectedCount) {
+    communitySelectedCount.textContent = count
+      ? `${count} выбрано`
+      : "Никто не выбран";
+  }
+  if (communityWizardMembers) {
+    communityWizardMembers.value = selectedCommunityMembers().join(",");
+  }
+}
+
+function resetCommunityAvatar() {
+  if (communityAvatarUrl) URL.revokeObjectURL(communityAvatarUrl);
+  communityAvatarUrl = "";
+  if (communityAvatarInput) communityAvatarInput.value = "";
+  if (communityAvatarPreview) {
+    communityAvatarPreview.innerHTML = `
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M8.5 6.5 10 4h4l1.5 2.5H18a3 3 0 0 1 3 3V17a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V9.5a3 3 0 0 1 3-3h2.5Z"></path>
+        <circle cx="12" cy="13" r="4"></circle>
+      </svg>
+    `;
+  }
+}
+
+function resetCommunityWizard(type) {
+  communityWizardMode = type === "channel" ? "channel" : "group";
+  if (communityWizardType) communityWizardType.value = communityWizardMode;
+  if (communityTitleLabel) {
+    communityTitleLabel.textContent = communityWizardMode === "channel"
+      ? "Название канала"
+      : "Название группы";
+  }
+  if (communityTitleInput) communityTitleInput.value = "";
+  if (communityDescriptionInput) communityDescriptionInput.value = "";
+  if (communityUsernameInput) communityUsernameInput.value = "";
+  if (communityMemberSearch) communityMemberSearch.value = "";
+  if (communityWizardVisibility) communityWizardVisibility.value = "public";
+
+  communityVisibilityRadios.forEach((radio) => {
+    radio.checked = radio.value === "public";
+  });
+  communityMemberRows.forEach((row) => {
+    const checkbox = row.querySelector('input[type="checkbox"]');
+    if (checkbox) checkbox.checked = false;
+    row.hidden = false;
+  });
+
+  resetCommunityAvatar();
+  updateCommunityMemberCount();
+  syncCommunityPrivacy();
+  showCommunityStep("details");
+}
+
+function openCommunityWizard(type) {
+  if (!communityWizard) return;
+  resetCommunityWizard(type);
+  communityWizard.hidden = false;
+  document.body.classList.add("has-modal");
+}
+
+function closeCommunityWizard() {
+  if (!communityWizard || communitySubmitting) return;
+  communityWizard.hidden = true;
+  document.body.classList.remove("has-modal");
+  resetCommunityAvatar();
+}
+
+function validateCommunityDetails() {
+  const title = communityTitleInput?.value.trim() || "";
+  if (!title) {
+    setCommunityError("details", communityWizardMode === "channel"
+      ? "Введите название канала."
+      : "Введите название группы.");
+    communityTitleInput?.focus();
+    return false;
+  }
+  return true;
+}
+
+function syncCommunityPrivacy() {
+  const visibility = communityVisibilityRadios.find((radio) => radio.checked)?.value || "public";
+  if (communityWizardVisibility) communityWizardVisibility.value = visibility;
+  const isPrivate = visibility === "private";
+  if (communityUsernameField) communityUsernameField.hidden = isPrivate;
+  if (communityPrivateNote) communityPrivateNote.hidden = !isPrivate;
+}
+
+function communityErrorsToText(errors) {
+  if (!errors || typeof errors !== "object") return "Не удалось создать чат.";
+  const order = ["title", "avatar", "username", "members", "__all__"];
+  const parts = [];
+  [...order, ...Object.keys(errors)].forEach((key) => {
+    if (!errors[key] || parts.some((item) => item.key === key)) return;
+    const messages = errors[key]
+      .map((item) => item?.message || "")
+      .filter(Boolean)
+      .join(" ");
+    if (messages) parts.push({ key, message: messages });
+  });
+  return parts.map((item) => item.message).join(" ") || "Проверьте введённые данные.";
+}
+
+async function submitCommunity(step) {
+  if (!communityWizardForm || !communityWizard || communitySubmitting) return;
+
+  if (!validateCommunityDetails()) {
+    showCommunityStep("details");
+    return;
+  }
+
+  if (communityWizardMode === "channel") {
+    const visibility = communityVisibilityRadios.find((radio) => radio.checked)?.value || "public";
+    if (visibility === "public" && !(communityUsernameInput?.value.trim())) {
+      setCommunityError("privacy", "Укажите публичный @адрес канала.");
+      communityUsernameInput?.focus();
+      return;
+    }
+  }
+
+  updateCommunityMemberCount();
+  syncCommunityPrivacy();
+
+  const formData = new FormData(communityWizardForm);
+  communitySubmitting = true;
+  communityWizard.querySelectorAll("button").forEach((button) => {
+    button.disabled = true;
+  });
+
+  try {
+    const response = await fetch(communityWizard.dataset.createUrl, {
+      method: "POST",
+      body: formData,
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+      },
+      credentials: "same-origin",
+    });
+    const payload = await response.json();
+
+    if (!response.ok || !payload.ok) {
+      const message = communityErrorsToText(payload.errors);
+      const targetStep = payload.errors?.username ? "privacy" : step;
+      if (targetStep !== step) showCommunityStep(targetStep);
+      setCommunityError(targetStep, message);
+      return;
+    }
+
+    window.location.assign(payload.redirect_url);
+  } catch (_error) {
+    setCommunityError(step, "Не удалось связаться с сервером. Попробуйте ещё раз.");
+  } finally {
+    communitySubmitting = false;
+    communityWizard.querySelectorAll("button").forEach((button) => {
+      button.disabled = false;
+    });
+  }
+}
+
+document.querySelectorAll("[data-community-open]").forEach((control) => {
+  control.addEventListener("click", (event) => {
+    event.preventDefault();
+    if (typeof setProfileMenu === "function") setProfileMenu(false);
+    openCommunityWizard(control.dataset.communityOpen || "group");
+  });
+});
+
+document.querySelectorAll("[data-community-close]").forEach((button) => {
+  button.addEventListener("click", closeCommunityWizard);
+});
+
+document.querySelectorAll("[data-community-back]").forEach((button) => {
+  button.addEventListener("click", () => showCommunityStep("details"));
+});
+
+document.getElementById("communityDetailsNext")?.addEventListener("click", () => {
+  if (!validateCommunityDetails()) return;
+  showCommunityStep(communityWizardMode === "channel" ? "privacy" : "members");
+});
+
+document.getElementById("communityCreateGroup")?.addEventListener("click", () => {
+  submitCommunity("members");
+});
+
+document.getElementById("communityCreateChannel")?.addEventListener("click", () => {
+  submitCommunity("privacy");
+});
+
+communityAvatarInput?.addEventListener("change", () => {
+  const file = communityAvatarInput.files?.[0];
+  if (!file || !communityAvatarPreview) return;
+  if (communityAvatarUrl) URL.revokeObjectURL(communityAvatarUrl);
+  communityAvatarUrl = URL.createObjectURL(file);
+  const image = document.createElement("img");
+  image.src = communityAvatarUrl;
+  image.alt = "";
+  communityAvatarPreview.replaceChildren(image);
+});
+
+communityMemberRows.forEach((row) => {
+  row.querySelector('input[type="checkbox"]')?.addEventListener("change", updateCommunityMemberCount);
+});
+
+communityMemberSearch?.addEventListener("input", () => {
+  const query = communityMemberSearch.value.trim().toLowerCase().replace(/^@/, "");
+  communityMemberRows.forEach((row) => {
+    row.hidden = Boolean(query) && !(row.dataset.memberSearch || "").includes(query);
+  });
+});
+
+communityVisibilityRadios.forEach((radio) => {
+  radio.addEventListener("change", syncCommunityPrivacy);
+});
+
+communityWizard?.addEventListener("click", (event) => {
+  if (event.target === communityWizard) closeCommunityWizard();
+});
+
+communityWizardForm?.addEventListener("submit", (event) => event.preventDefault());
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && communityWizard && !communityWizard.hidden) {
+    closeCommunityWizard();
+  }
+});
+
+if (communityWizard?.dataset.autoOpen === "group" || communityWizard?.dataset.autoOpen === "channel") {
+  openCommunityWizard(communityWizard.dataset.autoOpen);
+}
