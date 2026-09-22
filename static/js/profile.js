@@ -129,9 +129,14 @@ const userProfileEditAvatar = document.getElementById("userProfileEditAvatar");
 const userProfileEditDisplayName = document.getElementById("userProfileEditDisplayName");
 const userProfileEditStatus = document.getElementById("userProfileEditStatus");
 const userProfileFirstNameInput = document.getElementById("userProfileFirstNameInput");
-const userProfileLastNameInput = document.getElementById("userProfileLastNameInput");
 const userProfileUsernameInput = document.getElementById("userProfileUsernameInput");
 const userProfileChannelInput = document.getElementById("userProfileChannelInput");
+const userProfileChannelOpen = document.getElementById("userProfileChannelOpen");
+const userProfileChannelChoice = document.getElementById("userProfileChannelChoice");
+const userProfileChannelPicker = document.getElementById("userProfileChannelPicker");
+const userProfileChannelList = document.getElementById("userProfileChannelList");
+const userProfileChannelRemove = document.getElementById("userProfileChannelRemove");
+const userProfileChannelDone = document.getElementById("userProfileChannelDone");
 const userProfileBirthdayInput = document.getElementById("userProfileBirthdayInput");
 const userProfileBioInput = document.getElementById("userProfileBioInput");
 const userProfileBioCount = document.getElementById("userProfileBioCount");
@@ -139,6 +144,7 @@ const userProfileEditError = document.getElementById("userProfileEditError");
 
 let openedProfile = null;
 let profileAvatarPreviewUrl = "";
+let pendingProfileChannelId = "";
 
 function csrfToken() {
   return document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || "";
@@ -218,32 +224,96 @@ function renderUserProfile(profile) {
   document.body.classList.add("has-profile-overlay");
 }
 
-function fillPersonalChannelOptions(profile) {
-  if (!userProfileChannelInput) return;
-  userProfileChannelInput.replaceChildren();
+function channelTitleById(profile, channelId) {
+  if (!channelId) return "Не выбран";
+  const channel = (profile?.owned_channels || []).find(
+    (item) => String(item.id) === String(channelId)
+  );
+  return channel?.title || (channel?.username ? `@${channel.username}` : "Не выбран");
+}
 
-  const empty = document.createElement("option");
-  empty.value = "";
-  empty.textContent = "Не выбран";
-  userProfileChannelInput.appendChild(empty);
+function updateProfileChannelChoice(profile, channelId) {
+  if (userProfileChannelInput) userProfileChannelInput.value = channelId || "";
+  if (userProfileChannelChoice) {
+    userProfileChannelChoice.textContent = channelTitleById(profile, channelId);
+  }
+}
 
-  (profile.owned_channels || []).forEach((channel) => {
-    const option = document.createElement("option");
-    option.value = String(channel.id);
-    option.textContent = channel.title || (channel.username ? `@${channel.username}` : `Канал #${channel.id}`);
-    userProfileChannelInput.appendChild(option);
+function renderProfileChannelPicker(profile, selectedId) {
+  if (!userProfileChannelList) return;
+  userProfileChannelList.replaceChildren();
+
+  const channels = profile?.owned_channels || [];
+  channels.forEach((channel) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "tg-profile-channel-option";
+    row.dataset.channelId = String(channel.id);
+
+    const avatar = document.createElement("span");
+    avatar.className = "tg-profile-channel-option__avatar";
+    if (channel.avatar_url) {
+      const image = document.createElement("img");
+      image.src = channel.avatar_url;
+      image.alt = "";
+      avatar.appendChild(image);
+    } else {
+      const fallback = document.createElement("span");
+      fallback.textContent = (channel.title || channel.username || "К").trim().slice(0, 2).toUpperCase();
+      avatar.appendChild(fallback);
+    }
+
+    const copy = document.createElement("span");
+    copy.className = "tg-profile-channel-option__copy";
+    const title = document.createElement("strong");
+    title.textContent = channel.title || (channel.username ? `@${channel.username}` : `Канал #${channel.id}`);
+    const username = document.createElement("small");
+    username.textContent = channel.username ? `@${channel.username}` : "Канал";
+    copy.append(title, username);
+
+    const check = document.createElement("span");
+    check.className = "tg-profile-channel-option__check";
+    check.textContent = "✓";
+
+    row.classList.toggle("is-selected", String(channel.id) === String(selectedId || ""));
+    row.append(avatar, copy, check);
+    row.addEventListener("click", () => {
+      pendingProfileChannelId = String(channel.id);
+      userProfileChannelList.querySelectorAll(".tg-profile-channel-option").forEach((item) => {
+        item.classList.toggle("is-selected", item === row);
+      });
+    });
+
+    userProfileChannelList.appendChild(row);
   });
 
-  userProfileChannelInput.value = profile.personal_channel?.id
-    ? String(profile.personal_channel.id)
-    : "";
+  if (!channels.length) {
+    const empty = document.createElement("div");
+    empty.className = "tg-profile-channel-picker__empty";
+    empty.textContent = "У вас пока нет каналов.";
+    userProfileChannelList.appendChild(empty);
+  }
+}
+
+function openProfileChannelPicker() {
+  if (!openedProfile?.is_self || !userProfileChannelPicker) return;
+  pendingProfileChannelId = userProfileChannelInput?.value || "";
+  renderProfileChannelPicker(openedProfile, pendingProfileChannelId);
+  userProfileChannelPicker.hidden = false;
+}
+
+function closeProfileChannelPicker(applySelection = false) {
+  if (!userProfileChannelPicker) return;
+  if (applySelection) {
+    updateProfileChannelChoice(openedProfile, pendingProfileChannelId);
+  }
+  userProfileChannelPicker.hidden = true;
 }
 
 function fillUserProfileEdit() {
   if (!openedProfile?.is_self) return;
 
   if (userProfileFirstNameInput) userProfileFirstNameInput.value = openedProfile.first_name || "";
-  if (userProfileLastNameInput) userProfileLastNameInput.value = openedProfile.last_name || "";
   if (userProfileUsernameInput) userProfileUsernameInput.value = openedProfile.username || "";
   if (userProfileBirthdayInput) userProfileBirthdayInput.value = openedProfile.birthday || "";
   if (userProfileBioInput) userProfileBioInput.value = openedProfile.bio || "";
@@ -253,7 +323,10 @@ function fillUserProfileEdit() {
   }
   if (userProfileEditStatus) userProfileEditStatus.textContent = openedProfile.status || "";
 
-  fillPersonalChannelOptions(openedProfile);
+  updateProfileChannelChoice(
+    openedProfile,
+    openedProfile.personal_channel?.id ? String(openedProfile.personal_channel.id) : ""
+  );
 
   if (userProfileEditError) {
     userProfileEditError.hidden = true;
@@ -268,7 +341,6 @@ function profileErrorsToText(errors) {
   const order = [
     "avatar",
     "first_name",
-    "last_name",
     "username",
     "bio",
     "personal_channel",
@@ -332,6 +404,23 @@ userProfileEdit?.addEventListener("click", () => {
 userProfileEditBack?.addEventListener("click", () => {
   if (!openedProfile) return;
   renderUserProfile(openedProfile);
+});
+
+userProfileChannelOpen?.addEventListener("click", openProfileChannelPicker);
+
+userProfileChannelDone?.addEventListener("click", () => {
+  closeProfileChannelPicker(true);
+});
+
+userProfileChannelRemove?.addEventListener("click", () => {
+  pendingProfileChannelId = "";
+  closeProfileChannelPicker(true);
+});
+
+userProfileChannelPicker?.addEventListener("click", (event) => {
+  if (event.target === userProfileChannelPicker) {
+    closeProfileChannelPicker(false);
+  }
 });
 
 userProfileBioInput?.addEventListener("input", () => {
@@ -460,7 +549,12 @@ userProfileContact?.addEventListener("click", async () => {
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && userProfileOverlay && !userProfileOverlay.hidden) {
+  if (event.key !== "Escape") return;
+  if (userProfileChannelPicker && !userProfileChannelPicker.hidden) {
+    closeProfileChannelPicker(false);
+    return;
+  }
+  if (userProfileOverlay && !userProfileOverlay.hidden) {
     closeUserProfile();
   }
 });
