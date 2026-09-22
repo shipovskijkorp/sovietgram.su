@@ -567,16 +567,18 @@
   flex: 0 0 auto;
   width: 100%;
   min-height: 164px;
-  display: block;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   padding: max(20px, env(safe-area-inset-top, 0px)) 20px 15px;
   border: 0;
-  border-radius: 0;
   background: linear-gradient(155deg, #d31313, #9c0000 72%);
   color: #fff7e9;
   text-align: left;
   cursor: pointer;
-  appearance: none;
-  -webkit-appearance: none;
+  user-select: none;
+  outline: none;
+  box-shadow: none;
 }
 
 .profile-drawer__avatar-static {
@@ -594,17 +596,12 @@
 }
 
 .profile-drawer__summary {
+  width: 100%;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 28px;
-  align-items: end;
+  align-items: center;
   gap: 10px;
   min-width: 0;
-}
-
-.profile-drawer__identity-text {
-  display: grid;
-  min-width: 0;
-  color: inherit;
 }
 
 .profile-drawer__hero--telegram .profile-drawer__name {
@@ -613,16 +610,6 @@
   white-space: nowrap;
   font-size: 16px;
   line-height: 1.25;
-}
-
-.profile-drawer__hero--telegram .profile-drawer__username {
-  margin-top: 3px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: rgba(255,247,233,.72);
-  font-size: 11px;
-  line-height: 1.2;
 }
 
 .profile-accounts__arrow {
@@ -642,11 +629,12 @@
   border-color: #fff;
 }
 
-.profile-drawer__hero--telegram.is-open .profile-accounts__arrow {
+.profile-account-toggle-input:checked ~ .profile-drawer__hero .profile-accounts__arrow {
   transform: rotate(225deg) translate(-1px, -1px);
 }
 
 .profile-account-list {
+  display: none;
   flex: 0 0 auto;
   max-height: min(300px, 42vh);
   overflow-y: auto;
@@ -655,8 +643,8 @@
   background: #fffaf1;
 }
 
-.profile-account-list[hidden] {
-  display: none !important;
+.profile-account-toggle-input:checked ~ .profile-account-list {
+  display: block;
 }
 
 .profile-account-row,
@@ -878,3 +866,10 @@ body[data-theme="dark"] .profile-account-add:hover {
 }
 
 .profile-drawer--telegram .profile-drawer__close { display: none !important; }
+
+.profile-drawer__hero--telegram:focus,
+.profile-drawer__hero--telegram:focus-visible,
+.profile-drawer__hero--telegram:active {
+  outline: none !important;
+  box-shadow: none !important;
+}
