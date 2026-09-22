@@ -1,5 +1,6 @@
 import tempfile
 
+from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -27,6 +28,7 @@ class ChatFeatureTests(TestCase):
         super().tearDownClass()
 
     def setUp(self):
+        cache.clear()
         self.alice = User.objects.create_user("alice", "alice@example.com", self.password)
         self.bob = User.objects.create_user("bob", "bob@example.com", self.password)
         self.charlie = User.objects.create_user("charlie", "charlie@example.com", self.password)
@@ -205,6 +207,67 @@ class ChatFeatureTests(TestCase):
         by_file = self.client.get(url, {"q": "report"}).json()["results"]
         self.assertEqual(by_text[0]["id"], text_message.pk)
         self.assertEqual(by_file[0]["id"], file_message.pk)
+
+    @override_settings(
+        STALINGRAM_RATE_LIMITS={
+            "send_message": {"limit": 2, "window": 60},
+        }
+    )
+    def test_message_send_is_rate_limited(self):
+        url = reverse("messenger:send_message", args=[self.chat.pk])
+        first = self.client.post(url, {"text": "Первое"})
+        second = self.client.post(url, {"text": "Второе"})
+        limited = self.client.post(
+            url,
+            {"text": "Третье"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(first.status_code, 302)
+        self.assertEqual(second.status_code, 302)
+        self.assertEqual(limited.status_code, 429)
+        self.assertTrue(limited.json()["rate_limited"])
+        self.assertEqual(limited["Retry-After"], "60")
+        self.assertEqual(Message.objects.filter(chat=self.chat).count(), 2)
+
+    @override_settings(
+        STALINGRAM_RATE_LIMITS={
+            "search_messages": {"limit": 2, "window": 60},
+        }
+    )
+    def test_message_search_is_rate_limited(self):
+        url = reverse("messenger:search_messages", args=[self.chat.pk])
+        self.assertEqual(self.client.get(url, {"q": "test"}).status_code, 200)
+        self.assertEqual(self.client.get(url, {"q": "test"}).status_code, 200)
+        limited = self.client.get(url, {"q": "test"})
+
+        self.assertEqual(limited.status_code, 429)
+        self.assertTrue(limited.json()["rate_limited"])
+
+    @override_settings(
+        STALINGRAM_RATE_LIMITS={
+            "typing": {"limit": 2, "window": 60},
+        }
+    )
+    def test_typing_updates_are_rate_limited(self):
+        url = reverse("messenger:typing", args=[self.chat.pk])
+        self.assertEqual(self.client.post(url).status_code, 200)
+        self.assertEqual(self.client.post(url).status_code, 200)
+        limited = self.client.post(url)
+
+        self.assertEqual(limited.status_code, 429)
+        self.assertTrue(limited.json()["rate_limited"])
+
+    def test_wrong_http_method_does_not_consume_send_rate_limit(self):
+        with override_settings(
+            STALINGRAM_RATE_LIMITS={
+                "send_message": {"limit": 1, "window": 60},
+            }
+        ):
+            url = reverse("messenger:send_message", args=[self.chat.pk])
+            self.assertEqual(self.client.get(url).status_code, 405)
+            sent = self.client.post(url, {"text": "Разрешённое сообщение"})
+            self.assertEqual(sent.status_code, 302)
 
     def test_inline_attachment_requires_chat_membership(self):
         message = Message.objects.create(chat=self.chat, sender=self.alice, text="")
