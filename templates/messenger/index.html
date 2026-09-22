@@ -68,7 +68,7 @@
       {% empty %}
         <div class="chat-empty">
           <span class="chat-empty__icon">✉</span>
-          <strong>{% if show_archived %}Архив пуст{% else %}Диалогов пока нет{% endif %}</strong>
+          <strong>{% if show_archived %}Архив пуст{% else %}Чатов пока нет{% endif %}</strong>
           <p>{% if show_archived %}Здесь появятся чаты, которые вы отправите в архив.{% else %}Найдите человека или канал и выходите на связь.{% endif %}</p>
           {% if not show_archived %}<a class="chat-empty__action" href="{% url 'messenger:contacts' %}?focus=search">Открыть поиск</a>{% endif %}
         </div>
@@ -161,7 +161,7 @@
           <button id="chatSearchClose" type="button" aria-label="Закрыть">×</button>
         </div>
         <div class="chat-search-results" id="chatSearchResults">
-          <div class="chat-search-empty">Введите текст или имя файла.</div>
+          <div class="chat-search-empty">Введите текст сообщения или название файла.</div>
         </div>
       </section>
 
@@ -304,9 +304,9 @@
       <section class="conversation-empty">
         <span class="conversation-empty__star">★</span>
         <h1>{% if show_archived %}Архив{% else %}Stalingram{% endif %}</h1>
-        <p>{% if show_archived %}Выберите архивный диалог слева.{% else %}Выберите существующий диалог или найдите пользователя по @username.{% endif %}</p>
-        {% if not show_archived %}<a class="empty-primary" href="{% url 'messenger:contacts' %}?focus=search">Новый диалог</a>{% endif %}
-        <small>{% if show_archived %}Архив — не ссылка, а место для тихих чатов.{% else %}Пятилетний план по сообщениям начинается с первого «привет».{% endif %}</small>
+        <p>{% if show_archived %}Выберите архивный диалог слева.{% else %}Выберите чат или найдите человека либо канал.{% endif %}</p>
+        {% if not show_archived %}<a class="empty-primary" href="{% url 'messenger:contacts' %}?focus=search">Новый чат</a>{% endif %}
+        <small>{% if show_archived %}Архив хранит тихие чаты. Никаких комиссий и актов приёмки.{% else %}Пятилетний план по сообщениям начинается с первого «привет».{% endif %}</small>
       </section>
     </main>
   {% endif %}
@@ -337,7 +337,7 @@
   <button type="button" data-message-action="edit"><span>✎</span>Изменить</button>
   <button type="button" data-message-action="forward"><span>→</span>Переслать</button>
   <button type="button" data-message-action="pin"><span>⌖</span><b id="messagePinLabel">Закрепить</b></button>
-  <button class="message-context-menu__danger" type="button" data-message-action="delete"><span>×</span>Удалить у обоих</button>
+  <button class="message-context-menu__danger" type="button" data-message-action="delete"><span>×</span>Удалить сообщение</button>
 </div>
 
 <div class="chat-modal-backdrop" id="editMessageModal" hidden>
@@ -397,7 +397,7 @@
           {% endif %}
         {% endfor %}
       </div>
-    {% else %}<p class="chat-info-empty">Здесь пока нет общих файлов.</p>{% endif %}
+    {% else %}<p class="chat-info-empty">Пока пусто. Ни одного файла не поступило в распоряжение архива.</p>{% endif %}
   </section>
 </aside>
 
