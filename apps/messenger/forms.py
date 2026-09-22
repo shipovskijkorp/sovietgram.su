@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from django import forms
+from PIL import Image, UnidentifiedImageError
 
 
 MAX_ATTACHMENTS = 10
@@ -10,6 +11,52 @@ MEDIA_EXTENSIONS = {
     ".png", ".jpg", ".jpeg", ".webp",
     ".mp4", ".webm", ".mov", ".m4v",
 }
+IMAGE_FORMATS = {
+    ".png": {"PNG"},
+    ".jpg": {"JPEG"},
+    ".jpeg": {"JPEG"},
+    ".webp": {"WEBP"},
+}
+MEDIA_CONTENT_TYPES = {
+    ".png": {"image/png"},
+    ".jpg": {"image/jpeg"},
+    ".jpeg": {"image/jpeg"},
+    ".webp": {"image/webp"},
+    ".mp4": {"video/mp4"},
+    ".webm": {"video/webm"},
+    ".mov": {"video/quicktime"},
+    ".m4v": {"video/x-m4v", "video/mp4"},
+}
+MAX_IMAGE_DIMENSION = 12_000
+MAX_IMAGE_PIXELS = 40_000_000
+
+
+def _validate_inline_image(uploaded, extension):
+    original_position = uploaded.tell() if hasattr(uploaded, "tell") else 0
+    try:
+        with Image.open(uploaded) as image:
+            width, height = image.size
+            image_format = (image.format or "").upper()
+            if width > MAX_IMAGE_DIMENSION or height > MAX_IMAGE_DIMENSION:
+                raise forms.ValidationError(
+                    f"Сторона изображения не должна превышать {MAX_IMAGE_DIMENSION} пикселей."
+                )
+            if width * height > MAX_IMAGE_PIXELS:
+                raise forms.ValidationError(
+                    f"Изображение не должно превышать {MAX_IMAGE_PIXELS // 1_000_000} мегапикселей."
+                )
+            if image_format not in IMAGE_FORMATS.get(extension, set()):
+                raise forms.ValidationError(
+                    "Расширение изображения не соответствует его реальному формату."
+                )
+            image.verify()
+    except forms.ValidationError:
+        raise
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
+        raise forms.ValidationError("Файл не является корректным поддерживаемым изображением.")
+    finally:
+        if hasattr(uploaded, "seek"):
+            uploaded.seek(original_position)
 
 
 class MultipleFileInput(forms.ClearableFileInput):
@@ -63,12 +110,17 @@ class MessageForm(forms.Form):
             if extension == ".gif" or content_type == "image/gif":
                 raise forms.ValidationError("GIF в Stalingram пока отключены.")
             if mode == self.MODE_MEDIA:
-                if extension not in MEDIA_EXTENSIONS or not (
-                    content_type.startswith("image/") or content_type.startswith("video/")
-                ):
+                if extension not in MEDIA_EXTENSIONS:
                     raise forms.ValidationError(
                         "В режиме медиа можно отправлять только изображения и видео."
                     )
+                allowed_content_types = MEDIA_CONTENT_TYPES.get(extension, set())
+                if content_type not in allowed_content_types:
+                    raise forms.ValidationError(
+                        "MIME-тип файла не соответствует его расширению."
+                    )
+                if extension in IMAGE_FORMATS:
+                    _validate_inline_image(uploaded, extension)
             if uploaded.size > MAX_FILE_SIZE:
                 raise forms.ValidationError("Один файл должен быть не больше 25 МБ.")
             total_size += uploaded.size
