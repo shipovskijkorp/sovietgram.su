@@ -1,3 +1,4 @@
+import base64
 import tempfile
 
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -8,6 +9,11 @@ from apps.accounts.models import User
 
 from .models import Chat, Contact, Message, MessageAttachment
 from .services import get_or_create_direct_chat
+
+
+VALID_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+)
 
 
 class MessengerTests(TestCase):
@@ -98,9 +104,9 @@ class MessengerTests(TestCase):
     def test_media_message_is_saved(self):
         chat = get_or_create_direct_chat(self.alice, self.bob)
         upload = SimpleUploadedFile(
-            "photo.jpg",
-            b"not-a-real-image-but-valid-for-file-storage-test",
-            content_type="image/jpeg",
+            "photo.png",
+            VALID_PNG,
+            content_type="image/png",
         )
         response = self.client.post(
             reverse("messenger:send_message", args=[chat.pk]),
@@ -110,7 +116,7 @@ class MessengerTests(TestCase):
         self.assertRedirects(response, reverse("messenger:chat", args=[chat.pk]))
         attachment = MessageAttachment.objects.get()
         self.assertEqual(attachment.kind, MessageAttachment.Kind.IMAGE)
-        self.assertEqual(attachment.original_name, "photo.jpg")
+        self.assertEqual(attachment.original_name, "photo.png")
         self.assertEqual(attachment.message.text, "Подпись")
 
     def test_media_can_be_sent_as_file_without_inline_rendering(self):
