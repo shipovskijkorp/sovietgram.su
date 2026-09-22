@@ -21,6 +21,21 @@ def env_list(name, default=""):
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost")
 CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS")
 
+STALINGRAM_RATE_LIMITS = {
+    "send_message": {
+        "limit": int(os.getenv("RATE_LIMIT_SEND_PER_MINUTE", "30")),
+        "window": 60,
+    },
+    "search_messages": {
+        "limit": int(os.getenv("RATE_LIMIT_SEARCH_PER_MINUTE", "60")),
+        "window": 60,
+    },
+    "typing": {
+        "limit": int(os.getenv("RATE_LIMIT_TYPING_PER_MINUTE", "120")),
+        "window": 60,
+    },
+}
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
