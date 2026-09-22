@@ -212,6 +212,29 @@ def _forward_targets(user):
     return targets
 
 
+def _account_slots_with_unread(request):
+    slots = account_slots(request)
+    for slot in slots:
+        slot_user = slot["user"]
+        unread = 0
+        memberships = ChatParticipant.objects.filter(user=slot_user).values(
+            "chat_id",
+            "last_read_message_id",
+        )
+        for membership in memberships:
+            unread += (
+                Message.objects.filter(
+                    chat_id=membership["chat_id"],
+                    is_deleted=False,
+                    id__gt=membership["last_read_message_id"] or 0,
+                )
+                .exclude(sender=slot_user)
+                .count()
+            )
+        slot["unread_count"] = unread
+    return slots
+
+
 def _messenger_context(request, selected_chat=None, chat_messages=None, archived=False, focus_id=0):
     user = request.user
     context = {
@@ -224,7 +247,7 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
         "forward_targets": _forward_targets(user),
         "message_focus_id": focus_id,
         "server_time": timezone.now().isoformat(),
-        "account_slots": account_slots(request),
+        "account_slots": _account_slots_with_unread(request),
     }
     if selected_chat is None:
         return context
