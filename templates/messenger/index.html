@@ -447,7 +447,7 @@
             {% if slot.user.avatar %}<img src="{{ slot.user.avatar.url }}" alt="">{% else %}<span>{{ slot.user.initials }}</span>{% endif %}
             <strong>{{ slot.user.display_name }}</strong>
             <small>@{{ slot.user.username }}</small>
-            <b>✓</b>
+            {% if slot.unread_count %}<b class="profile-account-badge">{{ slot.unread_count }}</b>{% else %}<b>✓</b>{% endif %}
           </div>
         {% else %}
           <form method="post" action="{% url 'accounts:switch_account' slot.user.pk %}" class="profile-account-row">
@@ -456,6 +456,7 @@
               {% if slot.user.avatar %}<img src="{{ slot.user.avatar.url }}" alt="">{% else %}<span>{{ slot.user.initials }}</span>{% endif %}
               <strong>{{ slot.user.display_name }}</strong>
               <small>@{{ slot.user.username }}</small>
+              {% if slot.unread_count %}<b class="profile-account-badge">{{ slot.unread_count }}</b>{% endif %}
             </button>
           </form>
         {% endif %}
