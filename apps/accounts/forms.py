@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from django import forms
+from django.core.files.uploadedfile import UploadedFile
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 
 from .models import User
@@ -157,6 +158,11 @@ class ProfileForm(forms.ModelForm):
         if not avatar:
             return avatar
 
+        # ModelForm returns the already stored FieldFile when the user did not
+        # select a new file. Only fresh browser uploads have to be revalidated.
+        if not isinstance(avatar, UploadedFile):
+            return avatar
+
         if getattr(avatar, "size", 0) > 5 * 1024 * 1024:
             raise forms.ValidationError("Фотография должна быть не больше 5 МБ.")
 
@@ -251,6 +257,11 @@ class OverlayProfileForm(forms.ModelForm):
     def clean_avatar(self):
         avatar = self.cleaned_data.get("avatar")
         if not avatar:
+            return avatar
+
+        # ModelForm returns the already stored FieldFile when the user did not
+        # select a new file. Only fresh browser uploads have to be revalidated.
+        if not isinstance(avatar, UploadedFile):
             return avatar
 
         if getattr(avatar, "size", 0) > 5 * 1024 * 1024:
