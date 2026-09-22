@@ -11,19 +11,37 @@ from .models import Chat, ChatParticipant, MessageAttachment, PinnedMessage
 def get_or_create_direct_chat(first_user, second_user):
     if first_user.pk == second_user.pk:
         direct_key = f"self:{first_user.pk}"
-        chat, created = Chat.objects.get_or_create(direct_key=direct_key)
+        chat, created = Chat.objects.get_or_create(
+            direct_key=direct_key,
+            defaults={"type": Chat.Type.PRIVATE},
+        )
         if created:
-            ChatParticipant.objects.create(chat=chat, user=first_user)
+            ChatParticipant.objects.create(
+                chat=chat,
+                user=first_user,
+                role=ChatParticipant.Role.MEMBER,
+            )
         return chat
 
     low_id, high_id = sorted((first_user.pk, second_user.pk))
     direct_key = f"{low_id}:{high_id}"
-    chat, created = Chat.objects.get_or_create(direct_key=direct_key)
+    chat, created = Chat.objects.get_or_create(
+        direct_key=direct_key,
+        defaults={"type": Chat.Type.PRIVATE},
+    )
     if created:
         ChatParticipant.objects.bulk_create(
             [
-                ChatParticipant(chat=chat, user=first_user),
-                ChatParticipant(chat=chat, user=second_user),
+                ChatParticipant(
+                    chat=chat,
+                    user=first_user,
+                    role=ChatParticipant.Role.MEMBER,
+                ),
+                ChatParticipant(
+                    chat=chat,
+                    user=second_user,
+                    role=ChatParticipant.Role.MEMBER,
+                ),
             ]
         )
     return chat
