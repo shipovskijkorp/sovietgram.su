@@ -245,6 +245,63 @@ class ProfileTests(TestCase):
         self.assertContains(page, 'id="userProfileChannelMeta"', html=False)
         self.assertNotContains(page, 'id="userProfileChannelRow"', html=False)
 
+    def test_personal_channel_profile_link_opens_joined_channel_directly(self):
+        channel = Chat.objects.create(
+            type=Chat.Type.CHANNEL,
+            title="Joined channel",
+            username="joined_channel",
+        )
+        ChatParticipant.objects.create(
+            chat=channel,
+            user=self.user,
+            role=ChatParticipant.Role.OWNER,
+        )
+        self.user.personal_channel = channel
+        self.user.save(update_fields=["personal_channel"])
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse("accounts:public_profile", args=[self.user.username]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        personal = response.json()["personal_channel"]
+        self.assertEqual(personal["open_method"], "get")
+        self.assertEqual(
+            personal["open_url"],
+            reverse("messenger:chat", args=[channel.pk]),
+        )
+
+    def test_personal_channel_profile_link_joins_public_channel_for_non_member(self):
+        owner = User.objects.create_user(
+            username="owner",
+            email="owner@example.com",
+            password=self.password,
+        )
+        channel = Chat.objects.create(
+            type=Chat.Type.CHANNEL,
+            title="Public channel",
+            username="public_channel",
+        )
+        ChatParticipant.objects.create(
+            chat=channel,
+            user=owner,
+            role=ChatParticipant.Role.OWNER,
+        )
+        owner.personal_channel = channel
+        owner.save(update_fields=["personal_channel"])
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse("accounts:public_profile", args=[owner.username]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        personal = response.json()["personal_channel"]
+        self.assertEqual(personal["open_method"], "post")
+        self.assertEqual(
+            personal["open_url"],
+            reverse("messenger:join_public_chat", args=[channel.username]),
+        )
+
     def test_overlay_profile_edit_updates_birthday_and_owned_personal_channel(self):
         channel = Chat.objects.create(
             type=Chat.Type.CHANNEL,
