@@ -83,7 +83,7 @@
       <header class="conversation-header">
         <a class="icon-button mobile-back" href="{% if show_archived %}{% url 'messenger:home' %}?archived=1{% else %}{% url 'messenger:home' %}{% endif %}" aria-label="Назад">←</a>
         {% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}
-          <a class="conversation-header__identity" href="{% url 'accounts:public_profile' selected_chat.other_user.username %}">
+          <a class="conversation-header__identity" href="{% url 'accounts:public_profile' selected_chat.other_user.username %}" data-user-profile>
             {% if selected_chat.other_user.avatar %}
               <img class="conversation-header__avatar" src="{{ selected_chat.other_user.avatar.url }}" alt="">
             {% else %}
@@ -367,7 +367,7 @@
     {% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}
       {% if selected_chat.other_user.avatar %}<img class="chat-info-avatar" src="{{ selected_chat.other_user.avatar.url }}" alt="">{% else %}<span class="chat-info-avatar chat-info-avatar--fallback">{{ selected_chat.avatar_text_ui }}</span>{% endif %}
       <h2>{{ selected_chat.display_name_ui }}</h2><p>@{{ selected_chat.username_ui }}</p>
-      <a href="{% url 'accounts:public_profile' selected_chat.other_user.username %}">Открыть профиль</a>
+      <a href="{% url 'accounts:public_profile' selected_chat.other_user.username %}" data-user-profile>Открыть профиль</a>
     {% else %}
       {% if selected_chat.avatar %}
         <img class="chat-info-avatar" src="{{ selected_chat.avatar.url }}" alt="">
@@ -585,6 +585,8 @@
     </form>
   </section>
 </div>
+
+{% include 'accounts/_profile_overlay.html' %}
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 {% endblock %}
