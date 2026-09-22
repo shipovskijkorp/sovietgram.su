@@ -126,6 +126,17 @@ def profile(request):
                 "bio": user.bio,
                 "avatar_url": user.avatar.url if user.avatar else "",
                 "initials": user.initials,
+                "birthday": user.birthday.isoformat() if user.birthday else "",
+                "birthday_display": user.birthday.strftime("%d.%m.%Y") if user.birthday else "",
+                "personal_channel": (
+                    {
+                        "id": user.personal_channel_id,
+                        "title": user.personal_channel.title,
+                        "username": user.personal_channel.username or "",
+                    }
+                    if user.personal_channel_id
+                    else None
+                ),
             }
         )
 
@@ -192,6 +203,21 @@ def public_profile(request, username):
                 "bio": profile_user.bio,
                 "status": status,
                 "avatar_url": profile_user.avatar.url if profile_user.avatar else "",
+                "birthday": profile_user.birthday.isoformat() if profile_user.birthday else "",
+                "birthday_display": (
+                    profile_user.birthday.strftime("%d.%m.%Y")
+                    if profile_user.birthday
+                    else ""
+                ),
+                "personal_channel": (
+                    {
+                        "id": profile_user.personal_channel_id,
+                        "title": profile_user.personal_channel.title,
+                        "username": profile_user.personal_channel.username or "",
+                    }
+                    if profile_user.personal_channel_id
+                    else None
+                ),
                 "initials": profile_user.initials,
                 "is_contact": is_contact,
                 "is_self": bool(
@@ -205,6 +231,24 @@ def public_profile(request, username):
                     if request.user.is_authenticated
                     and request.user.pk == profile_user.pk
                     else ""
+                ),
+                "owned_channels": (
+                    [
+                        {
+                            "id": membership.chat_id,
+                            "title": membership.chat.title,
+                            "username": membership.chat.username or "",
+                        }
+                        for membership in profile_user.chat_memberships.select_related("chat")
+                        .filter(
+                            role="owner",
+                            chat__type="channel",
+                        )
+                        .order_by("chat__title", "chat_id")
+                    ]
+                    if request.user.is_authenticated
+                    and request.user.pk == profile_user.pk
+                    else []
                 ),
                 "start_chat_url": (
                     reverse("messenger:start_chat", args=[profile_user.username])
