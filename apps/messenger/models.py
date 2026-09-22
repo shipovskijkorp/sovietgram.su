@@ -53,6 +53,9 @@ class Chat(models.Model):
         related_name="messenger_chats",
     )
     direct_key = models.CharField(max_length=64, unique=True, null=True, blank=True)
+    title = models.CharField(max_length=120, blank=True, default="")
+    username = models.CharField(max_length=64, unique=True, null=True, blank=True)
+    description = models.TextField(max_length=500, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, db_index=True)
 
