@@ -142,3 +142,48 @@ document.addEventListener("click", (event) => {
 
   if (isInternalSection(url.pathname)) pushNavigationLocation();
 }, true);
+
+
+const sidebarComposeButton = document.getElementById("sidebarComposeButton");
+const sidebarComposeMenu = document.getElementById("sidebarComposeMenu");
+
+function closeSidebarComposeMenu() {
+  if (!sidebarComposeButton || !sidebarComposeMenu) return;
+  sidebarComposeMenu.hidden = true;
+  sidebarComposeButton.setAttribute("aria-expanded", "false");
+}
+
+if (sidebarComposeButton && sidebarComposeMenu) {
+  sidebarComposeButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const willOpen = sidebarComposeMenu.hidden;
+    sidebarComposeMenu.hidden = !willOpen;
+    sidebarComposeButton.setAttribute("aria-expanded", String(willOpen));
+  });
+
+  sidebarComposeMenu.addEventListener("click", (event) => event.stopPropagation());
+  document.addEventListener("click", closeSidebarComposeMenu);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeSidebarComposeMenu();
+  });
+}
+
+const communityTypeSwitch = document.querySelector(".community-type-switch");
+const communityMembersField = document.getElementById("communityMembersField");
+
+if (communityTypeSwitch) {
+  const radios = Array.from(communityTypeSwitch.querySelectorAll('input[name="type"]'));
+
+  function syncCommunityType() {
+    const selected = radios.find((radio) => radio.checked);
+    communityTypeSwitch.querySelectorAll("label").forEach((label) => {
+      label.classList.toggle("is-selected", label.contains(selected));
+    });
+    if (communityMembersField) {
+      communityMembersField.hidden = selected?.value === "channel";
+    }
+  }
+
+  radios.forEach((radio) => radio.addEventListener("change", syncCommunityType));
+  syncCommunityType();
+}
