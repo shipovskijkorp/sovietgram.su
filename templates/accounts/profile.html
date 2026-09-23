@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}Профиль — Stalingram{% endblock %}
 {% block body_class %}profile-body{% endblock %}
@@ -24,11 +25,11 @@
     </div>
 
     <nav class="settings-nav" aria-label="Настройки">
-      <a class="is-active" href="{% url 'accounts:profile' %}"><span>●</span> Профиль</a>
-      <a href="{% url 'accounts:settings' %}"><span>⚙</span> Настройки</a>
-      <a href="{% url 'accounts:public_profile' request.user.username %}"><span>↗</span> Публичная страница</a>
-      <a href="{% url 'accounts:password_change' %}"><span>⌁</span> Пароль</a>
-      <a href="{% url 'messenger:home' %}"><span>←</span> Вернуться к чатам</a>
+      <a class="is-active" href="{% url 'accounts:profile' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-profile"></use></svg> Профиль</a>
+      <a href="{% url 'accounts:settings' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-settings"></use></svg> Настройки</a>
+      <a href="{% url 'accounts:public_profile' request.user.username %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-info"></use></svg> Публичная страница</a>
+      <a href="{% url 'accounts:password_change' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-info"></use></svg> Пароль</a>
+      <a href="{% url 'messenger:home' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-back"></use></svg> Вернуться к чатам</a>
     </nav>
 
     <form method="post" action="{% url 'accounts:logout' %}" class="settings-logout">
@@ -39,7 +40,7 @@
 
   <section class="settings-content">
     <header class="settings-header">
-      <a class="settings-back" href="{% url 'messenger:home' %}" aria-label="Назад к чатам">←</a>
+      <a class="settings-back" href="{% url 'messenger:home' %}" aria-label="Назад к чатам"><svg class="tg-icon tg-icon--24"><use href="{% static 'icons/telegram.svg' %}#tg-back"></use></svg></a>
       <div>
         <p class="eyebrow">Настройки аккаунта</p>
         <h1>Профиль</h1>
