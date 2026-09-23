@@ -2,6 +2,14 @@ const toast = document.getElementById("toast");
 const easterStar = document.getElementById("easterStar");
 let toastTimeout;
 
+// Telegram Desktop icons are symbol sprites. The root SVG needs the same
+// viewport as the symbol; otherwise browser rendering keeps the symbol's
+// internal bounds and the icon looks like a tiny broken outline.
+document.querySelectorAll("svg.tg-icon:not([viewBox])").forEach((icon) => {
+  icon.setAttribute("viewBox", "0 0 24 24");
+  icon.setAttribute("aria-hidden", "true");
+});
+
 function showToast(text) {
   if (!toast) return;
   clearTimeout(toastTimeout);
@@ -144,7 +152,6 @@ document.addEventListener("click", (event) => {
 
   if (isInternalSection(url.pathname)) pushNavigationLocation();
 }, true);
-
 
 const sidebarComposeButton = document.getElementById("sidebarComposeButton");
 const sidebarComposeMenu = document.getElementById("sidebarComposeMenu");
