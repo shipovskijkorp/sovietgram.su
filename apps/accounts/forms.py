@@ -203,10 +203,28 @@ class UserSettingsForm(forms.ModelForm):
         label="Отправлять сообщения по Enter",
         required=False,
     )
+    keep_archived_chats = forms.BooleanField(
+        label="Всегда оставлять чаты в архиве",
+        required=False,
+    )
+    archive_unknown_chats = forms.BooleanField(
+        label="Архивировать и отключать уведомления у новых чатов не из контактов",
+        required=False,
+    )
+    archive_in_main_menu = forms.BooleanField(
+        label="Показывать архив в главном меню",
+        required=False,
+    )
 
     class Meta:
         model = User
-        fields = ("theme", "enter_to_send")
+        fields = (
+            "theme",
+            "enter_to_send",
+            "keep_archived_chats",
+            "archive_unknown_chats",
+            "archive_in_main_menu",
+        )
 
 
 class OverlayProfileForm(forms.ModelForm):
