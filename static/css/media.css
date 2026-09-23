@@ -420,3 +420,15 @@ body[data-theme="dark"] .message-file-card { background: rgba(255,255,255,.055);
   .media-compose-footer { gap: 8px; padding-left: 12px; }
   .media-compose-send { min-width: 92px; }
 }
+
+
+.media-compose-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.media-compose-close .tg-icon,
+.media-compose-add .tg-icon,
+.attachment-menu__icon .tg-icon {
+  color: currentColor;
+}
