@@ -849,10 +849,18 @@ def chat_action(request, chat_id):
     elif action == "archive":
         membership.is_archived = not membership.is_archived
         membership.save(update_fields=("is_archived",))
-        messages.success(request, "Чат перенесён в архив." if membership.is_archived else "Чат возвращён из архива.")
-        if membership.is_archived:
-            return redirect(f"{reverse('messenger:home')}?archived=1")
-        return redirect("messenger:home")
+        messages.success(
+            request,
+            "Чат перенесён в архив."
+            if membership.is_archived
+            else "Чат возвращён из архива.",
+        )
+        fallback = (
+            reverse("messenger:home")
+            if membership.is_archived
+            else f"{reverse('messenger:home')}?archived=1"
+        )
+        return redirect(_safe_next(request, fallback))
     elif action == "clear":
         if (
             chat.type != Chat.Type.PRIVATE
