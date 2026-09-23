@@ -12,17 +12,47 @@
 {% block content %}
 <div class="app-shell{% if selected_chat %} chat-open{% endif %}">
   <aside class="sidebar">
-    <header class="sidebar-searchbar">
-      <button class="sidebar-searchbar__menu" id="profileMenuButton" type="button" aria-label="Меню" aria-controls="profileMenu" aria-expanded="false" title="Меню">
-        <span></span><span></span><span></span>
-      </button>
+    <header class="sidebar-searchbar{% if show_archived %} sidebar-searchbar--archive{% endif %}">
+      {% if show_archived %}
+        <a class="sidebar-searchbar__menu sidebar-searchbar__back" href="{% url 'messenger:home' %}" aria-label="Назад к чатам" title="Назад">
+          <svg class="tg-icon tg-icon--24"><use href="{% static 'icons/telegram.svg' %}#tg-back"></use></svg>
+        </a>
+      {% else %}
+        <button class="sidebar-searchbar__menu" id="profileMenuButton" type="button" aria-label="Меню" aria-controls="profileMenu" aria-expanded="false" title="Меню">
+          <span></span><span></span><span></span>
+        </button>
+      {% endif %}
       <label class="sidebar-searchbar__field" for="chatFilter">
-        <span class="sidebar-searchbar__icon" aria-hidden="true">⌕</span>
-        <input id="chatFilter" type="search" placeholder="Поиск" autocomplete="off">
+        <svg class="tg-icon tg-icon--18 sidebar-searchbar__icon" aria-hidden="true"><use href="{% static 'icons/telegram.svg' %}#tg-search"></use></svg>
+        <input id="chatFilter" type="search" placeholder="{% if show_archived %}Поиск в архиве{% else %}Поиск{% endif %}" autocomplete="off">
       </label>
     </header>
 
-    <section class="chat-list{% if not chats %} chat-list--empty{% endif %}" id="chatList" aria-label="Чаты">
+    {% if show_archived %}
+      <div class="archive-page-heading">
+        <span>
+          <strong>Архив</strong>
+          <small>{{ archived_count }} чат{{ archived_count|pluralize:'а,ов' }}</small>
+        </span>
+        <a href="{% url 'accounts:settings' %}#archiveSettings" aria-label="Настройки архива" title="Настройки архива">
+          <svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-settings"></use></svg>
+        </a>
+      </div>
+    {% endif %}
+
+    <section class="chat-list{% if not chats and not archived_count %} chat-list--empty{% endif %}" id="chatList" aria-label="{% if show_archived %}Архив{% else %}Чаты{% endif %}">
+      {% if not show_archived and archived_count and not request.user.archive_in_main_menu %}
+        <a class="archive-folder-row" href="{% url 'messenger:home' %}?archived=1">
+          <span class="archive-folder-row__avatar">
+            <svg class="tg-icon tg-icon--24"><use href="{% static 'icons/telegram.svg' %}#tg-archive-open"></use></svg>
+          </span>
+          <span class="archive-folder-row__body">
+            <strong>Архив</strong>
+            <small>{% if archive_preview %}{{ archive_preview }}{% else %}{{ archived_count }} чат{{ archived_count|pluralize:'а,ов' }}{% endif %}</small>
+          </span>
+          {% if archived_unread_count %}<b class="archive-folder-row__badge">{{ archived_unread_count }}</b>{% endif %}
+        </a>
+      {% endif %}
       {% for chat in chats %}
         <a class="chat-row{% if selected_chat and selected_chat.pk == chat.pk %} is-active{% endif %}" href="{% url 'messenger:chat' chat.pk %}" data-chat-row data-search="{{ chat.search_text_ui }}">
           {% if chat.type == 'private' and chat.other_user.avatar %}
@@ -49,14 +79,14 @@
             </span>
           </span>
           <span class="chat-row__flags">
-            {% if chat.is_pinned_ui %}<span title="Закреплён">⌖</span>{% endif %}
-            {% if chat.is_muted_ui %}<span title="Без уведомлений">⊘</span>{% endif %}
+            {% if chat.is_pinned_ui %}<svg class="tg-icon tg-icon--16" title="Закреплён"><use href="{% static 'icons/telegram.svg' %}#tg-pin"></use></svg>{% endif %}
+            {% if chat.is_muted_ui %}<svg class="tg-icon tg-icon--16" title="Без уведомлений"><use href="{% static 'icons/telegram.svg' %}#tg-mute"></use></svg>{% endif %}
           </span>
           {% if chat.unread_count_ui %}<span class="chat-row__unread">{{ chat.unread_count_ui }}</span>{% endif %}
         </a>
       {% empty %}
         <div class="chat-empty">
-          <span class="chat-empty__icon">✉</span>
+          <span class="chat-empty__icon">{% if show_archived %}<svg class="tg-icon tg-icon--24"><use href="{% static 'icons/telegram.svg' %}#tg-archive"></use></svg>{% else %}✉{% endif %}</span>
           <strong>{% if show_archived %}Архив пуст{% else %}Чатов пока нет{% endif %}</strong>
           <p>{% if show_archived %}Здесь появятся чаты, которые вы отправите в архив.{% else %}Найдите человека или канал и выходите на связь.{% endif %}</p>
           {% if not show_archived %}<a class="chat-empty__action" href="{% url 'messenger:contacts' %}?focus=search">Открыть поиск</a>{% endif %}
@@ -81,7 +111,7 @@
   {% if selected_chat %}
     <main class="conversation conversation--chat" data-chat-id="{{ selected_chat.pk }}" data-chat-url="{% url 'messenger:chat' selected_chat.pk %}">
       <header class="conversation-header">
-        <a class="icon-button mobile-back" href="{% if show_archived %}{% url 'messenger:home' %}?archived=1{% else %}{% url 'messenger:home' %}{% endif %}" aria-label="Назад">←</a>
+        <a class="icon-button mobile-back" href="{% if show_archived %}{% url 'messenger:home' %}?archived=1{% else %}{% url 'messenger:home' %}{% endif %}" aria-label="Назад"><svg class="tg-icon tg-icon--24"><use href="{% static 'icons/telegram.svg' %}#tg-back"></use></svg></a>
         {% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}
           <a class="conversation-header__identity" href="{% url 'accounts:public_profile' selected_chat.other_user.username %}" data-user-profile>
             {% if selected_chat.other_user.avatar %}
@@ -108,29 +138,31 @@
           </span>
         {% endif %}
         <div class="conversation-header__actions">
-          <button class="icon-button conversation-header__search" id="chatSearchToggle" type="button" title="Поиск в чате" aria-label="Поиск">⌕</button>
+          <button class="icon-button conversation-header__search" id="chatSearchToggle" type="button" title="Поиск в чате" aria-label="Поиск"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-search"></use></svg></button>
           <div class="chat-menu-control">
             <button class="icon-button conversation-header__profile" id="chatMenuButton" type="button" title="Меню чата" aria-label="Меню чата" aria-expanded="false">⋮</button>
             <div class="chat-menu" id="chatMenu" hidden>
-              <button type="button" data-open-chat-search><span>⌕</span>Поиск</button>
-              <button type="button" data-open-chat-info><span>▦</span>Медиа и файлы</button>
+              <button type="button" data-open-chat-search><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-search"></use></svg>Поиск</button>
+              <button type="button" data-open-chat-info><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-info"></use></svg>Медиа и файлы</button>
               <form method="post" action="{% url 'messenger:chat_action' selected_chat.pk %}">
                 {% csrf_token %}<input type="hidden" name="action" value="pin">
-                <button type="submit"><span>⌖</span>{% if active_membership.is_pinned %}Открепить чат{% else %}Закрепить чат{% endif %}</button>
+                <button type="submit"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-pin"></use></svg>{% if active_membership.is_pinned %}Открепить чат{% else %}Закрепить чат{% endif %}</button>
               </form>
               <form method="post" action="{% url 'messenger:chat_action' selected_chat.pk %}">
                 {% csrf_token %}<input type="hidden" name="action" value="mute">
-                <button type="submit"><span>⊘</span>{% if active_membership.is_muted %}Включить уведомления{% else %}Выключить уведомления{% endif %}</button>
+                <button type="submit"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-mute"></use></svg>{% if active_membership.is_muted %}Включить уведомления{% else %}Выключить уведомления{% endif %}</button>
               </form>
               {% if not selected_chat.is_saved_ui %}
                 <form method="post" action="{% url 'messenger:chat_action' selected_chat.pk %}">
-                  {% csrf_token %}<input type="hidden" name="action" value="archive">
-                  <button type="submit"><span>▣</span>{% if active_membership.is_archived %}Вернуть из архива{% else %}В архив{% endif %}</button>
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="archive">
+                  <input type="hidden" name="next" value="{% if active_membership.is_archived %}{% url 'messenger:home' %}?archived=1{% else %}{% url 'messenger:home' %}{% endif %}">
+                  <button type="submit"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#{% if active_membership.is_archived %}tg-unarchive{% else %}tg-archive{% endif %}"></use></svg>{% if active_membership.is_archived %}Вернуть из архива{% else %}В архив{% endif %}</button>
                 </form>
               {% endif %}
               <form method="post" action="{% url 'messenger:chat_action' selected_chat.pk %}" data-confirm-form="{% if selected_chat.type == 'private' %}Очистить историю переписки?{% else %}Очистить историю чата для всех участников?{% endif %} Это действие нельзя отменить.">
                 {% csrf_token %}<input type="hidden" name="action" value="clear">
-                <button class="chat-menu__danger" type="submit"><span>×</span>Очистить историю</button>
+                <button class="chat-menu__danger" type="submit"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-clear"></use></svg>Очистить историю</button>
               </form>
             </div>
           </div>
@@ -461,20 +493,22 @@
   </div>
 
   <nav class="profile-drawer__nav profile-drawer__nav--telegram" aria-label="Главное меню">
-    <a href="{% url 'messenger:home' %}?archived=1"><span>▣</span><strong>Архив</strong>{% if archived_count %}<b>{{ archived_count }}</b>{% endif %}</a>
-    <a href="{% url 'accounts:public_profile' request.user.username %}" data-user-profile><span>◎</span><strong>Мой профиль</strong></a>
-    <a href="{% url 'messenger:create_community' %}?type=group" data-community-open="group"><span>♙</span><strong>Создать группу</strong></a>
-    <a href="{% url 'messenger:create_community' %}?type=channel" data-community-open="channel"><span>◉</span><strong>Создать канал</strong></a>
-    <a href="{% url 'messenger:contacts' %}"><span>♧</span><strong>Контакты</strong></a>
-    <a href="{% url 'messenger:calls' %}"><span>☎</span><strong>Звонки</strong></a>
-    <a href="{% url 'messenger:saved_messages' %}"><span>☆</span><strong>Избранное</strong></a>
-    <a href="{% url 'accounts:settings' %}"><span>⚙</span><strong>Настройки</strong></a>
+    {% if request.user.archive_in_main_menu and archived_count %}
+      <a href="{% url 'messenger:home' %}?archived=1"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-archive-open"></use></svg><strong>Архив</strong>{% if archived_unread_count %}<b>{{ archived_unread_count }}</b>{% endif %}</a>
+    {% endif %}
+    <a href="{% url 'accounts:public_profile' request.user.username %}" data-user-profile><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-profile"></use></svg><strong>Мой профиль</strong></a>
+    <a href="{% url 'messenger:create_community' %}?type=group" data-community-open="group"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-groups"></use></svg><strong>Создать группу</strong></a>
+    <a href="{% url 'messenger:create_community' %}?type=channel" data-community-open="channel"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-channel"></use></svg><strong>Создать канал</strong></a>
+    <a href="{% url 'messenger:contacts' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-contacts"></use></svg><strong>Контакты</strong></a>
+    <a href="{% url 'messenger:calls' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-phone"></use></svg><strong>Звонки</strong></a>
+    <a href="{% url 'messenger:saved_messages' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-saved"></use></svg><strong>Избранное</strong></a>
+    <a href="{% url 'accounts:settings' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-settings"></use></svg><strong>Настройки</strong></a>
   </nav>
 
   <div class="profile-drawer__footer profile-drawer__footer--telegram">
     <form method="post" action="{% url 'accounts:logout' %}">
       {% csrf_token %}
-      <button type="submit"><span>↪</span> Выйти из аккаунта</button>
+      <button type="submit"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-leave"></use></svg> Выйти из аккаунта</button>
     </form>
     <small>Stalingram · связь трудящихся</small>
   </div>
