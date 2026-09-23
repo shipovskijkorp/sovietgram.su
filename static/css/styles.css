@@ -376,3 +376,18 @@ a { color: var(--red); }
 body:not([data-theme="dark"]) .sidebar__footer {
   background: #f7efe4;
 }
+
+
+/* Telegram Desktop icon sprite helpers. */
+.tg-icon {
+  width: 20px;
+  height: 20px;
+  display: inline-block;
+  flex: 0 0 auto;
+  color: currentColor;
+  fill: currentColor;
+  pointer-events: none;
+}
+.tg-icon--24 { width: 24px; height: 24px; }
+.tg-icon--18 { width: 18px; height: 18px; }
+.tg-icon--16 { width: 16px; height: 16px; }
