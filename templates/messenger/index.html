@@ -182,9 +182,9 @@
 
       <section class="chat-search-panel" id="chatSearchPanel" data-search-url="{{ search_url }}" hidden>
         <div class="chat-search-box">
-          <span>⌕</span>
+          <svg class="tg-icon tg-icon--18"><use href="{% static 'icons/telegram.svg' %}#tg-search"></use></svg>
           <input id="chatSearchInput" type="search" placeholder="Поиск сообщений" autocomplete="off">
-          <button id="chatSearchClose" type="button" aria-label="Закрыть">×</button>
+          <button id="chatSearchClose" type="button" aria-label="Закрыть"><svg class="tg-icon tg-icon--18"><use href="{% static 'icons/telegram.svg' %}#tg-close"></use></svg></button>
         </div>
         <div class="chat-search-results" id="chatSearchResults">
           <div class="chat-search-empty">Введите текст сообщения или название файла.</div>
@@ -292,18 +292,18 @@
         <div class="composer-reply" id="composerReply" hidden>
           <span class="composer-reply__line"></span>
           <span class="composer-reply__copy"><strong id="composerReplyName">Ответ</strong><small id="composerReplyPreview"></small></span>
-          <button id="composerReplyClose" type="button" aria-label="Отменить ответ">×</button>
+          <button id="composerReplyClose" type="button" aria-label="Отменить ответ"><svg class="tg-icon tg-icon--18"><use href="{% static 'icons/telegram.svg' %}#tg-close"></use></svg></button>
         </div>
         <input id="replyToInput" type="hidden" name="reply_to" value="">
         <div class="attachment-control" id="attachmentControl">
-          <button class="composer__attach composer__attach-button" id="attachmentButton" type="button" aria-label="Прикрепить" aria-expanded="false" aria-controls="attachmentMenu" title="Прикрепить">＋</button>
+          <button class="composer__attach composer__attach-button" id="attachmentButton" type="button" aria-label="Прикрепить" aria-expanded="false" aria-controls="attachmentMenu" title="Прикрепить"><svg class="tg-icon tg-icon--24"><use href="{% static 'icons/telegram.svg' %}#tg-attach"></use></svg></button>
           <div class="attachment-menu" id="attachmentMenu" role="menu" hidden>
             <button type="button" role="menuitem" data-attachment-mode="media">
-              <span class="attachment-menu__icon">▧</span>
+              <span class="attachment-menu__icon"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-media"></use></svg></span>
               <span><strong>Фото или видео</strong><small>Предпросмотр и отправка альбомом</small></span>
             </button>
             <button type="button" role="menuitem" data-attachment-mode="file">
-              <span class="attachment-menu__icon">⌑</span>
+              <span class="attachment-menu__icon"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-file"></use></svg></span>
               <span><strong>Файл</strong><small>Отправить исходник без обработки</small></span>
             </button>
           </div>
@@ -314,7 +314,7 @@
         <div class="composer__field">
           <textarea id="messageInput" name="text" rows="1" maxlength="4096" placeholder="Сообщение" autocomplete="off">{{ active_membership.draft_text }}</textarea>
         </div>
-        <button class="send-button" id="sendButton" type="submit" aria-label="Отправить">➤</button>
+        <button class="send-button" id="sendButton" type="submit" aria-label="Отправить"><svg class="tg-icon tg-icon--24"><use href="{% static 'icons/telegram.svg' %}#tg-send"></use></svg></button>
       </form>
       {% else %}
       <div class="channel-readonly"><span>☭</span><strong>Только чтение</strong><small>Публиковать здесь могут владелец и администраторы канала.</small></div>
@@ -342,9 +342,9 @@
 <div class="media-compose-backdrop" id="mediaComposeBackdrop" hidden>
   <section class="media-compose-dialog" role="dialog" aria-modal="true" aria-labelledby="mediaComposeTitle">
     <header class="media-compose-header">
-      <button class="media-compose-close" id="mediaComposeClose" type="button" aria-label="Закрыть">×</button>
+      <button class="media-compose-close" id="mediaComposeClose" type="button" aria-label="Закрыть"><svg class="tg-icon tg-icon--18"><use href="{% static 'icons/telegram.svg' %}#tg-close"></use></svg></button>
       <div><strong id="mediaComposeTitle">Отправить медиа</strong><small id="mediaComposeSummary"></small></div>
-      <button class="media-compose-add" id="mediaComposeAdd" type="button">＋ Добавить</button>
+      <button class="media-compose-add" id="mediaComposeAdd" type="button"><svg class="tg-icon tg-icon--18"><use href="{% static 'icons/telegram.svg' %}#tg-add"></use></svg>Добавить</button>
     </header>
     <div class="media-compose-preview" id="mediaComposePreview"></div>
     <label class="media-compose-group" id="mediaComposeGroupRow" hidden>
@@ -358,17 +358,17 @@
 </div>
 
 <div class="message-context-menu" id="messageContextMenu" hidden>
-  <button type="button" data-message-action="reply"><span>↩</span>Ответить</button>
-  <button type="button" data-message-action="copy"><span>□</span>Копировать текст</button>
-  <button type="button" data-message-action="edit"><span>✎</span>Изменить</button>
-  <button type="button" data-message-action="forward"><span>→</span>Переслать</button>
-  <button type="button" data-message-action="pin"><span>⌖</span><b id="messagePinLabel">Закрепить</b></button>
-  <button class="message-context-menu__danger" type="button" data-message-action="delete"><span>×</span>Удалить сообщение</button>
+  <button type="button" data-message-action="reply"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-reply"></use></svg>Ответить</button>
+  <button type="button" data-message-action="copy"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-copy"></use></svg>Копировать текст</button>
+  <button type="button" data-message-action="edit"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-edit"></use></svg>Изменить</button>
+  <button type="button" data-message-action="forward"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-forward"></use></svg>Переслать</button>
+  <button type="button" data-message-action="pin"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-pin"></use></svg><b id="messagePinLabel">Закрепить</b></button>
+  <button class="message-context-menu__danger" type="button" data-message-action="delete"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-clear"></use></svg>Удалить сообщение</button>
 </div>
 
 <div class="chat-modal-backdrop" id="editMessageModal" hidden>
   <section class="chat-modal" role="dialog" aria-modal="true" aria-labelledby="editMessageTitle">
-    <header><strong id="editMessageTitle">Изменить сообщение</strong><button type="button" data-close-edit>×</button></header>
+    <header><strong id="editMessageTitle">Изменить сообщение</strong><button type="button" data-close-edit><svg class="tg-icon tg-icon--18"><use href="{% static 'icons/telegram.svg' %}#tg-close"></use></svg></button></header>
     <div class="chat-modal__body"><textarea id="editMessageText" maxlength="4096" rows="6" placeholder="Сообщение"></textarea></div>
     <footer><button class="chat-modal__secondary" type="button" data-close-edit>Отмена</button><button class="chat-modal__primary" id="editMessageSave" type="button">Сохранить</button></footer>
   </section>
@@ -376,8 +376,8 @@
 
 <div class="chat-modal-backdrop" id="forwardMessageModal" hidden>
   <section class="chat-modal chat-modal--forward" role="dialog" aria-modal="true" aria-labelledby="forwardMessageTitle">
-    <header><strong id="forwardMessageTitle">Переслать сообщение</strong><button type="button" data-close-forward>×</button></header>
-    <div class="forward-search"><span>⌕</span><input id="forwardTargetSearch" type="search" placeholder="Поиск чата" autocomplete="off"></div>
+    <header><strong id="forwardMessageTitle">Переслать сообщение</strong><button type="button" data-close-forward><svg class="tg-icon tg-icon--18"><use href="{% static 'icons/telegram.svg' %}#tg-close"></use></svg></button></header>
+    <div class="forward-search"><svg class="tg-icon tg-icon--18"><use href="{% static 'icons/telegram.svg' %}#tg-search"></use></svg><input id="forwardTargetSearch" type="search" placeholder="Поиск чата" autocomplete="off"></div>
     <div class="forward-targets" id="forwardTargets">
       <button class="forward-target" type="button" data-forward-target="saved" data-forward-search="избранное saved">
         <span class="forward-target__avatar forward-target__avatar--fallback">★</span><span><strong>Избранное</strong><small>Переслать себе</small></span>
@@ -396,7 +396,7 @@
 
 <div class="chat-info-backdrop" id="chatInfoBackdrop" hidden></div>
 <aside class="chat-info-drawer" id="chatInfoDrawer" hidden>
-  <header class="chat-info-header"><strong>Информация</strong><button id="chatInfoClose" type="button">×</button></header>
+  <header class="chat-info-header"><strong>Информация</strong><button id="chatInfoClose" type="button"><svg class="tg-icon tg-icon--18"><use href="{% static 'icons/telegram.svg' %}#tg-close"></use></svg></button></header>
   <section class="chat-info-identity">
     {% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}
       {% if selected_chat.other_user.avatar %}<img class="chat-info-avatar" src="{{ selected_chat.other_user.avatar.url }}" alt="">{% else %}<span class="chat-info-avatar chat-info-avatar--fallback">{{ selected_chat.avatar_text_ui }}</span>{% endif %}
@@ -432,7 +432,7 @@
 </aside>
 
 <div class="image-viewer" id="imageViewer" hidden>
-  <button id="imageViewerClose" type="button" aria-label="Закрыть">×</button>
+  <button id="imageViewerClose" type="button" aria-label="Закрыть"><svg class="tg-icon tg-icon--18"><use href="{% static 'icons/telegram.svg' %}#tg-close"></use></svg></button>
   <img id="imageViewerImage" src="" alt="">
 </div>
 {% endif %}
@@ -489,7 +489,7 @@
     {% endfor %}
 
     <a class="profile-account-add" href="{% url 'accounts:add_account' %}">
-      <span class="profile-account-add__icon">＋</span>
+      <span class="profile-account-add__icon"><svg class="tg-icon tg-icon--18"><use href="{% static 'icons/telegram.svg' %}#tg-add-account"></use></svg></span>
       <strong>Добавить аккаунт</strong>
     </a>
   </div>
@@ -561,7 +561,7 @@
           <small id="communitySelectedCount">0 выбрано</small>
         </header>
         <label class="community-member-search">
-          <span>⌕</span>
+          <svg class="tg-icon tg-icon--18"><use href="{% static 'icons/telegram.svg' %}#tg-search"></use></svg>
           <input id="communityMemberSearch" type="search" placeholder="Поиск" autocomplete="off">
         </label>
         <div class="community-member-list" id="communityMemberList">
