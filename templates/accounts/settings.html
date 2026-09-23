@@ -28,7 +28,7 @@
     <nav class="settings-nav" aria-label="Настройки">
       <a href="{% url 'accounts:profile' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-profile"></use></svg> Профиль</a>
       <a class="is-active" href="{% url 'accounts:settings' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-settings"></use></svg> Настройки</a>
-      <a href="{% url 'accounts:password_change' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-info"></use></svg> Пароль</a>
+      <a href="{% url 'accounts:password_change' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-lock"></use></svg> Пароль</a>
       <a href="{% url 'messenger:home' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-back"></use></svg> Вернуться к чатам</a>
     </nav>
 
