@@ -85,12 +85,14 @@
           {% if chat.unread_count_ui %}<span class="chat-row__unread">{{ chat.unread_count_ui }}</span>{% endif %}
         </a>
       {% empty %}
-        <div class="chat-empty">
-          <span class="chat-empty__icon">{% if show_archived %}<svg class="tg-icon tg-icon--24"><use href="{% static 'icons/telegram.svg' %}#tg-archive"></use></svg>{% else %}✉{% endif %}</span>
-          <strong>{% if show_archived %}Архив пуст{% else %}Чатов пока нет{% endif %}</strong>
-          <p>{% if show_archived %}Здесь появятся чаты, которые вы отправите в архив.{% else %}Найдите человека или канал и выходите на связь.{% endif %}</p>
-          {% if not show_archived %}<a class="chat-empty__action" href="{% url 'messenger:contacts' %}?focus=search">Открыть поиск</a>{% endif %}
-        </div>
+        {% if show_archived or not archived_count or request.user.archive_in_main_menu %}
+          <div class="chat-empty">
+            <span class="chat-empty__icon">{% if show_archived %}<svg class="tg-icon tg-icon--24"><use href="{% static 'icons/telegram.svg' %}#tg-archive"></use></svg>{% else %}✉{% endif %}</span>
+            <strong>{% if show_archived %}Архив пуст{% else %}Чатов пока нет{% endif %}</strong>
+            <p>{% if show_archived %}Здесь появятся чаты, которые вы отправите в архив.{% else %}Найдите человека или канал и выходите на связь.{% endif %}</p>
+            {% if not show_archived %}<a class="chat-empty__action" href="{% url 'messenger:contacts' %}?focus=search">Открыть поиск</a>{% endif %}
+          </div>
+        {% endif %}
       {% endfor %}
       <div class="chat-filter-empty" id="chatFilterEmpty" hidden>Ничего не найдено.</div>
     </section>
