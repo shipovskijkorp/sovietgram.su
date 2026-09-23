@@ -40,7 +40,7 @@
 
   <section class="settings-content">
     <header class="settings-header">
-      <a class="settings-back" href="{% url 'messenger:home' %}" aria-label="Назад к чатам">←</a>
+      <a class="settings-back" href="{% url 'messenger:home' %}" aria-label="Назад к чатам"><svg class="tg-icon tg-icon--24"><use href="{% static 'icons/telegram.svg' %}#tg-back"></use></svg></a>
       <div>
         <p class="eyebrow">Stalingram</p>
         <h1>Настройки</h1>
@@ -100,7 +100,7 @@
       </section>
 
 
-      <section class="settings-card preference-card archive-settings-card">
+      <section class="settings-card preference-card archive-settings-card" id="archiveSettings">
         <div class="settings-card__heading">
           <div>
             <h2>Архив</h2>
