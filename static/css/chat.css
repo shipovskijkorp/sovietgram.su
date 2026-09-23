@@ -467,3 +467,22 @@ body[data-theme="dark"] .message__text a { color: #e37880; }
 .mobile-back .tg-icon {
   color: currentColor;
 }
+
+
+.message-context-menu button > .tg-icon {
+  justify-self: center;
+  color: var(--red);
+}
+.message-context-menu .message-context-menu__danger > .tg-icon {
+  color: currentColor;
+}
+.chat-modal > header button,
+.chat-info-header button,
+.chat-search-box button {
+  display: grid;
+  place-items: center;
+}
+.forward-search > .tg-icon,
+.chat-search-box > .tg-icon {
+  color: currentColor;
+}
