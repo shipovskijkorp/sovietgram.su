@@ -31,6 +31,7 @@ from .forms import CommunityForm, EditMessageForm, MessageForm
 from .models import Chat, ChatParticipant, Contact, Message, MessageAttachment, PinnedMessage
 from .ratelimit import rate_limit
 from .services import (
+    apply_archive_rules_on_new_message,
     attachment_kind,
     attachment_url,
     clone_attachments,
@@ -626,7 +627,7 @@ def send_message(request, chat_id):
                 size=uploaded.size,
             )
         touch_chat(chat)
-        ChatParticipant.objects.filter(chat=chat).update(is_archived=False)
+        apply_archive_rules_on_new_message(chat, message)
         ChatParticipant.objects.filter(chat=chat, user=request.user).update(
             draft_text="",
             draft_updated_at=None,
@@ -728,7 +729,7 @@ def forward_message(request, chat_id, message_id):
         )
         clone_attachments(source, forwarded)
         touch_chat(target_chat)
-        ChatParticipant.objects.filter(chat=target_chat).update(is_archived=False)
+        apply_archive_rules_on_new_message(target_chat, forwarded)
         mark_chat_read(target_chat, request.user, forwarded)
 
     forwarded = _base_message_queryset(target_chat).get(pk=forwarded.pk)
