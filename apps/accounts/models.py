@@ -25,6 +25,18 @@ class User(AbstractUser):
         default=Theme.LIGHT,
     )
     enter_to_send = models.BooleanField("отправка по Enter", default=True)
+    keep_archived_chats = models.BooleanField(
+        "всегда оставлять чаты в архиве",
+        default=False,
+    )
+    archive_unknown_chats = models.BooleanField(
+        "архивировать и отключать уведомления у новых чатов не из контактов",
+        default=False,
+    )
+    archive_in_main_menu = models.BooleanField(
+        "показывать архив в главном меню",
+        default=True,
+    )
     last_seen_at = models.DateTimeField("последняя активность", null=True, blank=True)
     birthday = models.DateField("день рождения", null=True, blank=True)
     personal_channel = models.ForeignKey(
