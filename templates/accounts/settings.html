@@ -26,10 +26,10 @@
     </div>
 
     <nav class="settings-nav" aria-label="Настройки">
-      <a href="{% url 'accounts:profile' %}"><span>●</span> Профиль</a>
-      <a class="is-active" href="{% url 'accounts:settings' %}"><span>⚙</span> Настройки</a>
-      <a href="{% url 'accounts:password_change' %}"><span>⌁</span> Пароль</a>
-      <a href="{% url 'messenger:home' %}"><span>←</span> Вернуться к чатам</a>
+      <a href="{% url 'accounts:profile' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-profile"></use></svg> Профиль</a>
+      <a class="is-active" href="{% url 'accounts:settings' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-settings"></use></svg> Настройки</a>
+      <a href="{% url 'accounts:password_change' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-info"></use></svg> Пароль</a>
+      <a href="{% url 'messenger:home' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-back"></use></svg> Вернуться к чатам</a>
     </nav>
 
     <form method="post" action="{% url 'accounts:logout' %}" class="settings-logout">
@@ -94,6 +94,50 @@
           </span>
           <span class="switch-control">
             <input id="id_enter_to_send" type="checkbox" name="enter_to_send" {% if form.enter_to_send.value %}checked{% endif %}>
+            <span class="switch-control__track"><span class="switch-control__thumb"></span></span>
+          </span>
+        </label>
+      </section>
+
+
+      <section class="settings-card preference-card archive-settings-card">
+        <div class="settings-card__heading">
+          <div>
+            <h2>Архив</h2>
+            <p>Поведение архива повторяет Telegram: новые сообщения могут возвращать незаглушённые чаты в основной список.</p>
+          </div>
+          <svg class="tg-icon tg-icon--24 archive-settings-card__icon"><use href="{% static 'icons/telegram.svg' %}#tg-archive"></use></svg>
+        </div>
+
+        <label class="preference-row" for="id_keep_archived_chats">
+          <span class="preference-row__copy">
+            <strong>Всегда оставлять в архиве</strong>
+            <small>Новые сообщения не будут возвращать незаглушённые архивные чаты в основной список.</small>
+          </span>
+          <span class="switch-control">
+            <input id="id_keep_archived_chats" type="checkbox" name="keep_archived_chats" {% if form.keep_archived_chats.value %}checked{% endif %}>
+            <span class="switch-control__track"><span class="switch-control__thumb"></span></span>
+          </span>
+        </label>
+
+        <label class="preference-row" for="id_archive_unknown_chats">
+          <span class="preference-row__copy">
+            <strong>Архивировать новые чаты не из контактов</strong>
+            <small>Первое сообщение от пользователя не из контактов автоматически отправит чат в архив и отключит уведомления.</small>
+          </span>
+          <span class="switch-control">
+            <input id="id_archive_unknown_chats" type="checkbox" name="archive_unknown_chats" {% if form.archive_unknown_chats.value %}checked{% endif %}>
+            <span class="switch-control__track"><span class="switch-control__thumb"></span></span>
+          </span>
+        </label>
+
+        <label class="preference-row" for="id_archive_in_main_menu">
+          <span class="preference-row__copy">
+            <strong>Архив в главном меню</strong>
+            <small>Если выключить, папка «Архив» появится над списком чатов, как в Telegram.</small>
+          </span>
+          <span class="switch-control">
+            <input id="id_archive_in_main_menu" type="checkbox" name="archive_in_main_menu" {% if form.archive_in_main_menu.value %}checked{% endif %}>
             <span class="switch-control__track"><span class="switch-control__thumb"></span></span>
           </span>
         </label>
