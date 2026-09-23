@@ -4,7 +4,7 @@ from django.db import transaction
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Chat, ChatParticipant, MessageAttachment, PinnedMessage
+from .models import Chat, ChatParticipant, Contact, MessageAttachment, PinnedMessage
 
 
 @transaction.atomic
@@ -64,6 +64,49 @@ def mark_chat_read(chat, user, message=None):
 
 def touch_chat(chat):
     Chat.objects.filter(pk=chat.pk).update(updated_at=timezone.now())
+
+
+def apply_archive_rules_on_new_message(chat, message):
+    """Mirror Telegram archive behavior for a newly delivered message."""
+    sender = message.sender
+    had_previous_messages = chat.messages.filter(
+        is_deleted=False,
+    ).exclude(pk=message.pk).exists()
+
+    memberships = list(
+        ChatParticipant.objects.filter(chat=chat)
+        .select_related("user")
+    )
+    for membership in memberships:
+        if membership.user_id == sender.pk:
+            # Sending a message yourself does not pull your own chat out of archive.
+            continue
+
+        user = membership.user
+
+        # Telegram's "Archive and Mute New Chats from Unknown Users".
+        if (
+            chat.type == Chat.Type.PRIVATE
+            and user.archive_unknown_chats
+            and not had_previous_messages
+            and not Contact.objects.filter(owner=user, user=sender).exists()
+        ):
+            ChatParticipant.objects.filter(pk=membership.pk).update(
+                is_archived=True,
+                is_muted=True,
+            )
+            continue
+
+        # Muted chats stay archived. Unmuted chats return to the main list on
+        # incoming messages unless "Always Keep Archived" is enabled.
+        if (
+            membership.is_archived
+            and not membership.is_muted
+            and not user.keep_archived_chats
+        ):
+            ChatParticipant.objects.filter(pk=membership.pk).update(
+                is_archived=False,
+            )
 
 
 def attachment_kind(uploaded):
