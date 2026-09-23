@@ -249,13 +249,21 @@ def _community_candidates(user):
 
 def _messenger_context(request, selected_chat=None, chat_messages=None, archived=False, focus_id=0):
     user = request.user
+    current_chats = _prepare_sidebar_chats(user, archived=archived)
+    archive_chats = current_chats if archived else _prepare_sidebar_chats(user, archived=True)
+    archived_count = len(archive_chats)
+    archived_unread_count = sum(chat.unread_count_ui or 0 for chat in archive_chats)
+    archive_preview = ", ".join(chat.display_name_ui for chat in archive_chats[:3])
+
     context = {
-        "chats": _prepare_sidebar_chats(user, archived=archived),
+        "chats": current_chats,
         "selected_chat": selected_chat,
         "chat_messages": chat_messages or [],
         "message_form": MessageForm(),
         "show_archived": archived,
-        "archived_count": ChatParticipant.objects.filter(user=user, is_archived=True).count(),
+        "archived_count": archived_count,
+        "archived_unread_count": archived_unread_count,
+        "archive_preview": archive_preview,
         "forward_targets": _forward_targets(user),
         "message_focus_id": focus_id,
         "server_time": timezone.now().isoformat(),
