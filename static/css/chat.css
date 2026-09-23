@@ -449,3 +449,21 @@ body[data-theme="dark"] .message__text a { color: #e37880; }
   .image-viewer { padding: 50px 8px 20px; }
   .shared-media-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
 }
+
+
+/* Telegram icons replace text glyphs in chat controls. */
+.chat-menu button > .tg-icon {
+  justify-self: center;
+  color: var(--red);
+}
+.chat-menu .chat-menu__danger > .tg-icon {
+  color: currentColor;
+}
+.chat-row__flags .tg-icon {
+  width: 14px;
+  height: 14px;
+}
+.conversation-header__actions .tg-icon,
+.mobile-back .tg-icon {
+  color: currentColor;
+}
