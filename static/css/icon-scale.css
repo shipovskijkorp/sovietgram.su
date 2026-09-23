@@ -1,0 +1,53 @@
+/* Telegram-style icon scale overrides */
+
+.profile-drawer__nav--telegram a > .tg-icon {
+  width: 24px;
+  height: 24px;
+  justify-self: center;
+  color: #b09d88;
+}
+
+.profile-drawer__nav--telegram a {
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+}
+
+.settings-nav a > .tg-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.sidebar-searchbar__icon.tg-icon,
+.sidebar-searchbar .tg-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.chat-menu button > .tg-icon,
+.message-context-menu button > .tg-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.conversation-header__actions .tg-icon,
+.mobile-back .tg-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.forward-search > .tg-icon,
+.chat-search-box > .tg-icon,
+.community-member-search > .tg-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.send-button .tg-icon,
+.composer__attach .tg-icon {
+  width: 26px;
+  height: 26px;
+}
+
+.attachment-menu__icon .tg-icon {
+  width: 22px;
+  height: 22px;
+}
