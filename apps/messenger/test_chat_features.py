@@ -7,7 +7,7 @@ from django.urls import reverse
 
 from apps.accounts.models import User
 
-from .models import Chat, ChatParticipant, Message, MessageAttachment, PinnedMessage
+from .models import Chat, ChatParticipant, Contact, Message, MessageAttachment, PinnedMessage
 from .services import get_or_create_direct_chat
 
 
@@ -381,6 +381,143 @@ class ChatFeatureTests(TestCase):
         membership.refresh_from_db()
         self.assertTrue(membership.is_archived)
         self.assertFalse(ChatParticipant.objects.get(chat=self.chat, user=self.bob).is_archived)
+
+    def test_incoming_message_unarchives_unmuted_chat_by_default(self):
+        membership = self.chat.memberships.get(user=self.alice)
+        membership.is_archived = True
+        membership.is_muted = False
+        membership.save(update_fields=["is_archived", "is_muted"])
+
+        self.client.force_login(self.bob)
+        response = self.client.post(
+            reverse("messenger:send_message", args=[self.chat.pk]),
+            {"text": "Вернись из архива"},
+        )
+        self.assertEqual(response.status_code, 302)
+
+        membership.refresh_from_db()
+        self.assertFalse(membership.is_archived)
+
+    def test_always_keep_archived_prevents_unarchive_on_new_message(self):
+        self.alice.keep_archived_chats = True
+        self.alice.save(update_fields=["keep_archived_chats"])
+        membership = self.chat.memberships.get(user=self.alice)
+        membership.is_archived = True
+        membership.is_muted = False
+        membership.save(update_fields=["is_archived", "is_muted"])
+
+        self.client.force_login(self.bob)
+        self.client.post(
+            reverse("messenger:send_message", args=[self.chat.pk]),
+            {"text": "Оставайся в архиве"},
+        )
+
+        membership.refresh_from_db()
+        self.assertTrue(membership.is_archived)
+
+    def test_muted_archived_chat_stays_archived_on_new_message(self):
+        membership = self.chat.memberships.get(user=self.alice)
+        membership.is_archived = True
+        membership.is_muted = True
+        membership.save(update_fields=["is_archived", "is_muted"])
+
+        self.client.force_login(self.bob)
+        self.client.post(
+            reverse("messenger:send_message", args=[self.chat.pk]),
+            {"text": "Без уведомлений"},
+        )
+
+        membership.refresh_from_db()
+        self.assertTrue(membership.is_archived)
+        self.assertTrue(membership.is_muted)
+
+    def test_sender_does_not_unarchive_own_archived_chat(self):
+        membership = self.chat.memberships.get(user=self.alice)
+        membership.is_archived = True
+        membership.save(update_fields=["is_archived"])
+
+        response = self.client.post(
+            reverse("messenger:send_message", args=[self.chat.pk]),
+            {"text": "Исходящее из архива"},
+        )
+        self.assertEqual(response.status_code, 302)
+
+        membership.refresh_from_db()
+        self.assertTrue(membership.is_archived)
+
+    def test_unknown_first_message_is_archived_and_muted_when_enabled(self):
+        self.alice.archive_unknown_chats = True
+        self.alice.save(update_fields=["archive_unknown_chats"])
+
+        self.client.force_login(self.bob)
+        response = self.client.post(
+            reverse("messenger:send_message", args=[self.chat.pk]),
+            {"text": "Первое сообщение"},
+        )
+        self.assertEqual(response.status_code, 302)
+
+        membership = self.chat.memberships.get(user=self.alice)
+        self.assertTrue(membership.is_archived)
+        self.assertTrue(membership.is_muted)
+
+    def test_contact_first_message_is_not_auto_archived(self):
+        self.alice.archive_unknown_chats = True
+        self.alice.save(update_fields=["archive_unknown_chats"])
+        Contact.objects.create(owner=self.alice, user=self.bob)
+
+        self.client.force_login(self.bob)
+        self.client.post(
+            reverse("messenger:send_message", args=[self.chat.pk]),
+            {"text": "Я в контактах"},
+        )
+
+        membership = self.chat.memberships.get(user=self.alice)
+        self.assertFalse(membership.is_archived)
+        self.assertFalse(membership.is_muted)
+
+    def test_archive_location_switches_between_drawer_and_chat_list(self):
+        membership = self.chat.memberships.get(user=self.alice)
+        membership.is_archived = True
+        membership.save(update_fields=["is_archived"])
+
+        in_menu = self.client.get(reverse("messenger:home"))
+        self.assertContains(in_menu, "Архив")
+        self.assertNotContains(in_menu, 'class="archive-folder-row"', html=False)
+
+        self.alice.archive_in_main_menu = False
+        self.alice.save(update_fields=["archive_in_main_menu"])
+        in_list = self.client.get(reverse("messenger:home"))
+        self.assertContains(in_list, 'class="archive-folder-row"', html=False)
+        self.assertContains(in_list, self.bob.display_name)
+
+        archive = self.client.get(reverse("messenger:home"), {"archived": "1"})
+        self.assertContains(archive, 'class="archive-page-heading"', html=False)
+        self.assertContains(archive, self.bob.display_name)
+
+    def test_archive_action_keeps_user_in_current_folder_context(self):
+        url = reverse("messenger:chat_action", args=[self.chat.pk])
+        response = self.client.post(
+            url,
+            {"action": "archive", "next": reverse("messenger:home")},
+        )
+        self.assertRedirects(
+            response,
+            reverse("messenger:home"),
+            fetch_redirect_response=False,
+        )
+
+        response = self.client.post(
+            url,
+            {
+                "action": "archive",
+                "next": f"{reverse('messenger:home')}?archived=1",
+            },
+        )
+        self.assertRedirects(
+            response,
+            f"{reverse('messenger:home')}?archived=1",
+            fetch_redirect_response=False,
+        )
 
     def test_draft_and_typing_state_are_saved(self):
         draft_url = reverse("messenger:save_draft", args=[self.chat.pk])
