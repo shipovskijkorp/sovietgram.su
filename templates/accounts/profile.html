@@ -62,7 +62,7 @@
             <img id="avatarPreviewImage" src="" alt="Новая фотография профиля" hidden>
             <span id="avatarPreviewFallback" class="avatar-editor__fallback">{{ request.user.initials }}</span>
           {% endif %}
-          <span class="avatar-editor__overlay">📷</span>
+          <span class="avatar-editor__overlay"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-camera"></use></svg></span>
           {{ form.avatar }}
         </label>
 
