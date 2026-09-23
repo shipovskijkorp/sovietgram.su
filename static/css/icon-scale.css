@@ -1,63 +1,79 @@
-/* Telegram-style icon scale overrides */
+/* Telegram-style icon rendering overrides.
+   Telegram Desktop does not solve icon size by endlessly increasing the box:
+   icons are drawn as monochrome masks with controlled optical bounds.
+   Compensate for the sprite padding here. */
 
-/* The Telegram assets have generous internal viewBox padding. Increase the
-   rendered box, not just the CSS dimensions, so they keep the visual weight of
-   native Telegram UI icons. */
 .tg-icon {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   flex: 0 0 auto;
+  transform: scale(1.18);
+  transform-origin: center;
 }
 
 .profile-drawer__nav--telegram a > .tg-icon {
-  width: 29px;
-  height: 29px;
+  width: 24px;
+  height: 24px;
+  transform: scale(1.35);
   justify-self: center;
   color: #c0aa91;
 }
 
 .profile-drawer__nav--telegram a {
-  grid-template-columns: 48px minmax(0, 1fr) auto;
-  gap: 2px;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  gap: 4px;
 }
 
 .settings-nav a > .tg-icon {
-  width: 27px;
-  height: 27px;
+  width: 24px;
+  height: 24px;
+  transform: scale(1.3);
 }
 
 .sidebar-searchbar__icon.tg-icon,
 .sidebar-searchbar .tg-icon {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
+  transform: scale(1.25);
 }
 
 .chat-menu button > .tg-icon,
 .message-context-menu button > .tg-icon {
-  width: 25px;
-  height: 25px;
+  width: 22px;
+  height: 22px;
+  transform: scale(1.25);
 }
 
 .conversation-header__actions .tg-icon,
 .mobile-back .tg-icon {
-  width: 27px;
-  height: 27px;
+  width: 24px;
+  height: 24px;
+  transform: scale(1.2);
 }
 
 .forward-search > .tg-icon,
 .chat-search-box > .tg-icon,
 .community-member-search > .tg-icon {
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
+  transform: scale(1.2);
 }
 
 .send-button .tg-icon,
 .composer__attach .tg-icon {
-  width: 29px;
-  height: 29px;
+  width: 26px;
+  height: 26px;
+  transform: scale(1.15);
 }
 
 .attachment-menu__icon .tg-icon {
-  width: 25px;
-  height: 25px;
+  width: 22px;
+  height: 22px;
+  transform: scale(1.2);
+}
+
+/* Keep optical size consistent inside circular controls. */
+.tg-icon + span,
+.tg-icon + strong {
+  vertical-align: middle;
 }
