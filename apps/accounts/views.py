@@ -41,7 +41,9 @@ def _subscriber_label(count):
 
 
 def _personal_channel_payload(channel, viewer=None):
-    if channel is None:
+    # Telegram only allows a creator-owned public broadcast channel here.
+    # Do not expose legacy/private selections in a public profile payload.
+    if channel is None or not channel.username:
         return None
 
     last_message = (
@@ -312,7 +314,9 @@ def public_profile(request, username):
                         .filter(
                             role="owner",
                             chat__type="channel",
+                            chat__username__isnull=False,
                         )
+                        .exclude(chat__username="")
                         .order_by("chat__title", "chat_id")
                     ]
                     if request.user.is_authenticated
