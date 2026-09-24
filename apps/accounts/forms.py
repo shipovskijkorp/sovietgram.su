@@ -251,11 +251,16 @@ class OverlayProfileForm(forms.ModelForm):
         from apps.messenger.models import Chat, ChatParticipant
 
         if self.instance and self.instance.pk:
-            channel_ids = ChatParticipant.objects.filter(
-                user=self.instance,
-                role=ChatParticipant.Role.OWNER,
-                chat__type=Chat.Type.CHANNEL,
-            ).values_list("chat_id", flat=True)
+            channel_ids = (
+                ChatParticipant.objects.filter(
+                    user=self.instance,
+                    role=ChatParticipant.Role.OWNER,
+                    chat__type=Chat.Type.CHANNEL,
+                    chat__username__isnull=False,
+                )
+                .exclude(chat__username="")
+                .values_list("chat_id", flat=True)
+            )
             self.fields["personal_channel"].queryset = Chat.objects.filter(
                 pk__in=channel_ids,
                 type=Chat.Type.CHANNEL,
