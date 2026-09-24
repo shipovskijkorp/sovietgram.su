@@ -694,7 +694,7 @@ async function openUserProfile(url) {
 }
 
 const profileFromUrl = new URL(window.location.href).searchParams.get("profile");
-if (profileFromUrl && /^[A-Za-z0-9_.-]{1,150}$/.test(profileFromUrl)) {
+if (profileFromUrl && profileFromUrl.length <= 150) {
   void openUserProfile(`/u/${encodeURIComponent(profileFromUrl)}/`);
 }
 
