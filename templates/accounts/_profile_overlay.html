@@ -38,16 +38,14 @@
 
       <section class="tg-profile__rows">
         <div class="tg-profile__row">
-          <span class="tg-profile__row-icon">@</span>
-          <div>
+          <div class="tg-profile__row-copy">
             <strong id="userProfileUsername"></strong>
             <small>Имя пользователя</small>
           </div>
         </div>
 
         <div class="tg-profile__row" id="userProfileBirthdayRow" hidden>
-          <span class="tg-profile__row-icon">✥</span>
-          <div>
+          <div class="tg-profile__row-copy">
             <strong id="userProfileBirthday"></strong>
             <small>День рождения</small>
           </div>
@@ -83,7 +81,7 @@
           {% endif %}
         {% endfor %}
         <a class="tg-profile-account tg-profile-account--add" href="{% url 'accounts:add_account' %}">
-          <span class="tg-profile-account__plus">＋</span>
+          <span class="tg-profile-account__plus"><span class="tg-native-icon tg-native-icon--add-account" aria-hidden="true"></span></span>
           <strong>Добавить аккаунт</strong>
         </a>
       </section>
@@ -97,7 +95,7 @@
         </button>
         <strong>Информация</strong>
         <button class="tg-profile__icon-button" id="userProfileEditClose" type="button" aria-label="Закрыть">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+          <span class="tg-native-icon tg-native-icon--close" aria-hidden="true"></span>
         </button>
       </header>
 
