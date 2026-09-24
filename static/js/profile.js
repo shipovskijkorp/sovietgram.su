@@ -280,9 +280,91 @@ function setUserProfileMode(mode) {
   if (userProfileEditForm) userProfileEditForm.hidden = !editing;
 }
 
-function closeUserProfile() {
+function stopProfileRefresh() {
+  if (profileRefreshTimer) window.clearInterval(profileRefreshTimer);
+  profileRefreshTimer = 0;
+}
+
+function startProfileRefresh() {
+  stopProfileRefresh();
+  profileRefreshTimer = window.setInterval(async () => {
+    if (!openedProfile?.profile_url || userProfileOverlay?.hidden) return;
+    try {
+      const response = await fetch(openedProfile.profile_url, {
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+        credentials: "same-origin",
+      });
+      if (!response.ok) return;
+      const fresh = await response.json();
+      if (!fresh.ok || !openedProfile) return;
+      openedProfile.status = fresh.status;
+      openedProfile.is_contact = fresh.is_contact;
+      if (userProfileStatus) userProfileStatus.textContent = fresh.status || "";
+      if (userProfileEditStatus) userProfileEditStatus.textContent = fresh.status || "";
+    } catch (_error) {
+      // Presence refresh is best-effort.
+    }
+  }, 30000);
+}
+
+function closeProfilePhotoViewer() {
+  if (!userProfilePhotoViewer) return;
+  userProfilePhotoViewer.hidden = true;
+  if (userProfilePhotoImage) userProfilePhotoImage.removeAttribute("src");
+}
+
+function openProfilePhotoViewer() {
+  if (!openedProfile?.avatar_url || !userProfilePhotoViewer || !userProfilePhotoImage) return;
+  userProfilePhotoImage.src = openedProfile.avatar_url;
+  if (userProfilePhotoRemove) {
+    userProfilePhotoRemove.hidden = !(openedProfile.is_self && openedProfile.remove_avatar_url);
+  }
+  userProfilePhotoViewer.hidden = false;
+}
+
+function closeProfileFieldEditor() {
+  if (!userProfileFieldEditor) return;
+  userProfileFieldEditor.hidden = true;
+  profileFieldKey = "";
+  if (userProfileFieldError) {
+    userProfileFieldError.hidden = true;
+    userProfileFieldError.textContent = "";
+  }
+}
+
+async function flushBioSave() {
+  if (profileBioSaveTimer) {
+    window.clearTimeout(profileBioSaveTimer);
+    profileBioSaveTimer = 0;
+  }
+  if (!openedProfile?.is_self || !userProfileBioInput) return;
+  const bio = userProfileBioInput.value;
+  if (bio === (openedProfile.bio || "")) return;
+  try {
+    await saveSelfProfile({ bio });
+    if (userProfileEditError) userProfileEditError.hidden = true;
+  } catch (error) {
+    if (userProfileEditError) {
+      userProfileEditError.textContent = profileErrorsToText(error?.profileErrors);
+      userProfileEditError.hidden = false;
+    }
+    throw error;
+  }
+}
+
+async function closeUserProfile() {
   if (!userProfileOverlay) return;
+  if (userProfileEditForm && !userProfileEditForm.hidden) {
+    try {
+      await flushBioSave();
+    } catch (_error) {
+      return;
+    }
+  }
+  closeProfileFieldEditor();
+  closeProfilePhotoViewer();
   if (userProfileChannelPicker) userProfileChannelPicker.hidden = true;
+  stopProfileRefresh();
   userProfileOverlay.hidden = true;
   setUserProfileMode("view");
   openedProfile = null;
@@ -296,6 +378,10 @@ function renderUserProfile(profile) {
   openedProfile = profile;
 
   renderProfileAvatar(userProfileAvatar, profile);
+  if (userProfileAvatar) {
+    userProfileAvatar.disabled = !profile.avatar_url;
+    userProfileAvatar.classList.toggle("is-clickable", Boolean(profile.avatar_url));
+  }
   if (userProfileName) userProfileName.textContent = profile.display_name || profile.username || "";
   if (userProfileStatus) userProfileStatus.textContent = profile.status || "";
   if (userProfileUsername) userProfileUsername.textContent = `@${profile.username || ""}`;
@@ -330,9 +416,7 @@ function renderUserProfile(profile) {
       userProfileChannelTime.textContent = channel.last_message_time || "";
       userProfileChannelTime.hidden = !channel.last_message_time;
     }
-    if (userProfileChannelPreview) {
-      userProfileChannelPreview.textContent = channel.last_message_preview || "";
-    }
+    if (userProfileChannelPreview) userProfileChannelPreview.textContent = channel.last_message_preview || "";
     if (userProfileChannelMeta) {
       userProfileChannelMeta.textContent = `Канал · ${channel.subscriber_text || "0 подписчиков"}`;
     }
@@ -344,18 +428,14 @@ function renderUserProfile(profile) {
 
   const hasBirthday = Boolean(profile.birthday_display);
   if (userProfileBirthdayRow) userProfileBirthdayRow.hidden = !hasBirthday;
-  if (userProfileBirthday && hasBirthday) {
-    userProfileBirthday.textContent = profile.birthday_display;
-  }
+  if (userProfileBirthday && hasBirthday) userProfileBirthday.textContent = profile.birthday_display;
 
   if (userProfileEdit) userProfileEdit.hidden = !profile.is_self;
   if (userProfileActions) userProfileActions.hidden = Boolean(profile.is_self);
   if (userProfileAccounts) userProfileAccounts.hidden = !profile.is_self;
 
   if (userProfileContact) {
-    userProfileContact.textContent = profile.is_contact
-      ? "Удалить из контактов"
-      : "Добавить в контакты";
+    userProfileContact.textContent = profile.is_contact ? "Удалить контакт" : "Добавить в контакты";
     userProfileContact.classList.toggle("is-danger", Boolean(profile.is_contact));
   }
 
@@ -363,7 +443,6 @@ function renderUserProfile(profile) {
   userProfileOverlay.hidden = false;
   document.body.classList.add("has-profile-overlay");
 }
-
 function channelTitleById(profile, channelId) {
   if (!channelId) return "Не выбран";
   const channel = (profile?.owned_channels || []).find(
