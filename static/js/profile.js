@@ -208,6 +208,11 @@ function updateGlobalSelfIdentity(payload) {
   document.querySelectorAll(".profile-account-header__bottom strong").forEach((element) => {
     element.textContent = payload.display_name;
   });
+  if (payload.profile_url) {
+    document.querySelectorAll("[data-self-profile]").forEach((link) => {
+      link.href = payload.profile_url;
+    });
+  }
 }
 
 async function saveSelfProfile(changes = {}, avatarFile = null) {
