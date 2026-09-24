@@ -1956,26 +1956,8 @@ body:not([data-theme="dark"]) .tg-profile-channel-card__preview {
   color: #6f5c4b;
 }
 
-
-/* Telegram icon alignment in the main drawer. */
-.profile-drawer__nav--telegram a > .tg-icon {
-  justify-self: center;
-  color: #9a8875;
-}
-.profile-drawer__nav--telegram a:hover > .tg-icon {
-  color: #c4474f;
-}
 .profile-drawer__footer--telegram button {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-.profile-drawer__footer--telegram button > .tg-icon {
-  color: currentColor;
-}
-.profile-account-add__icon .tg-icon {
-  color: #fff;
-}
-.settings-nav a > .tg-icon {
-  justify-self: center;
 }
