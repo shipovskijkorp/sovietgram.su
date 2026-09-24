@@ -116,6 +116,7 @@ class ProfileTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'id="userProfileOverlay"', html=False)
         self.assertContains(response, "Имя пользователя")
+        self.assertNotContains(response, "tg-profile__row-icon", html=False)
         self.assertNotContains(response, ">Фамилия<", html=False)
         self.assertContains(response, 'id="userProfileChannelPicker"', html=False)
         self.assertContains(response, 'id="userProfileChannelOpen"', html=False)
