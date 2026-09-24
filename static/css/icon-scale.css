@@ -76,3 +76,107 @@
 .tg-icon + strong {
   vertical-align: middle;
 }
+
+
+/* Original Telegram Desktop raster icon masks.
+   These PNGs are copied byte-for-byte from Telegram Desktop 7.2.9.
+   Telegram stores them as grayscale masks; CSS luminance masking preserves
+   the exact original geometry while allowing the Stalingram palette. */
+.tg-native-icon {
+  width: 24px;
+  height: 24px;
+  display: inline-block;
+  flex: 0 0 24px;
+  background-color: currentColor;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  mask-size: 24px 24px;
+  mask-mode: luminance;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  -webkit-mask-size: 24px 24px;
+}
+
+.tg-native-icon--profile {
+  mask-image: url("../icons/telegram-original/menu/profile.png");
+  -webkit-mask-image: url("../icons/telegram-original/menu/profile.png");
+}
+.tg-native-icon--groups {
+  mask-image: url("../icons/telegram-original/menu/groups.png");
+  -webkit-mask-image: url("../icons/telegram-original/menu/groups.png");
+}
+.tg-native-icon--channel {
+  mask-image: url("../icons/telegram-original/menu/channel.png");
+  -webkit-mask-image: url("../icons/telegram-original/menu/channel.png");
+}
+.tg-native-icon--contacts {
+  mask-image: url("../icons/telegram-original/menu/name_show.png");
+  -webkit-mask-image: url("../icons/telegram-original/menu/name_show.png");
+}
+.tg-native-icon--phone {
+  mask-image: url("../icons/telegram-original/menu/phone.png");
+  -webkit-mask-image: url("../icons/telegram-original/menu/phone.png");
+}
+.tg-native-icon--saved {
+  mask-image: url("../icons/telegram-original/menu/saved_messages.png");
+  -webkit-mask-image: url("../icons/telegram-original/menu/saved_messages.png");
+}
+.tg-native-icon--settings {
+  mask-image: url("../icons/telegram-original/menu/settings.png");
+  -webkit-mask-image: url("../icons/telegram-original/menu/settings.png");
+}
+.tg-native-icon--archive-open {
+  mask-image: url("../icons/telegram-original/menu/archive_open.png");
+  -webkit-mask-image: url("../icons/telegram-original/menu/archive_open.png");
+}
+.tg-native-icon--add-account {
+  mask-image: url("../icons/telegram-original/menu/add_account.png");
+  -webkit-mask-image: url("../icons/telegram-original/menu/add_account.png");
+}
+.tg-native-icon--search {
+  mask-image: url("../icons/telegram-original/menu/search.png");
+  -webkit-mask-image: url("../icons/telegram-original/menu/search.png");
+}
+
+/* Telegram Desktop main menu layout:
+   icon x=26, icon=24, text starts at x=76. */
+.profile-drawer__nav--telegram a {
+  min-height: 40px;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  column-gap: 26px;
+  padding: 0 13px 0 26px;
+}
+
+.profile-drawer__nav--telegram a > .tg-native-icon {
+  width: 24px;
+  height: 24px;
+  justify-self: start;
+  color: #c0aa91;
+}
+
+.profile-drawer__nav--telegram a:hover > .tg-native-icon {
+  color: #d0b8a0;
+}
+
+.sidebar-searchbar__icon.tg-native-icon {
+  width: 18px;
+  height: 18px;
+  flex-basis: 18px;
+  mask-size: 18px 18px;
+  -webkit-mask-size: 18px 18px;
+  color: currentColor;
+}
+
+.archive-page-heading .tg-native-icon,
+.archive-folder-row__avatar .tg-native-icon {
+  color: currentColor;
+}
+
+.profile-account-add__icon .tg-native-icon {
+  width: 20px;
+  height: 20px;
+  flex-basis: 20px;
+  mask-size: 20px 20px;
+  -webkit-mask-size: 20px 20px;
+  color: #fff;
+}
