@@ -674,7 +674,9 @@ async function openUserProfile(url) {
     if (!response.ok) throw new Error("profile fetch failed");
     const profile = await response.json();
     if (!profile.ok) throw new Error("invalid profile payload");
+    if (!profile.profile_url) profile.profile_url = url;
     renderUserProfile(profile);
+    startProfileRefresh();
   } catch (_error) {
     window.location.assign(url);
   }
@@ -689,11 +691,66 @@ document.querySelectorAll("[data-user-profile]").forEach((link) => {
   });
 });
 
-userProfileClose?.addEventListener("click", closeUserProfile);
-userProfileEditClose?.addEventListener("click", closeUserProfile);
+userProfileClose?.addEventListener("click", () => {
+  void closeUserProfile();
+});
+userProfileEditClose?.addEventListener("click", () => {
+  void closeUserProfile();
+});
 
 userProfileOverlay?.addEventListener("click", (event) => {
-  if (event.target === userProfileOverlay) closeUserProfile();
+  if (event.target === userProfileOverlay) void closeUserProfile();
+});
+
+userProfileAvatar?.addEventListener("click", openProfilePhotoViewer);
+userProfileEditAvatarOpen?.addEventListener("click", openProfilePhotoViewer);
+userProfilePhotoClose?.addEventListener("click", closeProfilePhotoViewer);
+userProfilePhotoViewer?.addEventListener("click", (event) => {
+  if (event.target === userProfilePhotoViewer) closeProfilePhotoViewer();
+});
+
+userProfilePhotoRemove?.addEventListener("click", async () => {
+  if (!openedProfile?.is_self || !openedProfile.remove_avatar_url) return;
+  if (!window.confirm("Удалить фотографию профиля?")) return;
+
+  userProfilePhotoRemove.disabled = true;
+  try {
+    const body = new URLSearchParams();
+    body.set("csrfmiddlewaretoken", csrfToken());
+    const response = await fetch(openedProfile.remove_avatar_url, {
+      method: "POST",
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+      },
+      body,
+      credentials: "same-origin",
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.ok) throw new Error("avatar remove failed");
+
+    openedProfile.avatar_url = "";
+    openedProfile.initials = payload.initials || openedProfile.initials;
+    renderProfileAvatar(userProfileAvatar, openedProfile);
+    renderProfileAvatar(userProfileEditAvatar, openedProfile);
+    if (userProfileAvatar) {
+      userProfileAvatar.disabled = true;
+      userProfileAvatar.classList.remove("is-clickable");
+    }
+    if (userProfileEditAvatarOpen) userProfileEditAvatarOpen.disabled = true;
+    closeProfilePhotoViewer();
+  } catch (_error) {
+    showProfileToast("Не удалось удалить фото.");
+  } finally {
+    userProfilePhotoRemove.disabled = false;
+  }
+});
+
+userProfileUsernameRow?.addEventListener("click", () => {
+  if (!openedProfile?.username) return;
+  const relative = openedProfile.profile_url || `/u/${encodeURIComponent(openedProfile.username)}/`;
+  const absolute = new URL(relative, window.location.origin).href;
+  void copyProfileText(absolute, "Ссылка на профиль скопирована");
 });
 
 userProfileChannelCard?.addEventListener("click", () => {
@@ -725,35 +782,61 @@ userProfileEdit?.addEventListener("click", () => {
   setUserProfileMode("edit");
 });
 
-userProfileEditBack?.addEventListener("click", () => {
+userProfileEditBack?.addEventListener("click", async () => {
   if (!openedProfile) return;
+  try {
+    await flushBioSave();
+  } catch (_error) {
+    return;
+  }
   renderUserProfile(openedProfile);
 });
 
-userProfileChannelOpen?.addEventListener("click", openProfileChannelPicker);
+userProfileNameOpen?.addEventListener("click", () => openProfileFieldEditor("first_name"));
+userProfileUsernameOpen?.addEventListener("click", () => openProfileFieldEditor("username"));
+userProfileBirthdayOpen?.addEventListener("click", () => openProfileFieldEditor("birthday"));
 
-userProfileChannelDone?.addEventListener("click", () => {
-  closeProfileChannelPicker(true);
+userProfileFieldClose?.addEventListener("click", closeProfileFieldEditor);
+userProfileFieldCancel?.addEventListener("click", closeProfileFieldEditor);
+userProfileFieldSave?.addEventListener("click", () => {
+  void saveProfileFieldEditor();
 });
-
-userProfileChannelRemove?.addEventListener("click", () => {
-  pendingProfileChannelId = "";
-  closeProfileChannelPicker(true);
+userProfileFieldEditor?.addEventListener("click", (event) => {
+  if (event.target === userProfileFieldEditor) closeProfileFieldEditor();
 });
-
-userProfileChannelPicker?.addEventListener("click", (event) => {
-  if (event.target === userProfileChannelPicker) {
-    closeProfileChannelPicker(false);
+userProfileFieldInput?.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    void saveProfileFieldEditor();
   }
+});
+
+userProfileChannelOpen?.addEventListener("click", openProfileChannelPicker);
+userProfileChannelDone?.addEventListener("click", () => {
+  void applyProfileChannelSelection(pendingProfileChannelId);
+});
+userProfileChannelRemove?.addEventListener("click", () => {
+  void applyProfileChannelSelection("");
+});
+userProfileChannelPicker?.addEventListener("click", (event) => {
+  if (event.target === userProfileChannelPicker) closeProfileChannelPicker();
 });
 
 userProfileBioInput?.addEventListener("input", () => {
   if (userProfileBioCount) {
     userProfileBioCount.textContent = String(userProfileBioInput.value.length);
   }
+  if (profileBioSaveTimer) window.clearTimeout(profileBioSaveTimer);
+  profileBioSaveTimer = window.setTimeout(() => {
+    profileBioSaveTimer = 0;
+    void flushBioSave();
+  }, 1000);
+});
+userProfileBioInput?.addEventListener("blur", () => {
+  void flushBioSave();
 });
 
-userProfileAvatarInput?.addEventListener("change", () => {
+userProfileAvatarInput?.addEventListener("change", async () => {
   const file = userProfileAvatarInput.files?.[0];
   if (!file || !userProfileEditAvatar) return;
 
@@ -765,57 +848,23 @@ userProfileAvatarInput?.addEventListener("change", () => {
   image.src = profileAvatarPreviewUrl;
   image.alt = "";
   userProfileEditAvatar.appendChild(image);
-});
-
-userProfileEditForm?.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  if (!openedProfile?.is_self || !openedProfile.edit_url) return;
-
-  const submit = document.getElementById("userProfileEditSave");
-  if (submit) submit.disabled = true;
-  if (userProfileEditError) {
-    userProfileEditError.hidden = true;
-    userProfileEditError.textContent = "";
-  }
 
   try {
-    const response = await fetch(openedProfile.edit_url, {
-      method: "POST",
-      body: new FormData(userProfileEditForm),
-      headers: { "X-Requested-With": "XMLHttpRequest" },
-      credentials: "same-origin",
-    });
-    const payload = await response.json();
-    if (!response.ok || !payload.ok) {
-      const error = new Error("profile validation failed");
-      error.profileErrors = payload.errors;
-      throw error;
-    }
-
-    openedProfile = {
-      ...openedProfile,
-      ...payload,
-      is_self: true,
-      edit_url: openedProfile.edit_url,
-      owned_channels: openedProfile.owned_channels || [],
-    };
-
-    renderUserProfile(openedProfile);
-
-    document.querySelectorAll(".account-mini__name").forEach((element) => {
-      element.textContent = payload.display_name;
-    });
-    document.querySelectorAll(".profile-account-header__bottom strong").forEach((element) => {
-      element.textContent = payload.display_name;
-    });
+    await saveSelfProfile({}, file);
+    if (profileAvatarPreviewUrl) URL.revokeObjectURL(profileAvatarPreviewUrl);
+    profileAvatarPreviewUrl = "";
+    fillUserProfileEdit();
   } catch (error) {
-    if (userProfileEditError) {
-      userProfileEditError.textContent = profileErrorsToText(error?.profileErrors);
-      userProfileEditError.hidden = false;
-    }
+    showProfileToast(profileErrorsToText(error?.profileErrors));
+    renderProfileAvatar(userProfileEditAvatar, openedProfile);
   } finally {
-    if (submit) submit.disabled = false;
+    if (userProfileAvatarInput) userProfileAvatarInput.value = "";
   }
+});
+
+userProfileEditForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  void flushBioSave();
 });
 
 userProfileMessage?.addEventListener("click", () => {
@@ -838,17 +887,15 @@ userProfileMessage?.addEventListener("click", () => {
 userProfileContact?.addEventListener("click", async () => {
   if (!openedProfile) return;
 
-  const url = openedProfile.is_contact
-    ? openedProfile.remove_contact_url
-    : openedProfile.add_contact_url;
+  const removing = Boolean(openedProfile.is_contact);
+  if (removing && !window.confirm("Удалить пользователя из контактов?")) return;
+  const url = removing ? openedProfile.remove_contact_url : openedProfile.add_contact_url;
   if (!url) return;
 
   userProfileContact.disabled = true;
-
   try {
     const body = new URLSearchParams();
     body.set("csrfmiddlewaretoken", csrfToken());
-
     const response = await fetch(url, {
       method: "POST",
       headers: {
@@ -860,13 +907,11 @@ userProfileContact?.addEventListener("click", async () => {
     });
     if (!response.ok) throw new Error("contact action failed");
 
-    openedProfile.is_contact = !openedProfile.is_contact;
-    userProfileContact.textContent = openedProfile.is_contact
-      ? "Удалить из контактов"
-      : "Добавить в контакты";
+    openedProfile.is_contact = !removing;
+    userProfileContact.textContent = openedProfile.is_contact ? "Удалить контакт" : "Добавить в контакты";
     userProfileContact.classList.toggle("is-danger", openedProfile.is_contact);
   } catch (_error) {
-    if (typeof showToast === "function") showToast("Не удалось изменить контакт.");
+    showProfileToast("Не удалось изменить контакт.");
   } finally {
     userProfileContact.disabled = false;
   }
@@ -874,11 +919,32 @@ userProfileContact?.addEventListener("click", async () => {
 
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
+
+  if (userProfilePhotoViewer && !userProfilePhotoViewer.hidden) {
+    closeProfilePhotoViewer();
+    return;
+  }
+  if (userProfileFieldEditor && !userProfileFieldEditor.hidden) {
+    closeProfileFieldEditor();
+    return;
+  }
   if (userProfileChannelPicker && !userProfileChannelPicker.hidden) {
-    closeProfileChannelPicker(false);
+    closeProfileChannelPicker();
+    return;
+  }
+  if (userProfileEditForm && !userProfileEditForm.hidden) {
+    event.preventDefault();
+    void (async () => {
+      try {
+        await flushBioSave();
+      } catch (_error) {
+        return;
+      }
+      if (openedProfile) renderUserProfile(openedProfile);
+    })();
     return;
   }
   if (userProfileOverlay && !userProfileOverlay.hidden) {
-    closeUserProfile();
+    void closeUserProfile();
   }
 });
