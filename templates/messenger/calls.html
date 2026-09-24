@@ -9,14 +9,14 @@
 <main class="contacts-shell">
   <section class="contacts-card contacts-card--telegram calls-card">
     <header class="contacts-topbar contacts-topbar--compact">
-      <a class="icon-button" href="{% url 'messenger:home' %}" aria-label="Назад"><svg class="tg-icon tg-icon--24"><use href="{% static 'icons/telegram.svg' %}#tg-back"></use></svg></a>
+      <a class="icon-button" href="{% url 'messenger:home' %}" aria-label="Назад"><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span></a>
       <div>
         <strong>Звонки</strong>
         <small>История звонков</small>
       </div>
     </header>
     <section class="calls-empty">
-      <span class="calls-empty__icon"><svg class="tg-icon tg-icon--24"><use href="{% static 'icons/telegram.svg' %}#tg-phone"></use></svg></span>
+      <span class="calls-empty__icon"><span class="tg-native-icon tg-native-icon--phone" aria-hidden="true"></span></span>
       <strong>Звонков пока нет</strong>
       <p>Когда голосовая связь появится и кто-нибудь позвонит, история будет здесь.</p>
     </section>
