@@ -342,29 +342,26 @@ async function flushBioSave() {
     window.clearTimeout(profileBioSaveTimer);
     profileBioSaveTimer = 0;
   }
-  if (!openedProfile?.is_self || !userProfileBioInput) return;
+  if (!openedProfile?.is_self || !userProfileBioInput) return true;
   const bio = userProfileBioInput.value;
-  if (bio === (openedProfile.bio || "")) return;
+  if (bio === (openedProfile.bio || "")) return true;
   try {
     await saveSelfProfile({ bio });
     if (userProfileEditError) userProfileEditError.hidden = true;
+    return true;
   } catch (error) {
     if (userProfileEditError) {
       userProfileEditError.textContent = profileErrorsToText(error?.profileErrors);
       userProfileEditError.hidden = false;
     }
-    throw error;
+    return false;
   }
 }
 
 async function closeUserProfile() {
   if (!userProfileOverlay) return;
   if (userProfileEditForm && !userProfileEditForm.hidden) {
-    try {
-      await flushBioSave();
-    } catch (_error) {
-      return;
-    }
+    if (!await flushBioSave()) return;
   }
   closeProfileFieldEditor();
   closeProfilePhotoViewer();
@@ -789,11 +786,7 @@ userProfileEdit?.addEventListener("click", () => {
 
 userProfileEditBack?.addEventListener("click", async () => {
   if (!openedProfile) return;
-  try {
-    await flushBioSave();
-  } catch (_error) {
-    return;
-  }
+  if (!await flushBioSave()) return;
   renderUserProfile(openedProfile);
 });
 
@@ -940,11 +933,7 @@ document.addEventListener("keydown", (event) => {
   if (userProfileEditForm && !userProfileEditForm.hidden) {
     event.preventDefault();
     void (async () => {
-      try {
-        await flushBioSave();
-      } catch (_error) {
-        return;
-      }
+      if (!await flushBioSave()) return;
       if (openedProfile) renderUserProfile(openedProfile);
     })();
     return;
