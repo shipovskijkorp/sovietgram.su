@@ -195,6 +195,8 @@ def profile(request):
                 "birthday": user.birthday.isoformat() if user.birthday else "",
                 "birthday_display": user.birthday.strftime("%d.%m.%Y") if user.birthday else "",
                 "personal_channel": _personal_channel_payload(user.personal_channel, request.user),
+                "profile_url": reverse("accounts:public_profile", args=[user.username]),
+                "remove_avatar_url": reverse("accounts:remove_avatar"),
             }
         )
 
@@ -227,7 +229,17 @@ def remove_avatar(request):
         request.user.avatar.delete(save=False)
         request.user.avatar = ""
         request.user.save(update_fields=["avatar"])
-        messages.success(request, "Фотография профиля удалена.")
+
+    if request.headers.get("x-requested-with") == "XMLHttpRequest":
+        return JsonResponse(
+            {
+                "ok": True,
+                "avatar_url": "",
+                "initials": request.user.initials,
+            }
+        )
+
+    messages.success(request, "Фотография профиля удалена.")
     return redirect("accounts:profile")
 
 
@@ -320,6 +332,16 @@ def public_profile(request, username):
                     reverse("messenger:remove_contact", args=[profile_user.username])
                     if request.user.is_authenticated
                     and request.user.pk != profile_user.pk
+                    else ""
+                ),
+                "profile_url": reverse(
+                    "accounts:public_profile",
+                    args=[profile_user.username],
+                ),
+                "remove_avatar_url": (
+                    reverse("accounts:remove_avatar")
+                    if request.user.is_authenticated
+                    and request.user.pk == profile_user.pk
                     else ""
                 ),
             }
