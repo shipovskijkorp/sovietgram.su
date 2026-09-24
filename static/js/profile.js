@@ -120,6 +120,8 @@ const userProfileChannelTitle = document.getElementById("userProfileChannelTitle
 const userProfileChannelTime = document.getElementById("userProfileChannelTime");
 const userProfileChannelPreview = document.getElementById("userProfileChannelPreview");
 const userProfileChannelMeta = document.getElementById("userProfileChannelMeta");
+const userProfileChannelContext = document.getElementById("userProfileChannelContext");
+const userProfileChannelContextRemove = document.getElementById("userProfileChannelContextRemove");
 const userProfileBirthdayRow = document.getElementById("userProfileBirthdayRow");
 const userProfileBirthday = document.getElementById("userProfileBirthday");
 const userProfileActions = document.getElementById("userProfileActions");
@@ -312,6 +314,23 @@ function startProfileRefresh() {
   }, 30000);
 }
 
+function closeProfileChannelContext() {
+  if (userProfileChannelContext) userProfileChannelContext.hidden = true;
+}
+
+function openProfileChannelContext(event) {
+  if (!openedProfile?.is_self || !openedProfile.personal_channel || !userProfileChannelContext) return;
+  event.preventDefault();
+  userProfileChannelContext.hidden = false;
+
+  const width = 170;
+  const height = 44;
+  const left = Math.min(event.clientX, window.innerWidth - width - 8);
+  const top = Math.min(event.clientY, window.innerHeight - height - 8);
+  userProfileChannelContext.style.left = `${Math.max(8, left)}px`;
+  userProfileChannelContext.style.top = `${Math.max(8, top)}px`;
+}
+
 function closeProfilePhotoViewer() {
   if (!userProfilePhotoViewer) return;
   userProfilePhotoViewer.hidden = true;
@@ -365,6 +384,7 @@ async function closeUserProfile() {
   }
   closeProfileFieldEditor();
   closeProfilePhotoViewer();
+  closeProfileChannelContext();
   if (userProfileChannelPicker) userProfileChannelPicker.hidden = true;
   stopProfileRefresh();
   userProfileOverlay.hidden = true;
@@ -716,6 +736,9 @@ userProfileEditClose?.addEventListener("click", () => {
 
 userProfileOverlay?.addEventListener("click", (event) => {
   if (event.target === userProfileOverlay) void closeUserProfile();
+  if (!userProfileChannelContext?.hidden && !userProfileChannelContext.contains(event.target)) {
+    closeProfileChannelContext();
+  }
 });
 
 userProfileAvatar?.addEventListener("click", openProfilePhotoViewer);
@@ -767,6 +790,18 @@ userProfileUsernameRow?.addEventListener("click", () => {
   const relative = openedProfile.profile_url || `/u/${encodeURIComponent(openedProfile.username)}/`;
   const absolute = new URL(relative, window.location.origin).href;
   void copyProfileText(absolute, "Ссылка на профиль скопирована");
+});
+
+userProfileChannelCard?.addEventListener("contextmenu", openProfileChannelContext);
+userProfileChannelContextRemove?.addEventListener("click", async () => {
+  closeProfileChannelContext();
+  if (!openedProfile?.is_self || !openedProfile.personal_channel) return;
+  try {
+    await saveSelfProfile({ personal_channel: "" });
+    renderUserProfile(openedProfile);
+  } catch (error) {
+    showProfileToast(profileErrorsToText(error?.profileErrors));
+  }
 });
 
 userProfileChannelCard?.addEventListener("click", () => {
@@ -932,6 +967,10 @@ userProfileContact?.addEventListener("click", async () => {
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
 
+  if (userProfileChannelContext && !userProfileChannelContext.hidden) {
+    closeProfileChannelContext();
+    return;
+  }
   if (userProfilePhotoViewer && !userProfilePhotoViewer.hidden) {
     closeProfilePhotoViewer();
     return;
