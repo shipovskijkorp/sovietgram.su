@@ -180,3 +180,122 @@
   -webkit-mask-size: 20px 20px;
   color: #fff;
 }
+
+
+/* Original Telegram Desktop control masks. */
+.tg-native-icon--archive {
+  mask-image: url("../icons/telegram-original/archive.png");
+  -webkit-mask-image: url("../icons/telegram-original/archive.png");
+}
+.tg-native-icon--unarchive {
+  mask-image: url("../icons/telegram-original/unarchive.png");
+  -webkit-mask-image: url("../icons/telegram-original/unarchive.png");
+}
+.tg-native-icon--pin {
+  mask-image: url("../icons/telegram-original/pin.png");
+  -webkit-mask-image: url("../icons/telegram-original/pin.png");
+}
+.tg-native-icon--mute {
+  mask-image: url("../icons/telegram-original/mute.png");
+  -webkit-mask-image: url("../icons/telegram-original/mute.png");
+}
+.tg-native-icon--info {
+  mask-image: url("../icons/telegram-original/info.png");
+  -webkit-mask-image: url("../icons/telegram-original/info.png");
+}
+.tg-native-icon--clear {
+  mask-image: url("../icons/telegram-original/clear.png");
+  -webkit-mask-image: url("../icons/telegram-original/clear.png");
+}
+.tg-native-icon--add {
+  mask-image: url("../icons/telegram-original/add.png");
+  -webkit-mask-image: url("../icons/telegram-original/add.png");
+}
+.tg-native-icon--reply {
+  mask-image: url("../icons/telegram-original/reply.png");
+  -webkit-mask-image: url("../icons/telegram-original/reply.png");
+}
+.tg-native-icon--copy {
+  mask-image: url("../icons/telegram-original/copy.png");
+  -webkit-mask-image: url("../icons/telegram-original/copy.png");
+}
+.tg-native-icon--edit {
+  mask-image: url("../icons/telegram-original/edit.png");
+  -webkit-mask-image: url("../icons/telegram-original/edit.png");
+}
+.tg-native-icon--forward {
+  mask-image: url("../icons/telegram-original/forward.png");
+  -webkit-mask-image: url("../icons/telegram-original/forward.png");
+}
+.tg-native-icon--file {
+  mask-image: url("../icons/telegram-original/file.png");
+  -webkit-mask-image: url("../icons/telegram-original/file.png");
+}
+.tg-native-icon--leave {
+  mask-image: url("../icons/telegram-original/leave.png");
+  -webkit-mask-image: url("../icons/telegram-original/leave.png");
+}
+.tg-native-icon--lock {
+  mask-image: url("../icons/telegram-original/lock.png");
+  -webkit-mask-image: url("../icons/telegram-original/lock.png");
+}
+.tg-native-icon--back {
+  width: 32px;
+  height: 32px;
+  flex-basis: 32px;
+  mask-image: url("../icons/telegram-original/back.png");
+  -webkit-mask-image: url("../icons/telegram-original/back.png");
+  mask-size: 32px 32px;
+  -webkit-mask-size: 32px 32px;
+}
+.tg-native-icon--close {
+  width: 32px;
+  height: 32px;
+  flex-basis: 32px;
+  mask-image: url("../icons/telegram-original/close.png");
+  -webkit-mask-image: url("../icons/telegram-original/close.png");
+  mask-size: 32px 32px;
+  -webkit-mask-size: 32px 32px;
+}
+.tg-native-icon--attach {
+  width: 40px;
+  height: 40px;
+  flex-basis: 40px;
+  mask-image: url("../icons/telegram-original/attach.png");
+  -webkit-mask-image: url("../icons/telegram-original/attach.png");
+  mask-size: 40px 40px;
+  -webkit-mask-size: 40px 40px;
+}
+.tg-native-icon--send {
+  mask-image: url("../icons/telegram-original/send.png");
+  -webkit-mask-image: url("../icons/telegram-original/send.png");
+}
+.tg-native-icon--media {
+  mask-image: url("../icons/telegram-original/media.png");
+  -webkit-mask-image: url("../icons/telegram-original/media.png");
+}
+.tg-native-icon--camera {
+  width: 22px;
+  height: 20px;
+  flex-basis: 22px;
+  mask-image: url("../icons/telegram-original/camera.png");
+  -webkit-mask-image: url("../icons/telegram-original/camera.png");
+  mask-size: 22px 20px;
+  -webkit-mask-size: 22px 20px;
+}
+
+/* Compact placements keep the original source art, only the rendered box changes. */
+.tg-native-icon--compact {
+  width: 18px;
+  height: 18px;
+  flex-basis: 18px;
+  mask-size: 18px 18px;
+  -webkit-mask-size: 18px 18px;
+}
+.tg-native-icon--small {
+  width: 16px;
+  height: 16px;
+  flex-basis: 16px;
+  mask-size: 16px 16px;
+  -webkit-mask-size: 16px 16px;
+}
