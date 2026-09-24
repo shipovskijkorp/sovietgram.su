@@ -450,39 +450,9 @@ body[data-theme="dark"] .message__text a { color: #e37880; }
   .shared-media-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
 }
 
-
-/* Telegram icons replace text glyphs in chat controls. */
-.chat-menu button > .tg-icon {
-  justify-self: center;
-  color: var(--red);
-}
-.chat-menu .chat-menu__danger > .tg-icon {
-  color: currentColor;
-}
-.chat-row__flags .tg-icon {
-  width: 14px;
-  height: 14px;
-}
-.conversation-header__actions .tg-icon,
-.mobile-back .tg-icon {
-  color: currentColor;
-}
-
-
-.message-context-menu button > .tg-icon {
-  justify-self: center;
-  color: var(--red);
-}
-.message-context-menu .message-context-menu__danger > .tg-icon {
-  color: currentColor;
-}
 .chat-modal > header button,
 .chat-info-header button,
 .chat-search-box button {
   display: grid;
   place-items: center;
-}
-.forward-search > .tg-icon,
-.chat-search-box > .tg-icon {
-  color: currentColor;
 }
