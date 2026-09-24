@@ -98,7 +98,7 @@
     </section>
 
     <footer class="sidebar__footer">
-      <a class="account-mini" href="{% url 'accounts:public_profile' request.user.username %}" data-user-profile title="Открыть профиль">
+      <a class="account-mini" href="{% url 'accounts:public_profile' request.user.username %}" data-user-profile data-self-profile title="Открыть профиль">
         {% if request.user.avatar %}
           <img class="account-mini__avatar account-mini__avatar--image" src="{{ request.user.avatar.url }}" alt="">
         {% else %}
@@ -498,7 +498,7 @@
     {% if request.user.archive_in_main_menu and archived_count %}
       <a href="{% url 'messenger:home' %}?archived=1"><span class="tg-native-icon tg-native-icon--archive-open" aria-hidden="true"></span><strong>Архив</strong>{% if archived_unread_count %}<b>{{ archived_unread_count }}</b>{% endif %}</a>
     {% endif %}
-    <a href="{% url 'accounts:public_profile' request.user.username %}" data-user-profile><span class="tg-native-icon tg-native-icon--profile" aria-hidden="true"></span><strong>Мой профиль</strong></a>
+    <a href="{% url 'accounts:public_profile' request.user.username %}" data-user-profile data-self-profile><span class="tg-native-icon tg-native-icon--profile" aria-hidden="true"></span><strong>Мой профиль</strong></a>
     <a href="{% url 'messenger:create_community' %}?type=group" data-community-open="group"><span class="tg-native-icon tg-native-icon--groups" aria-hidden="true"></span><strong>Создать группу</strong></a>
     <a href="{% url 'messenger:create_community' %}?type=channel" data-community-open="channel"><span class="tg-native-icon tg-native-icon--channel" aria-hidden="true"></span><strong>Создать канал</strong></a>
     <a href="{% url 'messenger:contacts' %}"><span class="tg-native-icon tg-native-icon--contacts" aria-hidden="true"></span><strong>Контакты</strong></a>
