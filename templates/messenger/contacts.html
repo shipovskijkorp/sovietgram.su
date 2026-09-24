@@ -18,7 +18,7 @@
 
     <div class="telegram-search-wrap">
       <form class="telegram-search" method="get" action="{% url 'messenger:contacts' %}">
-        <svg class="tg-icon tg-icon--18" aria-hidden="true"><use href="{% static 'icons/telegram.svg' %}#tg-search"></use></svg>
+        <span class="tg-native-icon tg-native-icon--search tg-native-icon--compact" aria-hidden="true"></span>
         <input id="peopleSearchInput" type="search" name="q" value="{{ query }}" placeholder="Поиск" autocomplete="off" {% if focus_search %}autofocus{% endif %}>
         {% if query %}<a href="{% url 'messenger:contacts' %}" aria-label="Очистить поиск"><span class="tg-native-icon tg-native-icon--close tg-native-icon--compact" aria-hidden="true"></span></a>{% endif %}
       </form>
