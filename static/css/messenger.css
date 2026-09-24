@@ -1073,10 +1073,6 @@ body.has-modal {
 .sidebar-searchbar__back {
   text-decoration: none;
 }
-.sidebar-searchbar__back .tg-icon {
-  color: currentColor;
-}
-
 .archive-page-heading {
   flex: 0 0 auto;
   min-height: 54px;
