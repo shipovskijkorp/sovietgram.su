@@ -107,6 +107,11 @@ class ProfileTests(TestCase):
         self.assertIn("status", payload)
         self.assertIn("birthday", payload)
         self.assertIn("personal_channel", payload)
+        self.assertEqual(
+            payload["profile_url"],
+            reverse("accounts:public_profile", args=[other.username]),
+        )
+        self.assertEqual(payload["remove_avatar_url"], "")
         self.assertNotIn("email", payload)
         self.assertNotIn("phone", payload)
 
@@ -120,6 +125,10 @@ class ProfileTests(TestCase):
         self.assertNotContains(response, ">Фамилия<", html=False)
         self.assertContains(response, 'id="userProfileChannelPicker"', html=False)
         self.assertContains(response, 'id="userProfileChannelOpen"', html=False)
+        self.assertContains(response, 'id="userProfileFieldEditor"', html=False)
+        self.assertContains(response, 'id="userProfilePhotoViewer"', html=False)
+        self.assertContains(response, 'id="userProfileUsernameRow"', html=False)
+        self.assertNotContains(response, 'id="userProfileEditSave"', html=False)
         self.assertContains(
             response,
             'id="userProfileEdit" type="button" aria-label="Редактировать" hidden',
@@ -143,6 +152,9 @@ class ProfileTests(TestCase):
         )
         self.assertContains(response, 'id="userProfileEdit"', html=False)
         self.assertContains(response, 'id="userProfileEditForm"', html=False)
+        self.assertContains(response, 'id="userProfileNameOpen"', html=False)
+        self.assertContains(response, 'id="userProfileUsernameOpen"', html=False)
+        self.assertContains(response, 'id="userProfileBirthdayOpen"', html=False)
         self.assertContains(response, "О себе")
         self.assertContains(response, "Имя пользователя")
         self.assertNotContains(response, "Номер телефона")
@@ -189,6 +201,11 @@ class ProfileTests(TestCase):
         payload = response.json()
         self.assertTrue(payload["is_self"])
         self.assertEqual(payload["edit_url"], reverse("accounts:profile"))
+        self.assertEqual(
+            payload["profile_url"],
+            reverse("accounts:public_profile", args=[self.user.username]),
+        )
+        self.assertEqual(payload["remove_avatar_url"], reverse("accounts:remove_avatar"))
         self.assertIn("first_name", payload)
         self.assertIn("last_name", payload)
         self.assertNotIn("email", payload)
@@ -398,6 +415,29 @@ class ProfileTests(TestCase):
         self.user.refresh_from_db()
         self.assertEqual(self.user.avatar.name, original_name)
         self.assertEqual(self.user.bio, "Изменено без нового аватара.")
+
+    def test_ajax_avatar_removal_updates_profile_without_redirect(self):
+        buffer = BytesIO()
+        Image.new("RGB", (64, 64), "green").save(buffer, format="PNG")
+        self.user.avatar = SimpleUploadedFile(
+            "remove-me.png",
+            buffer.getvalue(),
+            content_type="image/png",
+        )
+        self.user.save(update_fields=["avatar"])
+
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("accounts:remove_avatar"),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["avatar_url"], "")
+
+        self.user.refresh_from_db()
+        self.assertFalse(bool(self.user.avatar))
 
     def test_fallback_profile_edit_keeps_existing_avatar_without_revalidation(self):
         buffer = BytesIO()
