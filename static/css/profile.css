@@ -907,7 +907,7 @@ body[data-theme="dark"] .profile-account-badge {
 }
 
 
-/* Telegram-like profile overlay — Stalingram palette */
+/* Telegram Desktop profile geometry — Stalingram palette */
 .user-profile-overlay {
   position: fixed;
   inset: 0;
@@ -925,12 +925,13 @@ body[data-theme="dark"] .profile-account-badge {
 }
 
 .tg-profile {
-  width: min(394px, calc(100vw - 28px));
-  max-height: min(820px, calc(100dvh - 28px));
+  width: min(392px, calc(100vw - 28px));
+  max-height: min(760px, calc(100dvh - 28px));
   overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid rgba(236, 218, 194, .08);
-  border-radius: 12px;
-  background: #1d1916;
+  border-radius: 11px;
+  background: #1b1815;
   color: #eee5d8;
   box-shadow: 0 24px 80px rgba(0, 0, 0, .44);
   scrollbar-width: thin;
@@ -945,79 +946,90 @@ body[data-theme="dark"] .profile-account-badge {
 .tg-profile__topbar {
   position: sticky;
   top: 0;
-  z-index: 3;
+  z-index: 5;
   min-height: 52px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 0 12px 0 20px;
+  padding: 0 10px 0 20px;
   border-bottom: 1px solid rgba(236, 218, 194, .055);
-  background: rgba(29, 25, 22, .97);
+  background: rgba(27, 24, 21, .97);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
 
 .tg-profile__topbar > strong {
-  font-size: 16px;
+  color: #f0e7dc;
+  font-size: 17px;
   font-weight: 700;
+  line-height: 1;
 }
 
 .tg-profile__topbar-actions {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 0;
 }
 
 .tg-profile__icon-button {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
   padding: 0;
   border: 0;
   border-radius: 50%;
   background: transparent;
-  color: #a69582;
+  color: #a89682;
   cursor: pointer;
 }
 
 .tg-profile__icon-button:hover {
-  background: #2a2420;
-  color: #e6dacc;
+  background: rgba(255, 255, 255, .05);
+  color: #e8ddd0;
 }
 
-.tg-profile__icon-button svg {
-  width: 20px;
-  height: 20px;
+.tg-profile__icon-button[hidden] {
+  display: none !important;
 }
 
-.tg-profile__icon-button svg path {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.tg-profile__icon-button .tg-native-icon--edit {
+  width: 24px;
+  height: 24px;
+  flex-basis: 24px;
+  mask-size: 24px 24px;
+  -webkit-mask-size: 24px 24px;
+}
+
+.tg-profile__icon-button .tg-native-icon--close,
+.tg-profile-edit__topbar .tg-native-icon--back {
+  width: 32px;
+  height: 32px;
+  flex-basis: 32px;
+  mask-size: 32px 32px;
+  -webkit-mask-size: 32px 32px;
+  color: currentColor;
 }
 
 .tg-profile__hero {
   display: grid;
   justify-items: center;
-  padding: 18px 20px 20px;
-  background: #1d1916;
+  padding: 14px 20px 18px;
+  background: #1b1815;
 }
 
 .tg-profile__avatar {
-  width: 88px;
-  height: 88px;
+  width: 80px;
+  height: 80px;
   display: grid;
   place-items: center;
   overflow: hidden;
   border-radius: 50%;
   background: #b52b35;
   color: #fff;
-  font-size: 25px;
-  font-weight: 850;
+  font-size: 24px;
+  font-weight: 800;
 }
 
 .tg-profile__avatar img,
@@ -1038,15 +1050,18 @@ body[data-theme="dark"] .profile-account-badge {
   color: #f4ece2;
   font-size: 18px;
   font-weight: 700;
+  line-height: 22px;
 }
 
 .tg-profile__hero p {
-  margin: 3px 0 0;
+  margin: 2px 0 0;
   color: #d45a63;
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 16px;
 }
 
 .tg-profile__bio,
+.tg-profile__personal-channel,
 .tg-profile__rows,
 .tg-profile__actions,
 .tg-profile__accounts,
@@ -1054,54 +1069,167 @@ body[data-theme="dark"] .profile-account-badge {
 .tg-profile-edit__rows,
 .tg-profile-edit__footer {
   margin-top: 7px;
-  background: #1d1916;
+  background: #1b1815;
 }
 
 .tg-profile__bio {
-  padding: 13px 20px 12px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 12px 20px 13px;
 }
 
 .tg-profile__bio p {
+  min-width: 0;
+  max-width: 100%;
   margin: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   white-space: pre-wrap;
-  color: #ece2d6;
-  font-size: 12px;
-  line-height: 1.45;
+  color: #eee4d8;
+  font-size: 14px;
+  line-height: 20px;
 }
 
 .tg-profile__bio small {
   display: block;
-  margin-top: 5px;
-  color: #978673;
-  font-size: 9.5px;
+  margin-top: 3px;
+  color: #94816e;
+  font-size: 11px;
+  line-height: 15px;
 }
 
+/* Telegram profile personal-channel row. */
+.tg-profile__personal-channel {
+  width: 100%;
+  min-height: 76px;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+}
+
+.tg-profile__personal-channel[hidden] {
+  display: none !important;
+}
+
+.tg-profile__personal-channel:disabled {
+  cursor: default;
+}
+
+.tg-profile__personal-channel.is-clickable {
+  cursor: pointer;
+}
+
+.tg-profile__personal-channel.is-clickable:hover {
+  background: #27221e;
+}
+
+.tg-profile-channel-card__avatar {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #a52b34;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.tg-profile-channel-card__avatar img,
+.tg-profile-channel-card__avatar > span {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  object-fit: cover;
+}
+
+.tg-profile-channel-card__content {
+  min-width: 0;
+}
+
+.tg-profile-channel-card__head {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.tg-profile-channel-card__head strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #f1e7db;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.tg-profile-channel-card__head time {
+  color: #9c8873;
+  font-size: 11px;
+  line-height: 15px;
+  white-space: nowrap;
+}
+
+.tg-profile-channel-card__preview {
+  display: block;
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #c9b9a8;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.tg-profile-channel-card__content small {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #8f7d69;
+  font-size: 11px;
+  line-height: 15px;
+}
+
+/* Plain information rows: Telegram does not add decorative left glyphs here. */
 .tg-profile__rows {
-  padding: 3px 0;
+  padding: 2px 0;
 }
 
 .tg-profile__row {
-  min-height: 58px;
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
+  min-height: 56px;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 20px;
+  padding: 9px 20px;
 }
 
 .tg-profile__row[hidden] {
   display: none !important;
 }
 
-.tg-profile__row-icon {
-  color: #c4b5a4;
-  font-size: 20px;
-  text-align: center;
+.tg-profile__row-copy {
+  min-width: 0;
+  width: 100%;
 }
 
 .tg-profile__row strong,
 .tg-profile__row small {
   display: block;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1109,21 +1237,23 @@ body[data-theme="dark"] .profile-account-badge {
 
 .tg-profile__row strong {
   color: #dc636b;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 19px;
 }
 
 .tg-profile__row small {
   margin-top: 2px;
   color: #907f6d;
-  font-size: 9.5px;
+  font-size: 11px;
+  line-height: 15px;
 }
 
 .tg-profile__actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1px;
-  padding: 5px;
+  padding: 5px 8px;
 }
 
 .tg-profile__actions[hidden] {
@@ -1131,14 +1261,14 @@ body[data-theme="dark"] .profile-account-badge {
 }
 
 .tg-profile__actions button {
-  min-height: 40px;
+  min-height: 42px;
   border: 0;
   border-radius: 8px;
   background: transparent;
   color: #dc636b;
   cursor: pointer;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .tg-profile__actions button:hover {
@@ -1154,8 +1284,9 @@ body[data-theme="dark"] .profile-account-badge {
   cursor: default;
 }
 
+/* Self-profile account switcher, matching Telegram settings proportions. */
 .tg-profile__accounts {
-  padding: 7px 0;
+  padding: 6px 0;
 }
 
 .tg-profile__accounts[hidden] {
@@ -1170,10 +1301,10 @@ body[data-theme="dark"] .profile-account-badge {
   width: 100%;
   min-height: 52px;
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) auto;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  padding: 6px 18px;
+  gap: 12px;
+  padding: 6px 20px;
   border: 0;
   background: transparent;
   color: #e8ddd0;
@@ -1186,7 +1317,7 @@ button.tg-profile-account {
 }
 
 .tg-profile-account:hover {
-  background: #29231f;
+  background: #27221e;
 }
 
 .tg-profile-account__avatar,
@@ -1221,11 +1352,12 @@ button.tg-profile-account {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .tg-profile-account > b {
-  min-width: 24px;
+  min-width: 22px;
   height: 20px;
   display: grid;
   place-items: center;
@@ -1233,23 +1365,31 @@ button.tg-profile-account {
   border-radius: 999px;
   background: #71363b;
   color: #fff;
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .tg-profile-account__plus {
   background: #b52b35;
-  font-size: 18px;
 }
 
-/* Edit mode */
+.tg-profile-account__plus .tg-native-icon {
+  width: 20px;
+  height: 20px;
+  flex-basis: 20px;
+  mask-size: 20px 20px;
+  -webkit-mask-size: 20px 20px;
+  color: #fff;
+}
+
+/* Self-profile edit screen. */
 .tg-profile-edit {
   background: #181513;
 }
 
 .tg-profile-edit__topbar {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 34px;
-  padding-inline: 10px;
+  grid-template-columns: 36px minmax(0, 1fr) 36px;
+  padding: 0 10px;
 }
 
 .tg-profile-edit__topbar > strong {
@@ -1259,28 +1399,28 @@ button.tg-profile-account {
 .tg-profile-edit__hero {
   display: grid;
   justify-items: center;
-  padding: 14px 20px 21px;
-  background: #1d1916;
+  padding: 14px 20px 18px;
+  background: #1b1815;
 }
 
 .tg-profile-edit__avatar {
   position: relative;
-  width: 88px;
-  height: 88px;
+  width: 80px;
+  height: 80px;
   cursor: pointer;
 }
 
 .tg-profile-edit__avatar > span {
-  width: 88px;
-  height: 88px;
+  width: 80px;
+  height: 80px;
   display: grid;
   place-items: center;
   overflow: hidden;
   border-radius: 50%;
   background: #b52b35;
   color: #fff;
-  font-size: 25px;
-  font-weight: 850;
+  font-size: 24px;
+  font-weight: 800;
 }
 
 .tg-profile-edit__avatar img,
@@ -1296,28 +1436,18 @@ button.tg-profile-account {
   position: absolute;
   right: -2px;
   bottom: -2px;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
-  border: 3px solid #1d1916;
+  border: 3px solid #1b1815;
   border-radius: 50%;
   background: #b52b35;
   color: #fff;
 }
 
-.tg-profile-edit__avatar > i svg {
-  width: 18px;
-  height: 18px;
-}
-
-.tg-profile-edit__avatar > i path,
-.tg-profile-edit__avatar > i circle {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.tg-profile-edit__avatar > i .tg-native-icon--camera {
+  color: currentColor;
 }
 
 .tg-profile-edit__hero > strong {
@@ -1326,20 +1456,25 @@ button.tg-profile-account {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 17px;
+  color: #f4ece2;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 22px;
 }
 
 .tg-profile-edit__hero > small {
-  margin-top: 3px;
+  margin-top: 2px;
   color: #d45a63;
-  font-size: 10.5px;
+  font-size: 12px;
+  line-height: 16px;
 }
 
 .tg-profile-edit__bio-section {
-  padding: 13px 20px 11px;
+  padding: 12px 20px 11px;
 }
 
 .tg-profile-edit__bio-section label {
+  min-width: 0;
   display: grid;
   gap: 5px;
 }
@@ -1347,38 +1482,42 @@ button.tg-profile-account {
 .tg-profile-edit__bio-section label > span,
 .tg-profile-edit__row > span:first-child {
   color: #998774;
-  font-size: 10px;
+  font-size: 11px;
+  line-height: 15px;
 }
 
 .tg-profile-edit__bio-section textarea {
-  min-height: 68px;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 72px;
   resize: none;
-  line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 20px;
 }
 
 .tg-profile-edit__bio-section textarea,
-.tg-profile-edit__row input,
-.tg-profile-edit__row select {
+.tg-profile-edit__row input {
   width: 100%;
+  box-sizing: border-box;
   border: 0;
   border-bottom: 1px solid #4b4038;
   outline: 0;
   background: transparent;
   color: #eee5d8;
   font: inherit;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .tg-profile-edit__bio-section textarea:focus,
-.tg-profile-edit__row input:focus,
-.tg-profile-edit__row select:focus {
+.tg-profile-edit__row input:focus {
   border-bottom-color: #c94a53;
 }
 
 .tg-profile-edit__bio-section small {
   justify-self: end;
   color: #7f7060;
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .tg-profile-edit__rows {
@@ -1386,7 +1525,7 @@ button.tg-profile-account {
 }
 
 .tg-profile-edit__row {
-  min-height: 58px;
+  min-height: 60px;
   display: grid;
   align-content: center;
   gap: 4px;
@@ -1395,11 +1534,6 @@ button.tg-profile-account {
 
 .tg-profile-edit__row:last-child {
   border-bottom: 0;
-}
-
-.tg-profile-edit__row select {
-  min-height: 30px;
-  cursor: pointer;
 }
 
 .tg-profile-edit__username {
@@ -1411,126 +1545,11 @@ button.tg-profile-account {
 
 .tg-profile-edit__username b {
   color: #d45a63;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .tg-profile-edit__username input {
   border-bottom: 0;
-}
-
-.tg-profile-edit__error {
-  margin: 7px 14px 0;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: rgba(181, 58, 68, .13);
-  color: #e68187;
-  font-size: 10px;
-}
-
-.tg-profile__accounts--edit {
-  margin-top: 7px;
-}
-
-.tg-profile-edit__footer {
-  position: sticky;
-  bottom: 0;
-  display: flex;
-  justify-content: flex-end;
-  padding: 9px 14px 12px;
-  border-top: 1px solid rgba(236, 218, 194, .055);
-}
-
-.tg-profile-edit__footer button {
-  min-height: 38px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 8px;
-  background: rgba(181, 58, 68, .12);
-  color: #e06a72;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.tg-profile-edit__footer button:hover {
-  background: rgba(181, 58, 68, .18);
-}
-
-.tg-profile-edit__footer button:disabled {
-  opacity: .5;
-  cursor: default;
-}
-
-body.has-profile-overlay {
-  overflow: hidden;
-}
-
-/* Light theme keeps the same layout, only the Stalingram palette changes. */
-body:not([data-theme="dark"]) .tg-profile,
-body:not([data-theme="dark"]) .tg-profile-edit {
-  border-color: rgba(88, 61, 38, .11);
-  background: #efe5d7;
-  color: #493d32;
-}
-
-body:not([data-theme="dark"]) .tg-profile__topbar,
-body:not([data-theme="dark"]) .tg-profile__hero,
-body:not([data-theme="dark"]) .tg-profile__bio,
-body:not([data-theme="dark"]) .tg-profile__rows,
-body:not([data-theme="dark"]) .tg-profile__actions,
-body:not([data-theme="dark"]) .tg-profile__accounts,
-body:not([data-theme="dark"]) .tg-profile-edit__hero,
-body:not([data-theme="dark"]) .tg-profile-edit__bio-section,
-body:not([data-theme="dark"]) .tg-profile-edit__rows,
-body:not([data-theme="dark"]) .tg-profile-edit__footer {
-  background: #fffaf1;
-}
-
-body:not([data-theme="dark"]) .tg-profile__hero h2,
-body:not([data-theme="dark"]) .tg-profile__bio p,
-body:not([data-theme="dark"]) .tg-profile-account,
-body:not([data-theme="dark"]) .tg-profile-edit__bio-section textarea,
-body:not([data-theme="dark"]) .tg-profile-edit__row input,
-body:not([data-theme="dark"]) .tg-profile-edit__row select {
-  color: #493d32;
-}
-
-body:not([data-theme="dark"]) .tg-profile__icon-button:hover,
-body:not([data-theme="dark"]) .tg-profile-account:hover {
-  background: #f2e7d9;
-}
-
-body:not([data-theme="dark"]) .tg-profile__row strong,
-body:not([data-theme="dark"]) .tg-profile__hero p,
-body:not([data-theme="dark"]) .tg-profile__actions button,
-body:not([data-theme="dark"]) .tg-profile-edit__hero > small,
-body:not([data-theme="dark"]) .tg-profile-edit__username b {
-  color: var(--red);
-}
-
-body:not([data-theme="dark"]) .tg-profile-edit__avatar > i {
-  border-color: #fffaf1;
-  background: var(--red);
-}
-
-@media (max-width: 520px) {
-  .user-profile-overlay {
-    align-items: end;
-    padding: 0;
-  }
-
-  .tg-profile {
-    width: 100%;
-    max-height: 92dvh;
-    border-width: 1px 0 0;
-    border-radius: 16px 16px 0 0;
-  }
-}
-
-
-/* Profile edit visibility and nested personal-channel picker */
-.tg-profile__icon-button[hidden] {
-  display: none !important;
 }
 
 .tg-profile-edit__row--button {
@@ -1558,13 +1577,13 @@ body:not([data-theme="dark"]) .tg-profile-edit__avatar > i {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 500;
 }
 
 .tg-profile-edit__channel-button > span {
   color: #9a8875;
-  font-size: 19px;
+  font-size: 20px;
   line-height: 1;
 }
 
@@ -1573,6 +1592,51 @@ body:not([data-theme="dark"]) .tg-profile-edit__avatar > i {
   color: #e06a72;
 }
 
+.tg-profile-edit__error {
+  margin: 7px 14px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(181, 58, 68, .13);
+  color: #e68187;
+  font-size: 11px;
+}
+
+.tg-profile__accounts--edit {
+  margin-top: 7px;
+}
+
+.tg-profile-edit__footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 14px 10px;
+  border-top: 1px solid rgba(236, 218, 194, .055);
+}
+
+.tg-profile-edit__footer button {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(181, 58, 68, .12);
+  color: #e06a72;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.tg-profile-edit__footer button:hover {
+  background: rgba(181, 58, 68, .18);
+}
+
+.tg-profile-edit__footer button:disabled {
+  opacity: .5;
+  cursor: default;
+}
+
+/* Personal channel picker sits above the profile, using Telegram proportions. */
 .tg-profile-channel-picker {
   position: fixed;
   inset: 0;
@@ -1590,13 +1654,13 @@ body:not([data-theme="dark"]) .tg-profile-edit__avatar > i {
 }
 
 .tg-profile-channel-picker__card {
-  width: min(330px, calc(100vw - 36px));
+  width: min(340px, calc(100vw - 36px));
   max-height: min(620px, calc(100dvh - 48px));
   display: flex;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid rgba(236, 218, 194, .09);
-  border-radius: 12px;
+  border-radius: 11px;
   background: #211d1a;
   color: #eee5d8;
   box-shadow: 0 20px 70px rgba(0, 0, 0, .48);
@@ -1604,11 +1668,11 @@ body:not([data-theme="dark"]) .tg-profile-edit__avatar > i {
 
 .tg-profile-channel-picker__header {
   flex: 0 0 auto;
-  padding: 16px 18px 12px;
+  padding: 16px 20px 12px;
 }
 
 .tg-profile-channel-picker__header strong {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 700;
 }
 
@@ -1623,12 +1687,12 @@ body:not([data-theme="dark"]) .tg-profile-edit__avatar > i {
 
 .tg-profile-channel-option {
   width: 100%;
-  min-height: 58px;
+  min-height: 60px;
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) 22px;
+  grid-template-columns: 44px minmax(0, 1fr) 22px;
   align-items: center;
-  gap: 10px;
-  padding: 7px 18px;
+  gap: 12px;
+  padding: 8px 18px;
   border: 0;
   background: transparent;
   color: #eee5d8;
@@ -1641,8 +1705,8 @@ body:not([data-theme="dark"]) .tg-profile-edit__avatar > i {
 }
 
 .tg-profile-channel-option__avatar {
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -1655,8 +1719,8 @@ body:not([data-theme="dark"]) .tg-profile-edit__avatar > i {
 
 .tg-profile-channel-option__avatar img,
 .tg-profile-channel-option__avatar > span {
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
   object-fit: cover;
@@ -1675,13 +1739,13 @@ body:not([data-theme="dark"]) .tg-profile-edit__avatar > i {
 }
 
 .tg-profile-channel-option__copy strong {
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .tg-profile-channel-option__copy small {
   margin-top: 2px;
   color: #958371;
-  font-size: 9.5px;
+  font-size: 11px;
 }
 
 .tg-profile-channel-option__check {
@@ -1709,7 +1773,7 @@ body:not([data-theme="dark"]) .tg-profile-edit__avatar > i {
   padding: 56px 18px;
   color: #927f6d;
   text-align: center;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .tg-profile-channel-picker__footer {
@@ -1728,14 +1792,11 @@ body:not([data-theme="dark"]) .tg-profile-edit__avatar > i {
   border-radius: 8px;
   background: transparent;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
 }
 
-.tg-profile-channel-picker__remove {
-  color: #e06770;
-}
-
+.tg-profile-channel-picker__remove,
 .tg-profile-channel-picker__done {
   color: #e06a72;
 }
@@ -1744,9 +1805,75 @@ body:not([data-theme="dark"]) .tg-profile-edit__avatar > i {
   background: rgba(181, 58, 68, .10);
 }
 
+body.has-profile-overlay {
+  overflow: hidden;
+}
+
+/* Light palette keeps Telegram geometry, only Stalingram colors change. */
+body:not([data-theme="dark"]) .tg-profile,
+body:not([data-theme="dark"]) .tg-profile-edit {
+  border-color: rgba(88, 61, 38, .11);
+  background: #efe5d7;
+  color: #493d32;
+}
+
+body:not([data-theme="dark"]) .tg-profile__topbar,
+body:not([data-theme="dark"]) .tg-profile__hero,
+body:not([data-theme="dark"]) .tg-profile__bio,
+body:not([data-theme="dark"]) .tg-profile__personal-channel,
+body:not([data-theme="dark"]) .tg-profile__rows,
+body:not([data-theme="dark"]) .tg-profile__actions,
+body:not([data-theme="dark"]) .tg-profile__accounts,
+body:not([data-theme="dark"]) .tg-profile-edit__hero,
+body:not([data-theme="dark"]) .tg-profile-edit__bio-section,
+body:not([data-theme="dark"]) .tg-profile-edit__rows,
+body:not([data-theme="dark"]) .tg-profile-edit__footer {
+  background: #fffaf1;
+}
+
+body:not([data-theme="dark"]) .tg-profile__topbar > strong,
+body:not([data-theme="dark"]) .tg-profile__hero h2,
+body:not([data-theme="dark"]) .tg-profile__bio p,
+body:not([data-theme="dark"]) .tg-profile-channel-card__head strong,
+body:not([data-theme="dark"]) .tg-profile-account,
+body:not([data-theme="dark"]) .tg-profile-edit__hero > strong,
+body:not([data-theme="dark"]) .tg-profile-edit__bio-section textarea,
+body:not([data-theme="dark"]) .tg-profile-edit__row input,
+body:not([data-theme="dark"]) .tg-profile-edit__channel-button {
+  color: #493d32;
+}
+
+body:not([data-theme="dark"]) .tg-profile__icon-button:hover,
+body:not([data-theme="dark"]) .tg-profile-account:hover,
+body:not([data-theme="dark"]) .tg-profile__personal-channel.is-clickable:hover,
+body:not([data-theme="dark"]) .tg-profile-channel-option:hover {
+  background: #f2e7d9;
+}
+
+body:not([data-theme="dark"]) .tg-profile__row strong,
+body:not([data-theme="dark"]) .tg-profile__hero p,
+body:not([data-theme="dark"]) .tg-profile__actions button,
+body:not([data-theme="dark"]) .tg-profile-edit__hero > small,
+body:not([data-theme="dark"]) .tg-profile-edit__username b {
+  color: var(--red);
+}
+
+body:not([data-theme="dark"]) .tg-profile-channel-card__content small,
+body:not([data-theme="dark"]) .tg-profile-channel-card__head time {
+  color: #8f7c67;
+}
+
+body:not([data-theme="dark"]) .tg-profile-channel-card__preview {
+  color: #6f5c4b;
+}
+
+body:not([data-theme="dark"]) .tg-profile-edit__avatar > i {
+  border-color: #fffaf1;
+  background: var(--red);
+}
+
 body:not([data-theme="dark"]) .tg-profile-edit__channel-button {
   border-bottom-color: #cbbcab;
-  color: #493d32;
 }
 
 body:not([data-theme="dark"]) .tg-profile-channel-picker__card {
@@ -1759,10 +1886,6 @@ body:not([data-theme="dark"]) .tg-profile-channel-option {
   color: #493d32;
 }
 
-body:not([data-theme="dark"]) .tg-profile-channel-option:hover {
-  background: #f2e7d9;
-}
-
 body:not([data-theme="dark"]) .tg-profile-channel-option.is-selected {
   background: rgba(204, 0, 0, .06);
 }
@@ -1771,7 +1894,25 @@ body:not([data-theme="dark"]) .tg-profile-channel-picker__footer {
   border-top-color: rgba(88, 61, 38, .08);
 }
 
+.profile-drawer__footer--telegram button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 @media (max-width: 520px) {
+  .user-profile-overlay {
+    align-items: end;
+    padding: 0;
+  }
+
+  .tg-profile {
+    width: 100%;
+    max-height: 92dvh;
+    border-width: 1px 0 0;
+    border-radius: 16px 16px 0 0;
+  }
+
   .tg-profile-channel-picker {
     align-items: end;
     padding: 0;
@@ -1783,181 +1924,4 @@ body:not([data-theme="dark"]) .tg-profile-channel-picker__footer {
     border-width: 1px 0 0;
     border-radius: 16px 16px 0 0;
   }
-}
-
-
-/* Telegram-like personal channel card inside profile */
-.tg-profile__personal-channel {
-  margin-top: 7px;
-  min-height: 78px;
-  display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-  padding: 10px 18px;
-  background: #1d1916;
-}
-
-.tg-profile__personal-channel[hidden] {
-  display: none !important;
-}
-
-.tg-profile-channel-card__avatar {
-  width: 48px;
-  height: 48px;
-  min-width: 48px;
-  min-height: 48px;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  border-radius: 50%;
-  background: #a52b34;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.tg-profile-channel-card__avatar img,
-.tg-profile-channel-card__avatar > span {
-  width: 48px;
-  height: 48px;
-  display: grid;
-  place-items: center;
-  object-fit: cover;
-}
-
-.tg-profile-channel-card__content {
-  min-width: 0;
-}
-
-.tg-profile-channel-card__head {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
-  gap: 10px;
-}
-
-.tg-profile-channel-card__head strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #f0e5d8;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.tg-profile-channel-card__head time {
-  color: #a18d78;
-  font-size: 9.5px;
-  white-space: nowrap;
-}
-
-.tg-profile-channel-card__content p {
-  margin: 2px 0 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #c9b9a8;
-  font-size: 10.5px;
-}
-
-.tg-profile-channel-card__content small {
-  display: block;
-  margin-top: 3px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #8f7d69;
-  font-size: 9.5px;
-}
-
-/* Long profile text must never escape the card. */
-.tg-profile__bio,
-.tg-profile__bio p,
-.tg-profile__bio small,
-.tg-profile-edit__bio-section,
-.tg-profile-edit__bio-section label,
-.tg-profile-edit__bio-section textarea {
-  min-width: 0;
-  max-width: 100%;
-  box-sizing: border-box;
-}
-
-.tg-profile__bio {
-  overflow: hidden;
-}
-
-.tg-profile__bio p {
-  overflow-wrap: anywhere;
-  word-break: break-word;
-  white-space: pre-wrap;
-}
-
-.tg-profile-edit__bio-section textarea {
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
-body:not([data-theme="dark"]) .tg-profile__personal-channel {
-  background: #fffaf1;
-}
-
-body:not([data-theme="dark"]) .tg-profile-channel-card__head strong {
-  color: #493d32;
-}
-
-body:not([data-theme="dark"]) .tg-profile-channel-card__head time,
-body:not([data-theme="dark"]) .tg-profile-channel-card__content small {
-  color: #8f7c67;
-}
-
-body:not([data-theme="dark"]) .tg-profile-channel-card__content p {
-  color: #6f5c4b;
-}
-
-
-.tg-profile__personal-channel {
-  width: 100%;
-  border: 0;
-  color: inherit;
-  text-align: left;
-  font: inherit;
-}
-
-.tg-profile__personal-channel:disabled {
-  cursor: default;
-}
-
-.tg-profile__personal-channel.is-clickable {
-  cursor: pointer;
-}
-
-.tg-profile__personal-channel.is-clickable:hover {
-  background: #29231f;
-}
-
-.tg-profile-channel-card__preview {
-  display: block;
-  margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #c9b9a8;
-  font-size: 10.5px;
-}
-
-body:not([data-theme="dark"]) .tg-profile__personal-channel.is-clickable:hover {
-  background: #f2e7d9;
-}
-
-body:not([data-theme="dark"]) .tg-profile-channel-card__preview {
-  color: #6f5c4b;
-}
-
-.profile-drawer__footer--telegram button {
-  display: flex;
-  align-items: center;
-  gap: 10px;
 }
