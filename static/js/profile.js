@@ -369,6 +369,7 @@ async function closeUserProfile() {
   stopProfileRefresh();
   userProfileOverlay.hidden = true;
   setUserProfileMode("view");
+  updateProfileHistory("");
   openedProfile = null;
   if (profileAvatarPreviewUrl) URL.revokeObjectURL(profileAvatarPreviewUrl);
   profileAvatarPreviewUrl = "";
@@ -662,6 +663,13 @@ function profileErrorsToText(errors) {
   return messages.join(" ") || "Проверьте введённые данные.";
 }
 
+function updateProfileHistory(username) {
+  const url = new URL(window.location.href);
+  if (username) url.searchParams.set("profile", username);
+  else url.searchParams.delete("profile");
+  window.history.replaceState({}, "", url);
+}
+
 async function openUserProfile(url) {
   if (!userProfileOverlay || !url) {
     window.location.assign(url);
@@ -678,10 +686,16 @@ async function openUserProfile(url) {
     if (!profile.ok) throw new Error("invalid profile payload");
     if (!profile.profile_url) profile.profile_url = url;
     renderUserProfile(profile);
+    updateProfileHistory(profile.username || "");
     startProfileRefresh();
   } catch (_error) {
     window.location.assign(url);
   }
+}
+
+const profileFromUrl = new URL(window.location.href).searchParams.get("profile");
+if (profileFromUrl && /^[A-Za-z0-9_.-]{1,150}$/.test(profileFromUrl)) {
+  void openUserProfile(`/u/${encodeURIComponent(profileFromUrl)}/`);
 }
 
 document.querySelectorAll("[data-user-profile]").forEach((link) => {
