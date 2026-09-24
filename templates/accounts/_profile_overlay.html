@@ -14,7 +14,7 @@
       </header>
 
       <section class="tg-profile__hero">
-        <div class="tg-profile__avatar" id="userProfileAvatar"></div>
+        <button class="tg-profile__avatar" id="userProfileAvatar" type="button" aria-label="Открыть фотографию профиля"></button>
         <h2 id="userProfileName"></h2>
         <p id="userProfileStatus"></p>
       </section>
@@ -37,12 +37,12 @@
       </button>
 
       <section class="tg-profile__rows">
-        <div class="tg-profile__row">
-          <div class="tg-profile__row-copy">
+        <button class="tg-profile__row tg-profile__row--interactive" id="userProfileUsernameRow" type="button">
+          <span class="tg-profile__row-copy">
             <strong id="userProfileUsername"></strong>
             <small>Имя пользователя</small>
-          </div>
-        </div>
+          </span>
+        </button>
 
         <div class="tg-profile__row" id="userProfileBirthdayRow" hidden>
           <div class="tg-profile__row-copy">
@@ -100,13 +100,15 @@
       </header>
 
       <section class="tg-profile-edit__hero">
-        <label class="tg-profile-edit__avatar" for="userProfileAvatarInput">
-          <input id="userProfileAvatarInput" name="avatar" type="file" accept="image/png,image/jpeg,image/webp" hidden>
-          <span id="userProfileEditAvatar"></span>
-          <i aria-hidden="true">
+        <div class="tg-profile-edit__avatar">
+          <button class="tg-profile-edit__avatar-open" id="userProfileEditAvatarOpen" type="button" aria-label="Открыть фотографию профиля">
+            <span id="userProfileEditAvatar"></span>
+          </button>
+          <label class="tg-profile-edit__avatar-upload" for="userProfileAvatarInput" aria-label="Изменить фотографию профиля" title="Изменить фотографию">
+            <input id="userProfileAvatarInput" name="avatar" type="file" accept="image/png,image/jpeg,image/webp" hidden>
             <span class="tg-native-icon tg-native-icon--camera" aria-hidden="true"></span>
-          </i>
-        </label>
+          </label>
+        </div>
         <strong id="userProfileEditDisplayName"></strong>
         <small id="userProfileEditStatus"></small>
       </section>
@@ -120,26 +122,41 @@
       </section>
 
       <section class="tg-profile-edit__rows">
-        <label class="tg-profile-edit__row">
-          <span>Имя</span>
-          <input id="userProfileFirstNameInput" name="first_name" type="text" maxlength="150">
-        </label>
-        <label class="tg-profile-edit__row">
-          <span>Имя пользователя</span>
-          <span class="tg-profile-edit__username"><b>@</b><input id="userProfileUsernameInput" name="username" type="text" maxlength="150"></span>
-        </label>
-        <div class="tg-profile-edit__row tg-profile-edit__row--button">
-          <span>Личный канал</span>
-          <button class="tg-profile-edit__channel-button" id="userProfileChannelOpen" type="button">
+        <button class="tg-profile-edit__setting-row" id="userProfileNameOpen" type="button">
+          <span>
+            <small>Имя</small>
+            <strong id="userProfileNameChoice"></strong>
+          </span>
+          <b aria-hidden="true">›</b>
+        </button>
+        <input id="userProfileFirstNameInput" name="first_name" type="hidden">
+
+        <button class="tg-profile-edit__setting-row" id="userProfileUsernameOpen" type="button">
+          <span>
+            <small>Имя пользователя</small>
+            <strong id="userProfileUsernameChoice"></strong>
+          </span>
+          <b aria-hidden="true">›</b>
+        </button>
+        <input id="userProfileUsernameInput" name="username" type="hidden">
+
+        <button class="tg-profile-edit__setting-row" id="userProfileChannelOpen" type="button">
+          <span>
+            <small>Личный канал</small>
             <strong id="userProfileChannelChoice">Не выбран</strong>
-            <span aria-hidden="true">›</span>
-          </button>
-          <input id="userProfileChannelInput" name="personal_channel" type="hidden" value="">
-        </div>
-        <label class="tg-profile-edit__row">
-          <span>День рождения</span>
-          <input id="userProfileBirthdayInput" name="birthday" type="date">
-        </label>
+          </span>
+          <b aria-hidden="true">›</b>
+        </button>
+        <input id="userProfileChannelInput" name="personal_channel" type="hidden" value="">
+
+        <button class="tg-profile-edit__setting-row" id="userProfileBirthdayOpen" type="button">
+          <span>
+            <small>День рождения</small>
+            <strong id="userProfileBirthdayChoice">Не указан</strong>
+          </span>
+          <b aria-hidden="true">›</b>
+        </button>
+        <input id="userProfileBirthdayInput" name="birthday" type="hidden">
       </section>
 
       <div class="tg-profile-edit__error" id="userProfileEditError" hidden></div>
@@ -168,16 +185,45 @@
           {% endif %}
         {% endfor %}
         <a class="tg-profile-account tg-profile-account--add" href="{% url 'accounts:add_account' %}">
-          <span class="tg-profile-account__plus">＋</span>
+          <span class="tg-profile-account__plus"><span class="tg-native-icon tg-native-icon--add-account" aria-hidden="true"></span></span>
           <strong>Добавить аккаунт</strong>
         </a>
       </section>
 
-      <footer class="tg-profile-edit__footer">
-        <button id="userProfileEditSave" type="submit">Сохранить</button>
-      </footer>
     </form>
   </section>
+
+  <div class="tg-profile-field-editor" id="userProfileFieldEditor" hidden>
+    <section class="tg-profile-field-editor__card" role="dialog" aria-modal="true" aria-labelledby="userProfileFieldTitle">
+      <header class="tg-profile-field-editor__header">
+        <strong id="userProfileFieldTitle"></strong>
+        <button id="userProfileFieldClose" type="button" aria-label="Закрыть">
+          <span class="tg-native-icon tg-native-icon--close" aria-hidden="true"></span>
+        </button>
+      </header>
+      <div class="tg-profile-field-editor__body">
+        <label>
+          <span id="userProfileFieldLabel"></span>
+          <input id="userProfileFieldInput" type="text" autocomplete="off">
+        </label>
+        <div class="tg-profile-field-editor__error" id="userProfileFieldError" hidden></div>
+      </div>
+      <footer class="tg-profile-field-editor__footer">
+        <button id="userProfileFieldCancel" type="button">Отмена</button>
+        <button id="userProfileFieldSave" type="button">Сохранить</button>
+      </footer>
+    </section>
+  </div>
+
+  <div class="tg-profile-photo-viewer" id="userProfilePhotoViewer" hidden>
+    <section class="tg-profile-photo-viewer__card" role="dialog" aria-modal="true" aria-label="Фотография профиля">
+      <button class="tg-profile-photo-viewer__close" id="userProfilePhotoClose" type="button" aria-label="Закрыть">
+        <span class="tg-native-icon tg-native-icon--close" aria-hidden="true"></span>
+      </button>
+      <img id="userProfilePhotoImage" alt="">
+      <button class="tg-profile-photo-viewer__remove" id="userProfilePhotoRemove" type="button" hidden>Удалить фото</button>
+    </section>
+  </div>
 
   <div class="tg-profile-channel-picker" id="userProfileChannelPicker" hidden>
     <section class="tg-profile-channel-picker__card" role="dialog" aria-modal="true" aria-labelledby="userProfileChannelPickerTitle">
