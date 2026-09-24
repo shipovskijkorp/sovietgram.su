@@ -79,8 +79,8 @@
             </span>
           </span>
           <span class="chat-row__flags">
-            {% if chat.is_pinned_ui %}<svg class="tg-icon tg-icon--16" title="Закреплён"><use href="{% static 'icons/telegram.svg' %}#tg-pin"></use></svg>{% endif %}
-            {% if chat.is_muted_ui %}<svg class="tg-icon tg-icon--16" title="Без уведомлений"><use href="{% static 'icons/telegram.svg' %}#tg-mute"></use></svg>{% endif %}
+            {% if chat.is_pinned_ui %}<span class="tg-native-icon tg-native-icon--pin tg-native-icon--small" title="Закреплён" aria-hidden="true"></span>{% endif %}
+            {% if chat.is_muted_ui %}<span class="tg-native-icon tg-native-icon--mute tg-native-icon--small" title="Без уведомлений" aria-hidden="true"></span>{% endif %}
           </span>
           {% if chat.unread_count_ui %}<span class="chat-row__unread">{{ chat.unread_count_ui }}</span>{% endif %}
         </a>
