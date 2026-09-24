@@ -709,7 +709,8 @@ async function openUserProfile(url) {
     updateProfileHistory(profile.username || "");
     startProfileRefresh();
   } catch (_error) {
-    window.location.assign(url);
+    updateProfileHistory("");
+    showProfileToast("Не удалось открыть профиль.");
   }
 }
 
