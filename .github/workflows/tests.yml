@@ -24,4 +24,6 @@ jobs:
       - name: Run Django tests
         run: python manage.py test
       - name: Check JavaScript syntax
-        run: node --check static/js/chat.js
+        run: |
+          node --check static/js/chat.js
+          node --check static/js/profile.js
