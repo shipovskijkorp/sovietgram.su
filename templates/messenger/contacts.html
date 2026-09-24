@@ -9,7 +9,7 @@
 <main class="contacts-shell">
   <section class="contacts-card contacts-card--telegram">
     <header class="contacts-topbar contacts-topbar--compact">
-      <a class="icon-button" href="{% url 'messenger:home' %}" aria-label="Назад"><svg class="tg-icon tg-icon--24"><use href="{% static 'icons/telegram.svg' %}#tg-back"></use></svg></a>
+      <a class="icon-button" href="{% url 'messenger:home' %}" aria-label="Назад"><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span></a>
       <div>
         <strong>Новый чат</strong>
         <small>Люди и каналы по @username</small>
@@ -20,18 +20,18 @@
       <form class="telegram-search" method="get" action="{% url 'messenger:contacts' %}">
         <svg class="tg-icon tg-icon--18" aria-hidden="true"><use href="{% static 'icons/telegram.svg' %}#tg-search"></use></svg>
         <input id="peopleSearchInput" type="search" name="q" value="{{ query }}" placeholder="Поиск" autocomplete="off" {% if focus_search %}autofocus{% endif %}>
-        {% if query %}<a href="{% url 'messenger:contacts' %}" aria-label="Очистить поиск"><svg class="tg-icon tg-icon--18"><use href="{% static 'icons/telegram.svg' %}#tg-close"></use></svg></a>{% endif %}
+        {% if query %}<a href="{% url 'messenger:contacts' %}" aria-label="Очистить поиск"><span class="tg-native-icon tg-native-icon--close tg-native-icon--compact" aria-hidden="true"></span></a>{% endif %}
       </form>
     </div>
 
     <section class="telegram-actions">
       <a href="{% url 'messenger:create_community' %}?type=group">
-        <span class="telegram-action-icon"><svg class="tg-icon tg-icon--24"><use href="{% static 'icons/telegram.svg' %}#tg-groups"></use></svg></span>
+        <span class="telegram-action-icon"><span class="tg-native-icon tg-native-icon--groups" aria-hidden="true"></span></span>
         <span><strong>Новая группа</strong><small>Собрать несколько человек в одном чате</small></span>
         <b>›</b>
       </a>
       <a href="{% url 'messenger:create_community' %}?type=channel">
-        <span class="telegram-action-icon"><svg class="tg-icon tg-icon--24"><use href="{% static 'icons/telegram.svg' %}#tg-channel"></use></svg></span>
+        <span class="telegram-action-icon"><span class="tg-native-icon tg-native-icon--channel" aria-hidden="true"></span></span>
         <span><strong>Новый канал</strong><small>Публиковать записи для подписчиков</small></span>
         <b>›</b>
       </a>
