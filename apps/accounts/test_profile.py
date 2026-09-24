@@ -80,6 +80,23 @@ class ProfileTests(TestCase):
         self.assertContains(response, "Публичное описание")
         self.assertNotContains(response, self.user.email)
 
+    def test_authenticated_public_profile_opens_in_messenger_overlay(self):
+        self.client.force_login(self.user)
+        other = User.objects.create_user(
+            username="overlay_target",
+            email="overlay-target@example.com",
+            password=self.password,
+        )
+
+        response = self.client.get(
+            reverse("accounts:public_profile", args=[other.username])
+        )
+        self.assertRedirects(
+            response,
+            f"{reverse('messenger:home')}?profile={other.username}",
+            fetch_redirect_response=False,
+        )
+
     def test_public_profile_ajax_returns_compact_safe_payload(self):
         self.user.first_name = "Иван"
         self.user.bio = "Публичное описание"
