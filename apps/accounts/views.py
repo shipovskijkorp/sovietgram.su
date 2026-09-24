@@ -251,6 +251,9 @@ def public_profile(request, username):
     if request.user.is_authenticated and request.user.pk != profile_user.pk:
         is_contact = Contact.objects.filter(owner=request.user, user=profile_user).exists()
 
+    if request.user.is_authenticated and request.headers.get("x-requested-with") != "XMLHttpRequest":
+        return redirect(f"{reverse('messenger:home')}?profile={profile_user.username}")
+
     if request.headers.get("x-requested-with") == "XMLHttpRequest":
         if profile_user.is_online:
             status = "в сети"
