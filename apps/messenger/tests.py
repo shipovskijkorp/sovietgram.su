@@ -74,6 +74,22 @@ class MessengerTests(TestCase):
         self.client.post(remove_url)
         self.assertFalse(Contact.objects.filter(owner=self.alice, user=self.bob).exists())
 
+    def test_profile_contact_actions_return_ajax_state(self):
+        add_url = reverse("messenger:add_contact", args=[self.bob.username])
+        remove_url = reverse("messenger:remove_contact", args=[self.bob.username])
+
+        added = self.client.post(add_url, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertEqual(added.status_code, 200)
+        self.assertTrue(added.json()["ok"])
+        self.assertTrue(added.json()["is_contact"])
+        self.assertTrue(Contact.objects.filter(owner=self.alice, user=self.bob).exists())
+
+        removed = self.client.post(remove_url, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertEqual(removed.status_code, 200)
+        self.assertTrue(removed.json()["ok"])
+        self.assertFalse(removed.json()["is_contact"])
+        self.assertFalse(Contact.objects.filter(owner=self.alice, user=self.bob).exists())
+
     def test_starting_same_direct_chat_does_not_duplicate_it(self):
         url = reverse("messenger:start_chat", args=[self.bob.username])
         first = self.client.post(url)
