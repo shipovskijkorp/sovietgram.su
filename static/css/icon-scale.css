@@ -299,3 +299,60 @@
   mask-size: 16px 16px;
   -webkit-mask-size: 16px 16px;
 }
+
+
+/* Native icon placement compatibility after removing the handcrafted SVG sprite. */
+.settings-nav a > .tg-native-icon,
+.profile-drawer__nav--telegram a > .tg-native-icon {
+  justify-self: center;
+}
+
+.chat-menu button > .tg-native-icon,
+.message-context-menu button > .tg-native-icon {
+  justify-self: center;
+  color: var(--red);
+}
+
+.chat-menu .chat-menu__danger > .tg-native-icon,
+.message-context-menu .message-context-menu__danger > .tg-native-icon {
+  color: currentColor;
+}
+
+.conversation-header__actions .tg-native-icon,
+.mobile-back .tg-native-icon,
+.chat-search-box .tg-native-icon,
+.forward-search .tg-native-icon,
+.community-member-search .tg-native-icon,
+.attachment-menu__icon .tg-native-icon,
+.send-button .tg-native-icon,
+.composer__attach .tg-native-icon,
+.media-compose-add .tg-native-icon,
+.media-compose-close .tg-native-icon {
+  color: currentColor;
+}
+
+.chat-row__flags .tg-native-icon {
+  width: 16px;
+  height: 16px;
+  flex-basis: 16px;
+  mask-size: 16px 16px;
+  -webkit-mask-size: 16px 16px;
+}
+
+.tg-profile__icon-button .tg-native-icon--edit {
+  width: 24px;
+  height: 24px;
+  flex-basis: 24px;
+  mask-size: 24px 24px;
+  -webkit-mask-size: 24px 24px;
+}
+
+.tg-profile__icon-button .tg-native-icon--close,
+.tg-profile-edit__topbar .tg-native-icon--back,
+.tg-profile-edit__topbar .tg-native-icon--close {
+  color: currentColor;
+}
+
+.tg-profile-edit__avatar > i .tg-native-icon--camera {
+  color: currentColor;
+}
