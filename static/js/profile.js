@@ -263,6 +263,7 @@ async function saveSelfProfile(changes = {}, avatarFile = null) {
     owned_channels: openedProfile.owned_channels || [],
   };
   updateGlobalSelfIdentity(payload);
+  updateProfileHistory(openedProfile.username || "");
   return payload;
 }
 
