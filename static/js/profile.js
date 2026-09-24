@@ -179,6 +179,86 @@ function csrfToken() {
   return document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || "";
 }
 
+function showProfileToast(text) {
+  if (typeof showToast === "function") showToast(text);
+}
+
+async function copyProfileText(text, successText = "Скопировано") {
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (_error) {
+    const input = document.createElement("textarea");
+    input.value = text;
+    input.style.position = "fixed";
+    input.style.opacity = "0";
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand("copy");
+    input.remove();
+  }
+  showProfileToast(successText);
+}
+
+function updateGlobalSelfIdentity(payload) {
+  if (!payload) return;
+  document.querySelectorAll(".account-mini__name").forEach((element) => {
+    element.textContent = payload.display_name;
+  });
+  document.querySelectorAll(".profile-account-header__bottom strong").forEach((element) => {
+    element.textContent = payload.display_name;
+  });
+}
+
+async function saveSelfProfile(changes = {}, avatarFile = null) {
+  if (!openedProfile?.is_self || !openedProfile.edit_url) {
+    throw new Error("profile is not editable");
+  }
+
+  const currentChannel = openedProfile.personal_channel?.id
+    ? String(openedProfile.personal_channel.id)
+    : "";
+  const values = {
+    first_name: openedProfile.first_name || "",
+    username: openedProfile.username || "",
+    bio: openedProfile.bio || "",
+    birthday: openedProfile.birthday || "",
+    personal_channel: currentChannel,
+    ...changes,
+  };
+
+  const body = new FormData();
+  body.set("first_name", values.first_name ?? "");
+  body.set("username", values.username ?? "");
+  body.set("bio", values.bio ?? "");
+  body.set("birthday", values.birthday ?? "");
+  body.set("personal_channel", values.personal_channel ?? "");
+  if (avatarFile) body.set("avatar", avatarFile);
+
+  const response = await fetch(openedProfile.edit_url, {
+    method: "POST",
+    body,
+    headers: { "X-Requested-With": "XMLHttpRequest" },
+    credentials: "same-origin",
+  });
+  const payload = await response.json();
+  if (!response.ok || !payload.ok) {
+    const error = new Error("profile validation failed");
+    error.profileErrors = payload.errors;
+    throw error;
+  }
+
+  openedProfile = {
+    ...openedProfile,
+    ...payload,
+    is_self: true,
+    edit_url: openedProfile.edit_url,
+    owned_channels: openedProfile.owned_channels || [],
+  };
+  updateGlobalSelfIdentity(payload);
+  return payload;
+}
+
 function renderProfileAvatar(target, profile) {
   if (!target) return;
   target.replaceChildren();
