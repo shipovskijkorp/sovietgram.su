@@ -371,6 +371,57 @@ class ProfileTests(TestCase):
         self.assertEqual(self.user.birthday, date(2000, 9, 10))
         self.assertEqual(self.user.personal_channel_id, channel.pk)
 
+    def test_overlay_rejects_private_owned_personal_channel(self):
+        channel = Chat.objects.create(
+            type=Chat.Type.CHANNEL,
+            title="Private owned channel",
+            username=None,
+        )
+        ChatParticipant.objects.create(
+            chat=channel,
+            user=self.user,
+            role=ChatParticipant.Role.OWNER,
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("accounts:profile"),
+            {
+                "first_name": "",
+                "username": self.user.username,
+                "bio": "",
+                "birthday": "",
+                "personal_channel": str(channel.pk),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("personal_channel", response.json()["errors"])
+
+    def test_private_legacy_personal_channel_is_not_exposed_in_profile(self):
+        channel = Chat.objects.create(
+            type=Chat.Type.CHANNEL,
+            title="Legacy private channel",
+            username=None,
+        )
+        ChatParticipant.objects.create(
+            chat=channel,
+            user=self.user,
+            role=ChatParticipant.Role.OWNER,
+        )
+        self.user.personal_channel = channel
+        self.user.save(update_fields=["personal_channel"])
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse("accounts:public_profile", args=[self.user.username]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIsNone(payload["personal_channel"])
+        self.assertEqual(payload["owned_channels"], [])
+
     def test_overlay_rejects_foreign_personal_channel(self):
         other = User.objects.create_user(
             username="other",
