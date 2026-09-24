@@ -2201,3 +2201,43 @@ body:not([data-theme="dark"]) .tg-profile-field-editor__body input {
     max-height: 100dvh;
   }
 }
+
+
+.tg-profile-channel-context {
+  position: fixed;
+  z-index: 295;
+  min-width: 170px;
+  padding: 4px;
+  border: 1px solid rgba(236, 218, 194, .08);
+  border-radius: 9px;
+  background: #211d1a;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, .40);
+}
+
+.tg-profile-channel-context[hidden] {
+  display: none !important;
+}
+
+.tg-profile-channel-context button {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #e06a72;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tg-profile-channel-context button:hover {
+  background: rgba(181, 58, 68, .12);
+}
+
+body:not([data-theme="dark"]) .tg-profile-channel-context {
+  border-color: rgba(88, 61, 38, .11);
+  background: #fffaf1;
+}
