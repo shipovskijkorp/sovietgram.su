@@ -26,10 +26,10 @@
     </div>
 
     <nav class="settings-nav" aria-label="Настройки">
-      <a href="{% url 'accounts:profile' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-profile"></use></svg> Профиль</a>
-      <a class="is-active" href="{% url 'accounts:settings' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-settings"></use></svg> Настройки</a>
-      <a href="{% url 'accounts:password_change' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-lock"></use></svg> Пароль</a>
-      <a href="{% url 'messenger:home' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-back"></use></svg> Вернуться к чатам</a>
+      <a href="{% url 'accounts:profile' %}"><span class="tg-native-icon tg-native-icon--profile" aria-hidden="true"></span> Профиль</a>
+      <a class="is-active" href="{% url 'accounts:settings' %}"><span class="tg-native-icon tg-native-icon--settings" aria-hidden="true"></span> Настройки</a>
+      <a href="{% url 'accounts:password_change' %}"><span class="tg-native-icon tg-native-icon--lock" aria-hidden="true"></span> Пароль</a>
+      <a href="{% url 'messenger:home' %}"><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span> Вернуться к чатам</a>
     </nav>
 
     <form method="post" action="{% url 'accounts:logout' %}" class="settings-logout">
@@ -40,7 +40,7 @@
 
   <section class="settings-content">
     <header class="settings-header">
-      <a class="settings-back" href="{% url 'messenger:home' %}" aria-label="Назад к чатам"><svg class="tg-icon tg-icon--24"><use href="{% static 'icons/telegram.svg' %}#tg-back"></use></svg></a>
+      <a class="settings-back" href="{% url 'messenger:home' %}" aria-label="Назад к чатам"><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span></a>
       <div>
         <p class="eyebrow">Stalingram</p>
         <h1>Настройки</h1>
@@ -106,7 +106,7 @@
             <h2>Архив</h2>
             <p>Поведение архива повторяет Telegram: новые сообщения могут возвращать незаглушённые чаты в основной список.</p>
           </div>
-          <svg class="tg-icon tg-icon--24 archive-settings-card__icon"><use href="{% static 'icons/telegram.svg' %}#tg-archive"></use></svg>
+          <span class="tg-native-icon tg-native-icon--archive archive-settings-card__icon" aria-hidden="true"></span>
         </div>
 
         <label class="preference-row" for="id_keep_archived_chats">
