@@ -23,7 +23,7 @@
         </button>
       {% endif %}
       <label class="sidebar-searchbar__field" for="chatFilter">
-        <svg class="tg-icon tg-icon--18 sidebar-searchbar__icon" aria-hidden="true"><use href="{% static 'icons/telegram.svg' %}#tg-search"></use></svg>
+        <span class="tg-native-icon tg-native-icon--search sidebar-searchbar__icon" aria-hidden="true"></span>
         <input id="chatFilter" type="search" placeholder="{% if show_archived %}Поиск в архиве{% else %}Поиск{% endif %}" autocomplete="off">
       </label>
     </header>
@@ -35,7 +35,7 @@
           <small>{{ archived_count }} чат{{ archived_count|pluralize:'а,ов' }}</small>
         </span>
         <a href="{% url 'accounts:settings' %}#archiveSettings" aria-label="Настройки архива" title="Настройки архива">
-          <svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-settings"></use></svg>
+          <span class="tg-native-icon tg-native-icon--settings" aria-hidden="true"></span>
         </a>
       </div>
     {% endif %}
@@ -44,7 +44,7 @@
       {% if not show_archived and archived_count and not request.user.archive_in_main_menu %}
         <a class="archive-folder-row" href="{% url 'messenger:home' %}?archived=1">
           <span class="archive-folder-row__avatar">
-            <svg class="tg-icon tg-icon--24"><use href="{% static 'icons/telegram.svg' %}#tg-archive-open"></use></svg>
+            <span class="tg-native-icon tg-native-icon--archive-open" aria-hidden="true"></span>
           </span>
           <span class="archive-folder-row__body">
             <strong>Архив</strong>
@@ -489,22 +489,22 @@
     {% endfor %}
 
     <a class="profile-account-add" href="{% url 'accounts:add_account' %}">
-      <span class="profile-account-add__icon"><svg class="tg-icon tg-icon--18"><use href="{% static 'icons/telegram.svg' %}#tg-add-account"></use></svg></span>
+      <span class="profile-account-add__icon"><span class="tg-native-icon tg-native-icon--add-account" aria-hidden="true"></span></span>
       <strong>Добавить аккаунт</strong>
     </a>
   </div>
 
   <nav class="profile-drawer__nav profile-drawer__nav--telegram" aria-label="Главное меню">
     {% if request.user.archive_in_main_menu and archived_count %}
-      <a href="{% url 'messenger:home' %}?archived=1"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-archive-open"></use></svg><strong>Архив</strong>{% if archived_unread_count %}<b>{{ archived_unread_count }}</b>{% endif %}</a>
+      <a href="{% url 'messenger:home' %}?archived=1"><span class="tg-native-icon tg-native-icon--archive-open" aria-hidden="true"></span><strong>Архив</strong>{% if archived_unread_count %}<b>{{ archived_unread_count }}</b>{% endif %}</a>
     {% endif %}
-    <a href="{% url 'accounts:public_profile' request.user.username %}" data-user-profile><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-profile"></use></svg><strong>Мой профиль</strong></a>
-    <a href="{% url 'messenger:create_community' %}?type=group" data-community-open="group"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-groups"></use></svg><strong>Создать группу</strong></a>
-    <a href="{% url 'messenger:create_community' %}?type=channel" data-community-open="channel"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-channel"></use></svg><strong>Создать канал</strong></a>
-    <a href="{% url 'messenger:contacts' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-contacts"></use></svg><strong>Контакты</strong></a>
-    <a href="{% url 'messenger:calls' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-phone"></use></svg><strong>Звонки</strong></a>
-    <a href="{% url 'messenger:saved_messages' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-saved"></use></svg><strong>Избранное</strong></a>
-    <a href="{% url 'accounts:settings' %}"><svg class="tg-icon"><use href="{% static 'icons/telegram.svg' %}#tg-settings"></use></svg><strong>Настройки</strong></a>
+    <a href="{% url 'accounts:public_profile' request.user.username %}" data-user-profile><span class="tg-native-icon tg-native-icon--profile" aria-hidden="true"></span><strong>Мой профиль</strong></a>
+    <a href="{% url 'messenger:create_community' %}?type=group" data-community-open="group"><span class="tg-native-icon tg-native-icon--groups" aria-hidden="true"></span><strong>Создать группу</strong></a>
+    <a href="{% url 'messenger:create_community' %}?type=channel" data-community-open="channel"><span class="tg-native-icon tg-native-icon--channel" aria-hidden="true"></span><strong>Создать канал</strong></a>
+    <a href="{% url 'messenger:contacts' %}"><span class="tg-native-icon tg-native-icon--contacts" aria-hidden="true"></span><strong>Контакты</strong></a>
+    <a href="{% url 'messenger:calls' %}"><span class="tg-native-icon tg-native-icon--phone" aria-hidden="true"></span><strong>Звонки</strong></a>
+    <a href="{% url 'messenger:saved_messages' %}"><span class="tg-native-icon tg-native-icon--saved" aria-hidden="true"></span><strong>Избранное</strong></a>
+    <a href="{% url 'accounts:settings' %}"><span class="tg-native-icon tg-native-icon--settings" aria-hidden="true"></span><strong>Настройки</strong></a>
   </nav>
 
   <div class="profile-drawer__footer profile-drawer__footer--telegram">
