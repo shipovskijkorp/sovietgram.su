@@ -564,6 +564,11 @@ def add_contact(request, username):
     target = get_object_or_404(User, username__iexact=username, is_active=True)
     if target.pk != request.user.pk:
         Contact.objects.get_or_create(owner=request.user, user=target)
+
+    if _wants_json(request):
+        return JsonResponse({"ok": True, "is_contact": target.pk != request.user.pk})
+
+    if target.pk != request.user.pk:
         messages.success(request, f"@{target.username} добавлен в контакты.")
     return redirect(_safe_next(request, reverse("messenger:contacts")))
 
@@ -573,6 +578,10 @@ def add_contact(request, username):
 def remove_contact(request, username):
     target = get_object_or_404(User, username__iexact=username, is_active=True)
     Contact.objects.filter(owner=request.user, user=target).delete()
+
+    if _wants_json(request):
+        return JsonResponse({"ok": True, "is_contact": False})
+
     messages.success(request, f"@{target.username} удалён из контактов.")
     return redirect(_safe_next(request, reverse("messenger:contacts")))
 
