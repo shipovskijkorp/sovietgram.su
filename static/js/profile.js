@@ -516,17 +516,39 @@ function renderProfileChannelPicker(profile, selectedId) {
 
 function openProfileChannelPicker() {
   if (!openedProfile?.is_self || !userProfileChannelPicker) return;
-  pendingProfileChannelId = userProfileChannelInput?.value || "";
+  pendingProfileChannelId = openedProfile.personal_channel?.id
+    ? String(openedProfile.personal_channel.id)
+    : "";
   renderProfileChannelPicker(openedProfile, pendingProfileChannelId);
   userProfileChannelPicker.hidden = false;
 }
 
-function closeProfileChannelPicker(applySelection = false) {
-  if (!userProfileChannelPicker) return;
-  if (applySelection) {
-    updateProfileChannelChoice(openedProfile, pendingProfileChannelId);
+function closeProfileChannelPicker() {
+  if (userProfileChannelPicker) userProfileChannelPicker.hidden = true;
+}
+
+async function applyProfileChannelSelection(channelId) {
+  if (!openedProfile?.is_self) return;
+  const current = openedProfile.personal_channel?.id
+    ? String(openedProfile.personal_channel.id)
+    : "";
+  if (String(channelId || "") === current) {
+    closeProfileChannelPicker();
+    return;
   }
-  userProfileChannelPicker.hidden = true;
+
+  if (userProfileChannelDone) userProfileChannelDone.disabled = true;
+  if (userProfileChannelRemove) userProfileChannelRemove.disabled = true;
+  try {
+    await saveSelfProfile({ personal_channel: channelId || "" });
+    fillUserProfileEdit();
+    closeProfileChannelPicker();
+  } catch (error) {
+    showProfileToast(profileErrorsToText(error?.profileErrors));
+  } finally {
+    if (userProfileChannelDone) userProfileChannelDone.disabled = false;
+    if (userProfileChannelRemove) userProfileChannelRemove.disabled = false;
+  }
 }
 
 function fillUserProfileEdit() {
@@ -537,6 +559,15 @@ function fillUserProfileEdit() {
   if (userProfileBirthdayInput) userProfileBirthdayInput.value = openedProfile.birthday || "";
   if (userProfileBioInput) userProfileBioInput.value = openedProfile.bio || "";
   if (userProfileBioCount) userProfileBioCount.textContent = String((openedProfile.bio || "").length);
+  if (userProfileNameChoice) {
+    userProfileNameChoice.textContent = openedProfile.first_name || openedProfile.display_name || "Не указано";
+  }
+  if (userProfileUsernameChoice) {
+    userProfileUsernameChoice.textContent = openedProfile.username ? `@${openedProfile.username}` : "Не указано";
+  }
+  if (userProfileBirthdayChoice) {
+    userProfileBirthdayChoice.textContent = openedProfile.birthday_display || "Не указан";
+  }
   if (userProfileEditDisplayName) {
     userProfileEditDisplayName.textContent = openedProfile.display_name || openedProfile.username || "";
   }
@@ -553,8 +584,59 @@ function fillUserProfileEdit() {
   }
   if (userProfileAvatarInput) userProfileAvatarInput.value = "";
   renderProfileAvatar(userProfileEditAvatar, openedProfile);
+  if (userProfileEditAvatarOpen) userProfileEditAvatarOpen.disabled = !openedProfile.avatar_url;
 }
 
+function openProfileFieldEditor(key) {
+  if (!openedProfile?.is_self || !userProfileFieldEditor || !userProfileFieldInput) return;
+  profileFieldKey = key;
+
+  const configs = {
+    first_name: { title: "Имя", label: "Имя", type: "text", maxLength: 150, value: openedProfile.first_name || "" },
+    username: { title: "Имя пользователя", label: "Имя пользователя", type: "text", maxLength: 150, value: openedProfile.username || "" },
+    birthday: { title: "День рождения", label: "День рождения", type: "date", maxLength: 0, value: openedProfile.birthday || "" },
+  };
+  const config = configs[key];
+  if (!config) return;
+
+  if (userProfileFieldTitle) userProfileFieldTitle.textContent = config.title;
+  if (userProfileFieldLabel) userProfileFieldLabel.textContent = config.label;
+  userProfileFieldInput.type = config.type;
+  userProfileFieldInput.value = config.value;
+  if (config.maxLength) userProfileFieldInput.maxLength = config.maxLength;
+  else userProfileFieldInput.removeAttribute("maxlength");
+  if (userProfileFieldError) {
+    userProfileFieldError.hidden = true;
+    userProfileFieldError.textContent = "";
+  }
+  userProfileFieldEditor.hidden = false;
+  window.setTimeout(() => {
+    userProfileFieldInput.focus();
+    if (config.type === "text") userProfileFieldInput.select();
+  }, 0);
+}
+
+async function saveProfileFieldEditor() {
+  if (!profileFieldKey || !userProfileFieldInput || !userProfileFieldSave) return;
+  let value = userProfileFieldInput.value;
+  if (profileFieldKey === "username") value = value.trim().replace(/^@+/, "");
+  if (profileFieldKey === "first_name") value = value.trim();
+
+  userProfileFieldSave.disabled = true;
+  if (userProfileFieldError) userProfileFieldError.hidden = true;
+  try {
+    await saveSelfProfile({ [profileFieldKey]: value });
+    fillUserProfileEdit();
+    closeProfileFieldEditor();
+  } catch (error) {
+    if (userProfileFieldError) {
+      userProfileFieldError.textContent = profileErrorsToText(error?.profileErrors);
+      userProfileFieldError.hidden = false;
+    }
+  } finally {
+    userProfileFieldSave.disabled = false;
+  }
+}
 function profileErrorsToText(errors) {
   if (!errors || typeof errors !== "object") return "Не удалось сохранить профиль.";
   const order = [
