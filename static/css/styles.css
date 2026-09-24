@@ -42,7 +42,7 @@ a { color: var(--red); }
   position: fixed;
   top: 18px;
   left: 50%;
-  z-index: 100;
+  z-index: 1000;
   width: min(460px, calc(100vw - 28px));
   transform: translateX(-50%);
 }
@@ -287,7 +287,7 @@ a { color: var(--red); }
   position: fixed;
   left: 50%;
   bottom: 28px;
-  z-index: 20;
+  z-index: 1000;
   transform: translate(-50%, 18px);
   max-width: min(90vw, 440px);
   padding: 10px 14px;
