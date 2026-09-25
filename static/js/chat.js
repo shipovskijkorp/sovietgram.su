@@ -889,12 +889,52 @@ function validateSelection(files, mode) {
   if (total > MAX_TOTAL_SIZE) return "Общий размер выбранных файлов больше 100 МБ.";
   return "";
 }
+function positionAttachmentMenu() {
+  if (!attachmentMenu || !attachmentButton || attachmentMenu.hidden) return;
+
+  const buttonRect = attachmentButton.getBoundingClientRect();
+  const menuRect = attachmentMenu.getBoundingClientRect();
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+  const gutter = 8;
+  const gap = 7;
+
+  let left = buttonRect.left;
+  left = Math.max(gutter, Math.min(left, viewportWidth - menuRect.width - gutter));
+
+  let top = buttonRect.top - menuRect.height - gap;
+  if (top < gutter) {
+    top = Math.min(
+      viewportHeight - menuRect.height - gutter,
+      buttonRect.bottom + gap,
+    );
+  }
+
+  attachmentMenu.style.left = `${Math.round(left)}px`;
+  attachmentMenu.style.top = `${Math.round(Math.max(gutter, top))}px`;
+  attachmentMenu.style.bottom = "auto";
+}
+
 function setAttachmentMenu(open) {
   if (!attachmentMenu || !attachmentButton) return;
-  attachmentMenu.hidden = !open;
-  attachmentButton.setAttribute("aria-expanded", String(open));
+
+  if (open) {
+    if (attachmentMenu.parentElement !== document.body) {
+      document.body.appendChild(attachmentMenu);
+    }
+    attachmentMenu.classList.add("attachment-menu--portal");
+    attachmentMenu.hidden = false;
+    attachmentButton.setAttribute("aria-expanded", "true");
+    positionAttachmentMenu();
+    return;
+  }
+
+  attachmentMenu.hidden = true;
+  attachmentButton.setAttribute("aria-expanded", "false");
 }
+
 attachmentButton?.addEventListener("click", (event) => {
+  event.preventDefault();
   event.stopPropagation();
   setAttachmentMenu(attachmentMenu?.hidden ?? true);
 });
@@ -928,7 +968,17 @@ document.querySelectorAll("[data-attachment-mode]").forEach((button) => button.a
   setAttachmentMenu(false);
   openFilePicker(button.dataset.attachmentMode || "media", false);
 }));
-document.addEventListener("click", (event) => { if (!attachmentControl?.contains(event.target)) setAttachmentMenu(false); });
+document.addEventListener("click", (event) => {
+  if (
+    !attachmentControl?.contains(event.target)
+    && !attachmentMenu?.contains(event.target)
+  ) {
+    setAttachmentMenu(false);
+  }
+});
+window.addEventListener("resize", () => {
+  if (attachmentMenu && !attachmentMenu.hidden) positionAttachmentMenu();
+});
 function openFilePicker(mode, append) {
   appendNextPick = append;
   const input = mode === "file"

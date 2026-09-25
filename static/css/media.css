@@ -50,6 +50,12 @@
   from { opacity: 0; transform: translateY(4px) scale(.985); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
+.attachment-menu--portal {
+  position: fixed;
+  right: auto;
+  bottom: auto;
+  z-index: 320;
+}
 .attachment-menu[hidden] { display: none; }
 .attachment-menu button {
   width: 100%;
