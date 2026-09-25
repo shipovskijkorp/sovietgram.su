@@ -5,9 +5,9 @@ from .models import User
 
 
 @admin.register(User)
-class StalingramUserAdmin(UserAdmin):
+class SovietgramUserAdmin(UserAdmin):
     fieldsets = UserAdmin.fieldsets + (
-        ("Профиль Stalingram", {"fields": ("bio", "avatar", "last_seen_at")}),
-        ("Настройки Stalingram", {"fields": ("theme", "enter_to_send")}),
+        ("Профиль Sovietgram", {"fields": ("bio", "avatar", "last_seen_at")}),
+        ("Настройки Sovietgram", {"fields": ("theme", "enter_to_send")}),
     )
     readonly_fields = ("last_seen_at",)
