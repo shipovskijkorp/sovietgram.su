@@ -47,16 +47,18 @@
           {% for person in search_results %}
             <article class="person-row person-row--telegram">
               <a class="person-row__identity" data-user-profile href="{% url 'accounts:public_profile' person.username %}">
-                {% if person.avatar %}
-                  <img class="person-row__avatar" src="{{ person.avatar.url }}" alt="">
+                {% if person.avatar_url_ui %}
+                  <img class="person-row__avatar" src="{{ person.avatar_url_ui }}" alt="">
                 {% else %}
                   <span class="person-row__avatar person-row__avatar--fallback">{{ person.initials }}</span>
                 {% endif %}
                 <span><strong>{{ person.display_name }}</strong><small>@{{ person.username }}</small></span>
               </a>
-              <form method="post" action="{% url 'messenger:start_chat' person.username %}">
-                {% csrf_token %}<button class="telegram-row-button" type="submit">Написать</button>
-              </form>
+              {% if person.can_message_ui %}
+                <form method="post" action="{% url 'messenger:start_chat' person.username %}">
+                  {% csrf_token %}<button class="telegram-row-button" type="submit">Написать</button>
+                </form>
+              {% endif %}
             </article>
           {% empty %}
             <div class="people-empty">Никого не нашли.</div>
@@ -100,16 +102,18 @@
           {% for contact in contacts %}
             <article class="person-row person-row--telegram">
               <a class="person-row__identity" data-user-profile href="{% url 'accounts:public_profile' contact.user.username %}">
-                {% if contact.user.avatar %}
-                  <img class="person-row__avatar" src="{{ contact.user.avatar.url }}" alt="">
+                {% if contact.avatar_url_ui %}
+                  <img class="person-row__avatar" src="{{ contact.avatar_url_ui }}" alt="">
                 {% else %}
                   <span class="person-row__avatar person-row__avatar--fallback">{{ contact.user.initials }}</span>
                 {% endif %}
                 <span><strong>{{ contact.user.display_name }}</strong><small>@{{ contact.user.username }}</small></span>
               </a>
-              <form method="post" action="{% url 'messenger:start_chat' contact.user.username %}">
-                {% csrf_token %}<button class="telegram-row-button" type="submit">Написать</button>
-              </form>
+              {% if contact.can_message_ui %}
+                <form method="post" action="{% url 'messenger:start_chat' contact.user.username %}">
+                  {% csrf_token %}<button class="telegram-row-button" type="submit">Написать</button>
+                </form>
+              {% endif %}
             </article>
           {% empty %}
             <div class="people-empty">Контактов пока нет. Поиск сверху быстрее бумажной картотеки.</div>

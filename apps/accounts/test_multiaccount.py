@@ -122,3 +122,34 @@ class MultiAccountTests(TestCase):
         self.assertContains(response, ">first</strong>", html=False)
         self.assertContains(response, ">second</strong>", html=False)
         self.assertContains(response, "Добавить аккаунт")
+
+
+    def test_add_account_can_register_new_account(self):
+        response = self.client.post(
+            reverse("accounts:add_account"),
+            {
+                "mode": "register",
+                "username": "third",
+                "email": "third@example.com",
+                "password1": self.password,
+                "password2": self.password,
+            },
+        )
+        self.assertRedirects(response, reverse("messenger:home"))
+        third = User.objects.get(username="third")
+        self.assertEqual(int(self.client.session[SESSION_KEY]), third.pk)
+        account_ids = {
+            int(item["user_id"])
+            for item in self.client.session["sovietgram_accounts_v1"]
+        }
+        self.assertEqual(account_ids, {self.first.pk, third.pk})
+
+    def test_add_account_page_exposes_login_and_registration_modes(self):
+        response = self.client.get(reverse("accounts:add_account"))
+        self.assertContains(response, "Войти")
+        self.assertContains(response, "Создать новый")
+        registration = self.client.get(
+            f"{reverse('accounts:add_account')}?mode=register"
+        )
+        self.assertContains(registration, 'name="mode" value="register"', html=False)
+        self.assertContains(registration, "Создать и переключиться")

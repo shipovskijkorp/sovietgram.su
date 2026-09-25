@@ -122,3 +122,111 @@ body[data-theme="dark"] .preference-row__copy small { color: #a69582; }
 body[data-theme="dark"] .theme-option__check { border-color: rgba(255,255,255,.14); }
 body[data-theme="dark"] .switch-control__track { background: #524940; }
 body[data-theme="dark"] .switch-control__thumb { background: #eee5d8; box-shadow: 0 2px 7px rgba(0,0,0,.4); }
+
+
+/* Authentication pages now obey the same persisted light/dark theme as the app. */
+body[data-theme="dark"].auth-body {
+  background:
+    radial-gradient(circle at 14% 12%, rgba(255,255,255,.025), transparent 24%),
+    radial-gradient(circle at 88% 84%, rgba(181,58,68,.12), transparent 28%),
+    linear-gradient(145deg, #100e0d, #1b1714 52%, #12100e);
+}
+
+body[data-theme="dark"] .auth-card {
+  border-color: rgba(255,255,255,.07);
+  background: rgba(33, 29, 26, .97);
+  box-shadow: 0 20px 64px rgba(0,0,0,.42);
+}
+
+body[data-theme="dark"] .auth-brand {
+  color: #df6d75;
+}
+
+body[data-theme="dark"] .auth-heading h1 {
+  color: #eee5d8;
+}
+
+body[data-theme="dark"] .auth-heading p,
+body[data-theme="dark"] .auth-switch,
+body[data-theme="dark"] .micro-copy {
+  color: #a99987;
+}
+
+body[data-theme="dark"] .eyebrow {
+  color: #dc6871 !important;
+}
+
+body[data-theme="dark"] .field > span {
+  color: #d2c4b4;
+}
+
+body[data-theme="dark"] .field input {
+  border-color: rgba(255,255,255,.09);
+  background: #29231f;
+  color: #eee5d8;
+}
+
+body[data-theme="dark"] .field input::placeholder {
+  color: #75695e;
+}
+
+body[data-theme="dark"] .field input:focus {
+  border-color: rgba(212,90,99,.58);
+  background: #302923;
+  box-shadow: 0 0 0 3px rgba(181,58,68,.12);
+}
+
+body[data-theme="dark"] .field-error {
+  color: #ff7b83;
+}
+
+body[data-theme="dark"] .form-alert {
+  border-color: rgba(255,101,107,.18);
+  background: rgba(181,58,68,.13);
+  color: #ff9096;
+}
+
+body[data-theme="dark"] .primary-button {
+  background: linear-gradient(180deg, #b33b45, #8d252d);
+  color: #fff;
+  box-shadow: 0 7px 20px rgba(0,0,0,.28);
+}
+
+body[data-theme="dark"] .auth-switch a {
+  color: #e17b82;
+}
+
+body[data-theme="dark"] .auth-theme-toggle {
+  border-color: rgba(255,255,255,.08);
+  background: #29231f;
+  color: #b5a491;
+}
+
+body[data-theme="dark"] .auth-theme-toggle:hover {
+  border-color: rgba(221,107,115,.25);
+  background: #302923;
+  color: #e17b82;
+}
+
+body[data-theme="dark"] .auth-mode-switch {
+  background: #181513;
+}
+
+body[data-theme="dark"] .auth-mode-switch a {
+  color: #9f8f7d;
+}
+
+body[data-theme="dark"] .auth-mode-switch a:hover {
+  color: #e1d5c6;
+}
+
+body[data-theme="dark"] .auth-mode-switch a.is-active {
+  background: #302923;
+  color: #e17b82;
+  box-shadow: 0 2px 9px rgba(0,0,0,.25);
+}
+
+body[data-theme="dark"] .brand__mark {
+  background: #d3aa40;
+  color: #68171d;
+}

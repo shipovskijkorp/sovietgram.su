@@ -5,32 +5,58 @@
 
 {% block content %}
 <main class="auth-shell">
-  <section class="auth-card">
+  <section class="auth-card auth-card--wide">
+    <button class="auth-theme-toggle" type="button" data-auth-theme-toggle aria-label="Переключить тему" title="Переключить тему">
+      <span data-auth-theme-icon aria-hidden="true">☾</span>
+    </button>
     <a class="auth-brand" href="{% url 'messenger:home' %}">
       <span class="brand__mark">★</span>
       <span>SOVIETGRAM</span>
     </a>
+
     <div class="auth-heading">
       <p class="eyebrow">Мультиаккаунт</p>
       <h1>Добавить аккаунт</h1>
-      <p>Войдите во второй аккаунт. Текущий останется сохранён и будет доступен из бокового меню.</p>
+      <p>{% if mode == 'register' %}Создайте новый аккаунт — текущий останется сохранён.{% else %}Войдите в существующий аккаунт — текущий останется сохранён.{% endif %}</p>
     </div>
 
-    <form method="post" class="auth-form" novalidate>
-      {% csrf_token %}
-      {% if form.non_field_errors %}<div class="form-alert">{{ form.non_field_errors|striptags }}</div>{% endif %}
-      <label class="field">
-        <span>{{ form.username.label }}</span>
-        {{ form.username }}
-        {% for error in form.username.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-      </label>
-      <label class="field">
-        <span>{{ form.password.label }}</span>
-        {{ form.password }}
-        {% for error in form.password.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-      </label>
-      <button class="primary-button" type="submit">Добавить и переключиться</button>
-    </form>
+    <nav class="auth-mode-switch" aria-label="Способ добавления аккаунта">
+      <a class="{% if mode == 'login' %}is-active{% endif %}" href="{% url 'accounts:add_account' %}?mode=login">Войти</a>
+      <a class="{% if mode == 'register' %}is-active{% endif %}" href="{% url 'accounts:add_account' %}?mode=register">Создать новый</a>
+    </nav>
+
+    {% if mode == 'register' %}
+      <form method="post" class="auth-form" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="mode" value="register">
+        {% if register_form.non_field_errors %}<div class="form-alert">{{ register_form.non_field_errors|striptags }}</div>{% endif %}
+        {% for field in register_form %}
+          <label class="field">
+            <span>{{ field.label }}</span>
+            {{ field }}
+            {% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+        {% endfor %}
+        <button class="primary-button" type="submit">Создать и переключиться</button>
+      </form>
+    {% else %}
+      <form method="post" class="auth-form" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="mode" value="login">
+        {% if login_form.non_field_errors %}<div class="form-alert">{{ login_form.non_field_errors|striptags }}</div>{% endif %}
+        <label class="field">
+          <span>{{ login_form.username.label }}</span>
+          {{ login_form.username }}
+          {% for error in login_form.username.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
+        <label class="field">
+          <span>{{ login_form.password.label }}</span>
+          {{ login_form.password }}
+          {% for error in login_form.password.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
+        <button class="primary-button" type="submit">Добавить и переключиться</button>
+      </form>
+    {% endif %}
 
     <p class="auth-switch"><a href="{% url 'messenger:home' %}">Отмена</a></p>
   </section>

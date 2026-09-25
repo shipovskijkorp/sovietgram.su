@@ -1,10 +1,26 @@
 {% load static %}
 <!doctype html>
-<html lang="ru">
+<html lang="ru"
+      data-theme="{% if request.user.is_authenticated %}{{ request.user.theme }}{% else %}light{% endif %}"
+      data-authenticated="{{ request.user.is_authenticated|yesno:'true,false' }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="{% if request.user.is_authenticated and request.user.theme == 'dark' %}#171412{% else %}#cc0000{% endif %}">
+  <script>
+    (() => {
+      const root = document.documentElement;
+      let theme = root.dataset.theme || "light";
+      if (root.dataset.authenticated !== "true") {
+        try {
+          const saved = localStorage.getItem("sovietgram.theme");
+          if (saved === "dark" || saved === "light") theme = saved;
+        } catch (_error) {}
+      }
+      root.dataset.theme = theme;
+      root.style.colorScheme = theme === "dark" ? "dark" : "light";
+    })();
+  </script>
   <link rel="icon" type="image/png" href="{% static 'img/sovietgram-icon.png' %}">
   <title>{% block title %}Sovietgram{% endblock %}</title>
   <link rel="stylesheet" href="{% static 'css/styles.css' %}?v={{ static_version }}">
@@ -16,7 +32,22 @@
   <link rel="stylesheet" href="{% static 'css/theme.css' %}?v={{ static_version }}">
   <link rel="stylesheet" href="{% static 'css/palette.css' %}?v={{ static_version }}">
 </head>
-<body class="{% block body_class %}{% endblock %}"{% if request.user.is_authenticated %} data-theme="{{ request.user.theme }}" data-enter-to-send="{{ request.user.enter_to_send|yesno:'true,false' }}"{% endif %}>
+<body class="{% block body_class %}{% endblock %}"
+      data-theme="{% if request.user.is_authenticated %}{{ request.user.theme }}{% else %}light{% endif %}"
+      {% if request.user.is_authenticated %}data-enter-to-send="{{ request.user.enter_to_send|yesno:'true,false' }}"{% endif %}>
+  <script>
+    (() => {
+      const theme = document.documentElement.dataset.theme || "light";
+      document.body.dataset.theme = theme;
+      try {
+        if (document.documentElement.dataset.authenticated === "true") {
+          localStorage.setItem("sovietgram.theme", theme);
+        }
+      } catch (_error) {}
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.content = theme === "dark" ? "#171412" : "#cc0000";
+    })();
+  </script>
   {% if messages %}
     <div class="flash-stack" aria-live="polite">
       {% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}

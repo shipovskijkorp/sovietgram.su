@@ -762,3 +762,215 @@ body[data-theme="dark"] .tg-settings-cover__avatar {
     display: none;
   }
 }
+
+
+/* Use the same native Telegram raster-mask pipeline as the rest of the app.
+   This fixes the settings icons on Chromium/WebKit where the old custom
+   settings masks were interpreted through alpha instead of luminance. */
+.tg-settings-row__native-icon {
+  width: 24px;
+  height: 24px;
+  flex-basis: 24px;
+  justify-self: start;
+  color: var(--settings-icon);
+  mask-mode: luminance;
+}
+
+.tg-settings-search {
+  height: 42px;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  margin: 5px 14px 9px;
+  padding: 0 11px;
+  border-radius: 8px;
+  background: var(--settings-bg-over);
+  color: var(--settings-subtext);
+}
+
+.tg-settings-search .tg-native-icon {
+  width: 18px;
+  height: 18px;
+  flex-basis: 18px;
+  mask-size: 18px 18px;
+  -webkit-mask-size: 18px 18px;
+}
+
+.tg-settings-search input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--settings-text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.tg-settings-people,
+.tg-settings-sessions {
+  display: grid;
+}
+
+.tg-settings-person,
+.tg-settings-session {
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 7px 16px 7px 22px;
+  border: 0;
+  background: transparent;
+  color: var(--settings-text);
+  font: inherit;
+  text-align: left;
+}
+
+button.tg-settings-person {
+  width: 100%;
+  cursor: pointer;
+}
+
+button.tg-settings-person:hover,
+.tg-settings-session:hover {
+  background: var(--settings-bg-over);
+}
+
+.tg-settings-person__avatar {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #b4373f;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tg-settings-person__copy,
+.tg-settings-session__copy {
+  min-width: 0;
+}
+
+.tg-settings-person__copy strong,
+.tg-settings-person__copy small,
+.tg-settings-session__copy strong,
+.tg-settings-session__copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tg-settings-person__copy strong,
+.tg-settings-session__copy strong {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.tg-settings-person__copy small,
+.tg-settings-session__copy small {
+  margin-top: 2px;
+  color: var(--settings-subtext);
+  font-size: 10px;
+}
+
+.tg-settings-person__action,
+.tg-settings-session__action {
+  min-height: 30px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--settings-accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.tg-settings-person__action:hover,
+.tg-settings-session__action:hover {
+  background: color-mix(in srgb, var(--settings-accent) 10%, transparent);
+}
+
+.tg-settings-session {
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+}
+
+.tg-settings-session__icon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--settings-bg-over);
+  color: var(--settings-icon);
+  font-size: 14px;
+}
+
+.tg-settings-session.is-current .tg-settings-session__icon {
+  background: color-mix(in srgb, var(--settings-accent) 13%, var(--settings-bg));
+  color: var(--settings-accent);
+}
+
+.tg-settings-empty {
+  margin: 12px 22px 18px;
+  color: var(--settings-subtext);
+  font-size: 10px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.tg-settings-empty[hidden] {
+  display: none;
+}
+
+.tg-settings-danger-action {
+  width: calc(100% - 44px);
+  min-height: 38px;
+  margin: 10px 22px;
+  border: 1px solid color-mix(in srgb, var(--settings-danger) 25%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--settings-danger) 7%, transparent);
+  color: var(--settings-danger);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tg-settings-danger-action:hover {
+  background: color-mix(in srgb, var(--settings-danger) 12%, transparent);
+}
+
+.tg-settings-person.is-selected {
+  background: color-mix(in srgb, var(--settings-accent) 7%, transparent);
+}
+
+.tg-settings-person__check {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--settings-subtext);
+  border-radius: 50%;
+  color: transparent;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.tg-settings-person.is-selected .tg-settings-person__check {
+  border-color: var(--settings-accent);
+  background: var(--settings-accent);
+  color: #fff;
+}
+
+body[data-theme="dark"] .tg-settings-search,
+body[data-theme="dark"] .tg-settings-session__icon {
+  background: #2b2622;
+}

@@ -3,6 +3,7 @@
   class="tg-settings-overlay"
   id="telegramSettings"
   data-settings-url="{% url 'accounts:settings' %}"
+  data-user-search-url="{% url 'messenger:global_search' %}"
   data-auto-open="{{ request.GET.settings|default:'' }}"
   hidden
 >
@@ -50,7 +51,6 @@
           class="tg-settings-cover"
           href="{% url 'messenger:home' %}?profile={{ request.user.username|urlencode }}"
           data-settings-close-on-follow
-          aria-label="Открыть профиль"
         >
           {% if request.user.avatar %}
             <img class="tg-settings-cover__avatar" src="{{ request.user.avatar.url }}" alt="">
@@ -64,26 +64,22 @@
           </span>
         </a>
 
-        <div class="tg-settings-divider" aria-hidden="true"></div>
-        <div class="tg-settings-section-gap" aria-hidden="true"></div>
+        <div class="tg-settings-divider"></div>
+        <div class="tg-settings-section-gap"></div>
 
         <nav class="tg-settings-list" aria-label="Разделы настроек">
-          <a
-            class="tg-settings-row"
-            href="{% url 'messenger:home' %}?profile={{ request.user.username|urlencode }}"
-            data-settings-close-on-follow
-          >
-            <span class="tg-settings-section-icon tg-settings-section-icon--account" aria-hidden="true"></span>
+          <a class="tg-settings-row" href="{% url 'messenger:home' %}?profile={{ request.user.username|urlencode }}" data-settings-close-on-follow>
+            <span class="tg-native-icon tg-native-icon--profile tg-settings-row__native-icon" aria-hidden="true"></span>
             <span class="tg-settings-row__label">Мой аккаунт</span>
           </a>
 
           <button class="tg-settings-row" type="button" data-settings-target="privacy">
-            <span class="tg-settings-section-icon tg-settings-section-icon--lock" aria-hidden="true"></span>
+            <span class="tg-native-icon tg-native-icon--lock tg-settings-row__native-icon" aria-hidden="true"></span>
             <span class="tg-settings-row__label">Конфиденциальность и безопасность</span>
           </button>
 
           <button class="tg-settings-row" type="button" data-settings-target="chat">
-            <span class="tg-settings-section-icon tg-settings-section-icon--chat" aria-hidden="true"></span>
+            <span class="tg-native-icon tg-native-icon--settings tg-settings-row__native-icon" aria-hidden="true"></span>
             <span class="tg-settings-row__label">Настройки чатов</span>
           </button>
         </nav>
@@ -92,32 +88,167 @@
       <section class="tg-settings-screen" data-settings-screen="privacy" hidden>
         <div class="tg-settings-subsection">
           <h2>Безопасность</h2>
+
           <button class="tg-settings-row tg-settings-row--plain" type="button" data-settings-target="password">
             <span class="tg-settings-row__label">Пароль</span>
             <span class="tg-settings-row__value">Изменить</span>
           </button>
+
+          <button class="tg-settings-row tg-settings-row--plain" type="button" data-settings-target="auto-delete">
+            <span class="tg-settings-row__label">Автоудаление сообщений</span>
+            <span class="tg-settings-row__value" id="privacyAutoDeleteValue">{{ settings_auto_delete_label }}</span>
+          </button>
+
+          <button class="tg-settings-row tg-settings-row--plain" type="button" data-settings-target="blocked">
+            <span class="tg-settings-row__label">Заблокированные пользователи</span>
+            <span class="tg-settings-row__value" id="privacyBlockedCount">{% if settings_blocked_users %}{{ settings_blocked_users|length }}{% else %}Нет{% endif %}</span>
+          </button>
+
+          <button class="tg-settings-row tg-settings-row--plain" type="button" data-settings-target="sessions">
+            <span class="tg-settings-row__label">Активные сеансы</span>
+            <span class="tg-settings-row__value" id="privacySessionCount">{{ settings_sessions|length }}</span>
+          </button>
         </div>
 
-        <div class="tg-settings-divider" aria-hidden="true"></div>
-        <div class="tg-settings-section-gap" aria-hidden="true"></div>
+        <div class="tg-settings-divider"></div>
+        <div class="tg-settings-section-gap"></div>
 
-        <div class="tg-settings-subsection" id="newChatsSettings">
+        <div class="tg-settings-subsection">
+          <h2>Конфиденциальность</h2>
+          {% for key, rule in settings_privacy_rules.items %}
+            <button class="tg-settings-row tg-settings-row--plain" type="button" data-privacy-open="{{ key }}">
+              <span class="tg-settings-row__label">{{ rule.title }}</span>
+              <span class="tg-settings-row__value" data-privacy-label="{{ key }}">{{ rule.option_label }}</span>
+            </button>
+          {% endfor %}
+        </div>
+
+        <div class="tg-settings-divider"></div>
+        <div class="tg-settings-section-gap"></div>
+
+        <div class="tg-settings-subsection">
           <h2>Новые чаты от незнакомых</h2>
           <label class="tg-settings-toggle-row" for="id_archive_unknown_chats">
             <span class="tg-settings-toggle-row__copy">
               <strong>Архивировать и отключать уведомления</strong>
-              <small>Новые личные чаты от пользователей не из контактов будут попадать в архив без уведомлений.</small>
+              <small>Новые личные чаты от пользователей не из контактов попадут в архив без уведомлений.</small>
             </span>
             <span class="tg-settings-switch">
-              <input
-                id="id_archive_unknown_chats"
-                type="checkbox"
-                data-setting="archive_unknown_chats"
-                {% if request.user.archive_unknown_chats %}checked{% endif %}
-              >
+              <input id="id_archive_unknown_chats" type="checkbox" data-setting="archive_unknown_chats" {% if request.user.archive_unknown_chats %}checked{% endif %}>
               <span class="tg-settings-switch__track"><span></span></span>
             </span>
           </label>
+        </div>
+
+        <div class="tg-settings-divider"></div>
+        <div class="tg-settings-section-gap"></div>
+
+        <div class="tg-settings-subsection">
+          <h2>Удаление аккаунта</h2>
+          <button class="tg-settings-row tg-settings-row--plain" type="button" data-settings-target="inactive">
+            <span class="tg-settings-row__label">При неактивности</span>
+            <span class="tg-settings-row__value" id="privacyInactiveValue">{{ settings_inactivity_label }}</span>
+          </button>
+          <p class="tg-settings-about">Если не заходить в Sovietgram дольше выбранного срока, аккаунт и связанные с ним данные будут удалены.</p>
+        </div>
+      </section>
+
+      <section class="tg-settings-screen" data-settings-screen="privacy-rule" hidden>
+        <div class="tg-settings-subsection">
+          <h2 id="privacyRuleQuestion">Кто может видеть это?</h2>
+          <label class="tg-settings-radio-row">
+            <input type="radio" name="privacy-rule-option" value="everyone">
+            <span class="tg-settings-radio-row__control"></span>
+            <span class="tg-settings-radio-row__copy"><strong>Все</strong></span>
+          </label>
+          <label class="tg-settings-radio-row">
+            <input type="radio" name="privacy-rule-option" value="contacts">
+            <span class="tg-settings-radio-row__control"></span>
+            <span class="tg-settings-radio-row__copy"><strong>Мои контакты</strong></span>
+          </label>
+          <label class="tg-settings-radio-row">
+            <input type="radio" name="privacy-rule-option" value="nobody">
+            <span class="tg-settings-radio-row__control"></span>
+            <span class="tg-settings-radio-row__copy"><strong>Никто</strong></span>
+          </label>
+        </div>
+
+        <div class="tg-settings-divider"></div>
+        <div class="tg-settings-section-gap"></div>
+
+        <div class="tg-settings-subsection">
+          <h2>Исключения</h2>
+          <button class="tg-settings-row tg-settings-row--plain" type="button" data-privacy-exception="always">
+            <span class="tg-settings-row__label">Всегда разрешать</span>
+            <span class="tg-settings-row__value" id="privacyAlwaysCount">Нет</span>
+          </button>
+          <button class="tg-settings-row tg-settings-row--plain" type="button" data-privacy-exception="never">
+            <span class="tg-settings-row__label">Никогда не разрешать</span>
+            <span class="tg-settings-row__value" id="privacyNeverCount">Нет</span>
+          </button>
+          <p class="tg-settings-about">Исключения имеют приоритет над основным правилом.</p>
+        </div>
+      </section>
+
+      <section class="tg-settings-screen" data-settings-screen="privacy-exceptions" hidden>
+        <div class="tg-settings-subsection">
+          <h2 id="privacyExceptionTitle">Исключения</h2>
+          <label class="tg-settings-search">
+            <span class="tg-native-icon tg-native-icon--search" aria-hidden="true"></span>
+            <input id="privacyExceptionSearch" type="search" placeholder="Поиск пользователей" autocomplete="off">
+          </label>
+          <div class="tg-settings-people" id="privacyExceptionSelected"></div>
+          <div class="tg-settings-people" id="privacyExceptionResults"></div>
+          <p class="tg-settings-empty" id="privacyExceptionEmpty">Введите имя или @username.</p>
+        </div>
+      </section>
+
+      <section class="tg-settings-screen" data-settings-screen="blocked" hidden>
+        <div class="tg-settings-subsection">
+          <h2>Заблокированные пользователи</h2>
+          <label class="tg-settings-search">
+            <span class="tg-native-icon tg-native-icon--search" aria-hidden="true"></span>
+            <input id="blockedUserSearch" type="search" placeholder="Найти пользователя" autocomplete="off">
+          </label>
+          <div class="tg-settings-people" id="blockedUsersList"></div>
+          <div class="tg-settings-people" id="blockedSearchResults"></div>
+          <p class="tg-settings-empty" id="blockedUsersEmpty">Список заблокированных пользователей пуст.</p>
+        </div>
+      </section>
+
+      <section class="tg-settings-screen" data-settings-screen="sessions" hidden>
+        <div class="tg-settings-subsection">
+          <h2>Активные сеансы</h2>
+          <div class="tg-settings-sessions" id="privacySessionsList"></div>
+          <button class="tg-settings-danger-action" id="terminateOtherSessions" type="button">Завершить все другие сеансы</button>
+          <p class="tg-settings-about">Завершение сеанса удаляет авторизацию этого браузера. Текущий сеанс завершить отсюда нельзя.</p>
+        </div>
+      </section>
+
+      <section class="tg-settings-screen" data-settings-screen="inactive" hidden>
+        <div class="tg-settings-subsection">
+          <h2>Удалить аккаунт при неактивности</h2>
+          {% for value, label in privacy_inactivity_choices %}
+            <label class="tg-settings-radio-row">
+              <input type="radio" name="inactive-period" data-setting="delete_after_inactive_days" data-value="{{ value }}" {% if request.user.delete_after_inactive_days == value %}checked{% endif %}>
+              <span class="tg-settings-radio-row__control"></span>
+              <span class="tg-settings-radio-row__copy"><strong>{{ label }}</strong></span>
+            </label>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="tg-settings-screen" data-settings-screen="auto-delete" hidden>
+        <div class="tg-settings-subsection">
+          <h2>Автоудаление сообщений</h2>
+          {% for value, label in privacy_auto_delete_choices %}
+            <label class="tg-settings-radio-row">
+              <input type="radio" name="auto-delete-period" data-setting="default_auto_delete_seconds" data-value="{{ value }}" {% if request.user.default_auto_delete_seconds == value %}checked{% endif %}>
+              <span class="tg-settings-radio-row__control"></span>
+              <span class="tg-settings-radio-row__copy"><strong>{{ label }}</strong></span>
+            </label>
+          {% endfor %}
+          <p class="tg-settings-about">Таймер применяется к новым личным чатам. Сообщения в таких чатах удаляются после выбранного срока.</p>
         </div>
       </section>
 
@@ -133,14 +264,7 @@
                 <i class="tg-settings-theme__composer"></i>
               </span>
               <span class="tg-settings-theme__choice">
-                <input
-                  type="radio"
-                  name="theme-preview"
-                  value="light"
-                  data-setting="theme"
-                  data-value="light"
-                  {% if request.user.theme == 'light' %}checked{% endif %}
-                >
+                <input type="radio" name="theme-preview" value="light" data-setting="theme" data-value="light" {% if request.user.theme == 'light' %}checked{% endif %}>
                 <span></span><b>Светлая</b>
               </span>
             </label>
@@ -153,65 +277,36 @@
                 <i class="tg-settings-theme__composer"></i>
               </span>
               <span class="tg-settings-theme__choice">
-                <input
-                  type="radio"
-                  name="theme-preview"
-                  value="dark"
-                  data-setting="theme"
-                  data-value="dark"
-                  {% if request.user.theme == 'dark' %}checked{% endif %}
-                >
+                <input type="radio" name="theme-preview" value="dark" data-setting="theme" data-value="dark" {% if request.user.theme == 'dark' %}checked{% endif %}>
                 <span></span><b>Тёмная</b>
               </span>
             </label>
           </div>
         </div>
 
-        <div class="tg-settings-divider" aria-hidden="true"></div>
-        <div class="tg-settings-section-gap" aria-hidden="true"></div>
+        <div class="tg-settings-divider"></div>
+        <div class="tg-settings-section-gap"></div>
 
         <div class="tg-settings-subsection">
           <h2>Сообщения</h2>
-
           <label class="tg-settings-radio-row" for="sendModeEnter">
-            <input
-              id="sendModeEnter"
-              type="radio"
-              name="send-mode"
-              data-setting="enter_to_send"
-              data-value="true"
-              {% if request.user.enter_to_send %}checked{% endif %}
-            >
+            <input id="sendModeEnter" type="radio" name="send-mode" data-setting="enter_to_send" data-value="true" {% if request.user.enter_to_send %}checked{% endif %}>
             <span class="tg-settings-radio-row__control"></span>
-            <span class="tg-settings-radio-row__copy">
-              <strong>Отправлять по Enter</strong>
-              <small>Shift+Enter — новая строка</small>
-            </span>
+            <span class="tg-settings-radio-row__copy"><strong>Отправлять по Enter</strong><small>Shift+Enter — новая строка</small></span>
           </label>
-
           <label class="tg-settings-radio-row" for="sendModeCtrlEnter">
-            <input
-              id="sendModeCtrlEnter"
-              type="radio"
-              name="send-mode"
-              data-setting="enter_to_send"
-              data-value="false"
-              {% if not request.user.enter_to_send %}checked{% endif %}
-            >
+            <input id="sendModeCtrlEnter" type="radio" name="send-mode" data-setting="enter_to_send" data-value="false" {% if not request.user.enter_to_send %}checked{% endif %}>
             <span class="tg-settings-radio-row__control"></span>
-            <span class="tg-settings-radio-row__copy">
-              <strong>Отправлять по Ctrl+Enter</strong>
-              <small>Enter — новая строка</small>
-            </span>
+            <span class="tg-settings-radio-row__copy"><strong>Отправлять по Ctrl+Enter</strong><small>Enter — новая строка</small></span>
           </label>
         </div>
 
-        <div class="tg-settings-divider" aria-hidden="true"></div>
-        <div class="tg-settings-section-gap" aria-hidden="true"></div>
+        <div class="tg-settings-divider"></div>
+        <div class="tg-settings-section-gap"></div>
 
         <div class="tg-settings-subsection">
           <button class="tg-settings-row" type="button" data-settings-target="archive">
-            <span class="tg-settings-section-icon tg-settings-section-icon--archive" aria-hidden="true"></span>
+            <span class="tg-native-icon tg-native-icon--archive tg-settings-row__native-icon" aria-hidden="true"></span>
             <span class="tg-settings-row__label">Настройки архива</span>
             <span class="tg-settings-chevron" aria-hidden="true"></span>
           </button>
@@ -221,35 +316,17 @@
       <section class="tg-settings-screen" data-settings-screen="archive" id="archiveSettings" hidden>
         <div class="tg-settings-subsection">
           <h2>Архив</h2>
-
           <label class="tg-settings-toggle-row" for="id_keep_archived_chats">
-            <span class="tg-settings-toggle-row__copy">
-              <strong>Всегда оставлять в архиве</strong>
-              <small>Новые сообщения не будут возвращать незаглушённые чаты в основной список.</small>
-            </span>
+            <span class="tg-settings-toggle-row__copy"><strong>Всегда оставлять в архиве</strong><small>Новые сообщения не будут возвращать незаглушённые чаты в основной список.</small></span>
             <span class="tg-settings-switch">
-              <input
-                id="id_keep_archived_chats"
-                type="checkbox"
-                data-setting="keep_archived_chats"
-                {% if request.user.keep_archived_chats %}checked{% endif %}
-              >
+              <input id="id_keep_archived_chats" type="checkbox" data-setting="keep_archived_chats" {% if request.user.keep_archived_chats %}checked{% endif %}>
               <span class="tg-settings-switch__track"><span></span></span>
             </span>
           </label>
-
           <label class="tg-settings-toggle-row" for="id_archive_in_main_menu">
-            <span class="tg-settings-toggle-row__copy">
-              <strong>Архив в главном меню</strong>
-              <small>Показывать Архив отдельным пунктом бокового меню вместо строки над чатами.</small>
-            </span>
+            <span class="tg-settings-toggle-row__copy"><strong>Архив в главном меню</strong><small>Показывать Архив отдельным пунктом бокового меню вместо строки над чатами.</small></span>
             <span class="tg-settings-switch">
-              <input
-                id="id_archive_in_main_menu"
-                type="checkbox"
-                data-setting="archive_in_main_menu"
-                {% if request.user.archive_in_main_menu %}checked{% endif %}
-              >
+              <input id="id_archive_in_main_menu" type="checkbox" data-setting="archive_in_main_menu" {% if request.user.archive_in_main_menu %}checked{% endif %}>
               <span class="tg-settings-switch__track"><span></span></span>
             </span>
           </label>
@@ -259,41 +336,23 @@
       <section class="tg-settings-screen" data-settings-screen="password" hidden>
         <div class="tg-settings-subsection">
           <h2>Смена пароля</h2>
-          <p class="tg-settings-about">Введите текущий пароль, затем новый пароль дважды.</p>
+          <p class="tg-settings-about">В Sovietgram используется один обычный пароль аккаунта. Облачного пароля, локального кода и ключей доступа здесь нет.</p>
         </div>
-
-        <form
-          class="tg-settings-password-form"
-          id="settingsPasswordForm"
-          method="post"
-          action="{% url 'accounts:password_change' %}"
-          novalidate
-        >
+        <form class="tg-settings-password-form" id="settingsPasswordForm" method="post" action="{% url 'accounts:password_change' %}" novalidate>
           {% csrf_token %}
-          <label class="tg-settings-password-field">
-            <span>Текущий пароль</span>
-            <input type="password" name="old_password" autocomplete="current-password" required>
-          </label>
-          <label class="tg-settings-password-field">
-            <span>Новый пароль</span>
-            <input type="password" name="new_password1" autocomplete="new-password" required>
-          </label>
-          <label class="tg-settings-password-field">
-            <span>Повторите новый пароль</span>
-            <input type="password" name="new_password2" autocomplete="new-password" required>
-          </label>
+          <label class="tg-settings-password-field"><span>Текущий пароль</span><input type="password" name="old_password" autocomplete="current-password" required></label>
+          <label class="tg-settings-password-field"><span>Новый пароль</span><input type="password" name="new_password1" autocomplete="new-password" required></label>
+          <label class="tg-settings-password-field"><span>Повторите новый пароль</span><input type="password" name="new_password2" autocomplete="new-password" required></label>
           <div class="tg-settings-password-error" id="settingsPasswordError" hidden></div>
-          <div class="tg-settings-password-actions">
-            <button type="submit">Изменить пароль</button>
-          </div>
+          <div class="tg-settings-password-actions"><button type="submit">Изменить пароль</button></div>
         </form>
       </section>
     </div>
   </section>
 
-  <form id="settingsAjaxForm" method="post" hidden>
-    {% csrf_token %}
-  </form>
-
+  <form id="settingsAjaxForm" method="post" hidden>{% csrf_token %}</form>
+  {{ settings_privacy_rules|json_script:"settingsPrivacyData" }}
+  {{ settings_blocked_users|json_script:"settingsBlockedData" }}
+  {{ settings_sessions|json_script:"settingsSessionsData" }}
   <div class="tg-settings-toast" id="settingsStatus" role="status" aria-live="polite" hidden></div>
 </div>

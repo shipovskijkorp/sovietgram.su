@@ -1,3 +1,41 @@
+const AUTH_THEME_KEY = "sovietgram.theme";
+
+function applyClientTheme(theme, persist = true) {
+  const next = theme === "dark" ? "dark" : "light";
+  document.documentElement.dataset.theme = next;
+  document.documentElement.style.colorScheme = next === "dark" ? "dark" : "light";
+  document.body.dataset.theme = next;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = next === "dark" ? "#171412" : "#cc0000";
+  document.querySelectorAll("[data-auth-theme-icon]").forEach((icon) => {
+    icon.textContent = next === "dark" ? "☀" : "☾";
+  });
+  document.querySelectorAll("[data-auth-theme-toggle]").forEach((button) => {
+    button.setAttribute(
+      "aria-label",
+      next === "dark" ? "Включить светлую тему" : "Включить тёмную тему",
+    );
+    button.title = next === "dark" ? "Светлая тема" : "Тёмная тема";
+  });
+  if (persist) {
+    try {
+      localStorage.setItem(AUTH_THEME_KEY, next);
+    } catch (_error) {
+      // Storage can be disabled; the current page still keeps the theme.
+    }
+  }
+  return next;
+}
+
+if (document.body.classList.contains("auth-body")) {
+  applyClientTheme(document.documentElement.dataset.theme || document.body.dataset.theme || "light", false);
+  document.querySelectorAll("[data-auth-theme-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      applyClientTheme(document.body.dataset.theme === "dark" ? "light" : "dark");
+    });
+  });
+}
+
 const toast = document.getElementById("toast");
 const easterStar = document.getElementById("easterStar");
 let toastTimeout;

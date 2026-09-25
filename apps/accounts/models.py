@@ -47,6 +47,19 @@ class User(AbstractUser):
         on_delete=models.SET_NULL,
         related_name="profile_owners",
     )
+    privacy_settings = models.JSONField(
+        "настройки конфиденциальности",
+        default=dict,
+        blank=True,
+    )
+    default_auto_delete_seconds = models.PositiveIntegerField(
+        "автоудаление сообщений по умолчанию",
+        default=0,
+    )
+    delete_after_inactive_days = models.PositiveSmallIntegerField(
+        "удаление аккаунта после неактивности",
+        default=365,
+    )
 
     @property
     def display_name(self):
@@ -68,3 +81,29 @@ class User(AbstractUser):
 
     def __str__(self):
         return self.username
+
+
+class UserBlock(models.Model):
+    blocker = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="blocked_user_links",
+    )
+    blocked = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="blocked_by_links",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("blocker", "blocked"),
+                name="unique_user_block",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.blocker} blocks {self.blocked}"

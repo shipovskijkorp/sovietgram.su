@@ -29,6 +29,17 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_POST
 
 from apps.accounts.multiaccount import account_slots
+from apps.accounts.privacy import (
+    AUTO_DELETE_CHOICES,
+    INACTIVITY_CHOICES,
+    active_sessions_payload,
+    auto_delete_label,
+    blocked_users_payload,
+    inactivity_label,
+    is_blocked_between,
+    privacy_allows,
+    privacy_rule_payload,
+)
 
 from .forms import CommunityForm, EditMessageForm, MessageForm
 from .models import (
@@ -215,14 +226,25 @@ def _other_last_read_id(chat, user):
     return chat.messages.filter(is_deleted=False).order_by("-id").values_list("id", flat=True).first() or 0
 
 
-def _presence_text(user):
-    if user.is_online:
+def _presence_text(user, viewer=None):
+    exact = bool(
+        viewer
+        and getattr(viewer, "is_authenticated", False)
+        and privacy_allows(user, viewer, "last_seen")
+    )
+    if viewer and getattr(viewer, "pk", None) == user.pk:
+        exact = True
+
+    if exact and user.is_online:
         return "в сети"
     if not user.last_seen_at:
         return "был(а) давно"
 
     now = timezone.now()
     delta = now - user.last_seen_at
+    if not exact:
+        return "был(а) недавно" if delta < timedelta(days=3) else "был(а) давно"
+
     local_seen = timezone.localtime(user.last_seen_at)
     if delta < timedelta(minutes=15):
         return "был(а) недавно"
@@ -246,8 +268,17 @@ def _decorate_chat_ui(chat, user):
         chat.display_name_ui = "Избранное" if chat.is_saved_ui else other_user.display_name
         chat.username_ui = "" if chat.is_saved_ui else other_user.username
         chat.avatar_text_ui = "★" if chat.is_saved_ui else other_user.initials
+        chat.other_user_avatar_url_ui = (
+            other_user.avatar.url
+            if (
+                not chat.is_saved_ui
+                and other_user.avatar
+                and privacy_allows(other_user, user, "profile_photo")
+            )
+            else ""
+        )
         chat.search_text_ui = f"{chat.display_name_ui} {chat.username_ui}".lower()
-        chat.status_ui = "Личное облако" if chat.is_saved_ui else _presence_text(other_user)
+        chat.status_ui = "Личное облако" if chat.is_saved_ui else _presence_text(other_user, user)
     else:
         chat.other_user = None
         chat.display_name_ui = chat.title or (
@@ -611,9 +642,20 @@ def _community_candidates(user):
         .exclude(pk=user.pk)
         .order_by("-last_seen_at", "username")[:200]
     )
+    visible = []
     for candidate in candidates:
-        candidate.presence_ui = _presence_text(candidate)
-    return candidates
+        if is_blocked_between(user, candidate):
+            continue
+        if not privacy_allows(candidate, user, "invites"):
+            continue
+        candidate.presence_ui = _presence_text(candidate, user)
+        candidate.avatar_url_ui = (
+            candidate.avatar.url
+            if candidate.avatar and privacy_allows(candidate, user, "profile_photo")
+            else ""
+        )
+        visible.append(candidate)
+    return visible
 
 
 def _messenger_context(request, selected_chat=None, chat_messages=None, archived=False, focus_id=0):
@@ -639,6 +681,16 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
         "account_slots": _account_slots_with_unread(request),
         "community_candidates": _community_candidates(user),
         "community_create_url": reverse("messenger:create_community"),
+        "settings_privacy_rules": privacy_rule_payload(user),
+        "settings_blocked_users": blocked_users_payload(user),
+        "settings_sessions": active_sessions_payload(
+            user,
+            request.session.session_key or "",
+        ),
+        "settings_inactivity_label": inactivity_label(user.delete_after_inactive_days),
+        "settings_auto_delete_label": auto_delete_label(user.default_auto_delete_seconds),
+        "privacy_inactivity_choices": list(INACTIVITY_CHOICES.items()),
+        "privacy_auto_delete_choices": list(AUTO_DELETE_CHOICES.items()),
     }
     if selected_chat is None:
         return context
@@ -835,6 +887,12 @@ def create_community(request):
                 if requested
                 else []
             )
+            users = [
+                user
+                for user in users
+                if not is_blocked_between(request.user, user)
+                and privacy_allows(user, request.user, "invites")
+            ]
             ChatParticipant.objects.bulk_create(
                 [
                     ChatParticipant(
@@ -887,6 +945,27 @@ def join_public_chat(request, username):
 @require_POST
 def start_chat(request, username):
     target = get_object_or_404(User, username__iexact=username, is_active=True)
+    if target.pk != request.user.pk:
+        if is_blocked_between(request.user, target):
+            if _wants_json(request):
+                return JsonResponse(
+                    {"ok": False, "error": "Диалог недоступен из-за блокировки."},
+                    status=403,
+                )
+            messages.error(request, "Диалог недоступен из-за блокировки.")
+            return redirect("messenger:home")
+        if not privacy_allows(target, request.user, "messages"):
+            if _wants_json(request):
+                return JsonResponse(
+                    {
+                        "ok": False,
+                        "error": "Пользователь ограничил входящие личные сообщения.",
+                    },
+                    status=403,
+                )
+            messages.error(request, "Пользователь ограничил входящие личные сообщения.")
+            return redirect("messenger:home")
+
     chat = get_or_create_direct_chat(request.user, target)
     ChatParticipant.objects.filter(chat=chat, user=request.user).update(
         is_hidden=False,
@@ -940,11 +1019,11 @@ def global_search(request):
                 "username": chat.username_ui,
                 "status": chat.status_ui,
                 "avatar_url": (
-                    chat.other_user.avatar.url
+                    chat.other_user_avatar_url_ui
                     if (
                         chat.type == Chat.Type.PRIVATE
                         and chat.other_user
-                        and chat.other_user.avatar
+                        and chat.other_user_avatar_url_ui
                     )
                     else chat.avatar.url
                     if chat.type != Chat.Type.PRIVATE and chat.avatar
@@ -973,9 +1052,13 @@ def global_search(request):
             "id": user.pk,
             "display_name": user.display_name,
             "username": user.username,
-            "avatar_url": user.avatar.url if user.avatar else "",
+            "avatar_url": (
+                user.avatar.url
+                if user.avatar and privacy_allows(user, request.user, "profile_photo")
+                else ""
+            ),
             "avatar_text": user.initials,
-            "status": _presence_text(user),
+            "status": _presence_text(user, request.user),
             "profile_url": reverse(
                 "accounts:public_profile",
                 args=[user.username],
@@ -1085,6 +1168,16 @@ def contacts(request):
         .order_by("user__username")
     )
     contact_ids = {item.user_id for item in contact_links}
+    for item in contact_links:
+        item.avatar_url_ui = (
+            item.user.avatar.url
+            if item.user.avatar and privacy_allows(item.user, request.user, "profile_photo")
+            else ""
+        )
+        item.can_message_ui = (
+            not is_blocked_between(request.user, item.user)
+            and privacy_allows(item.user, request.user, "messages")
+        )
 
     user_results = []
     channel_results = []
@@ -1096,6 +1189,15 @@ def contacts(request):
         )
         for user in user_results:
             user.is_contact_ui = user.pk in contact_ids
+            user.avatar_url_ui = (
+                user.avatar.url
+                if user.avatar and privacy_allows(user, request.user, "profile_photo")
+                else ""
+            )
+            user.can_message_ui = (
+                not is_blocked_between(request.user, user)
+                and privacy_allows(user, request.user, "messages")
+            )
 
         channel_results = list(
             Chat.objects.filter(
@@ -1175,6 +1277,33 @@ def send_message(request, chat_id):
             for error in errors:
                 messages.error(request, error)
         return redirect("messenger:chat", chat_id=chat.pk)
+
+    if chat.type == Chat.Type.PRIVATE and chat.direct_key != f"self:{request.user.pk}":
+        recipient = other_user_for_chat(chat, request.user)
+        if is_blocked_between(request.user, recipient):
+            error = "Сообщение не отправлено: один из пользователей заблокировал другого."
+            if wants_json:
+                return JsonResponse({"ok": False, "error": error}, status=403)
+            messages.error(request, error)
+            return redirect("messenger:chat", chat_id=chat.pk)
+        if not privacy_allows(recipient, request.user, "messages"):
+            error = "Пользователь ограничил входящие личные сообщения."
+            if wants_json:
+                return JsonResponse({"ok": False, "error": error}, status=403)
+            messages.error(request, error)
+            return redirect("messenger:chat", chat_id=chat.pk)
+
+        attachment_mode = form.cleaned_data.get("attachment_mode") or MessageForm.MODE_MEDIA
+        if (
+            attachment_mode == MessageForm.MODE_AUDIO
+            and form.cleaned_data["attachments"]
+            and not privacy_allows(recipient, request.user, "voice_messages")
+        ):
+            error = "Пользователь ограничил входящие голосовые и аудиосообщения."
+            if wants_json:
+                return JsonResponse({"ok": False, "error": error}, status=403)
+            messages.error(request, error)
+            return redirect("messenger:chat", chat_id=chat.pk)
 
     restriction = _posting_restriction(
         chat,
@@ -1271,6 +1400,19 @@ def send_special_message(request, chat_id):
             {"ok": False, "error": str(error)},
             status=400,
         )
+
+    if chat.type == Chat.Type.PRIVATE and chat.direct_key != f"self:{request.user.pk}":
+        recipient = other_user_for_chat(chat, request.user)
+        if is_blocked_between(request.user, recipient):
+            return JsonResponse(
+                {"ok": False, "error": "Сообщение не отправлено: один из пользователей заблокировал другого."},
+                status=403,
+            )
+        if not privacy_allows(recipient, request.user, "messages"):
+            return JsonResponse(
+                {"ok": False, "error": "Пользователь ограничил входящие личные сообщения."},
+                status=403,
+            )
 
     restriction = _posting_restriction(
         chat,
@@ -1744,6 +1886,19 @@ def forward_message(request, chat_id, message_id):
         target_chat = _chat_for_user(request.user, target_chat_id)
 
     target_membership = _membership(target_chat, request.user)
+    if target_chat.type == Chat.Type.PRIVATE and target_chat.direct_key != f"self:{request.user.pk}":
+        recipient = other_user_for_chat(target_chat, request.user)
+        if is_blocked_between(request.user, recipient):
+            return JsonResponse(
+                {"ok": False, "error": "Пересылка недоступна из-за блокировки."},
+                status=403,
+            )
+        if not privacy_allows(recipient, request.user, "messages"):
+            return JsonResponse(
+                {"ok": False, "error": "Пользователь ограничил входящие личные сообщения."},
+                status=403,
+            )
+
     restriction = _posting_restriction(
         target_chat,
         target_membership,
@@ -1759,6 +1914,9 @@ def forward_message(request, chat_id, message_id):
     origin = source.forwarded_from or source
     origin_name = source.forwarded_from_name or source.sender.display_name
     origin_username = source.forwarded_from_username or source.sender.username
+    origin_owner = origin.sender
+    if not privacy_allows(origin_owner, request.user, "forwards"):
+        origin_username = ""
 
     with transaction.atomic():
         forwarded = Message.objects.create(
@@ -2276,7 +2434,7 @@ def poll_messages(request, chat_id):
         other_status = (
             "Личное облако"
             if chat.direct_key == f"self:{request.user.pk}"
-            else _presence_text(other_user)
+            else _presence_text(other_user, request.user)
         )
     else:
         other_typing = False

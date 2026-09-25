@@ -59,8 +59,8 @@
       {% endif %}
       {% for chat in chats %}
         <a class="chat-row{% if selected_chat and selected_chat.pk == chat.pk %} is-active{% endif %}" href="{% url 'messenger:chat' chat.pk %}" data-chat-row data-search="{{ chat.search_text_ui }}">
-          {% if chat.type == 'private' and chat.other_user.avatar %}
-            <img class="chat-row__avatar" src="{{ chat.other_user.avatar.url }}" alt="">
+          {% if chat.type == 'private' and chat.other_user_avatar_url_ui %}
+            <img class="chat-row__avatar" src="{{ chat.other_user_avatar_url_ui }}" alt="">
           {% elif chat.type != 'private' and chat.avatar %}
             <img class="chat-row__avatar" src="{{ chat.avatar.url }}" alt="">
           {% else %}
@@ -132,8 +132,8 @@
         <a class="icon-button mobile-back" href="{% if show_archived %}{% url 'messenger:home' %}?archived=1{% else %}{% url 'messenger:home' %}{% endif %}" aria-label="Назад"><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span></a>
         {% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}
           <a class="conversation-header__identity" href="{% url 'accounts:public_profile' selected_chat.other_user.username %}" data-user-profile>
-            {% if selected_chat.other_user.avatar %}
-              <img class="conversation-header__avatar" src="{{ selected_chat.other_user.avatar.url }}" alt="">
+            {% if selected_chat.other_user_avatar_url_ui %}
+              <img class="conversation-header__avatar" src="{{ selected_chat.other_user_avatar_url_ui }}" alt="">
             {% else %}
               <span class="conversation-header__avatar conversation-header__avatar--fallback">{{ selected_chat.avatar_text_ui }}</span>
             {% endif %}
@@ -726,7 +726,7 @@
       {% for target in forward_targets %}
         {% if not target.is_saved_ui %}
           <button class="forward-target" type="button" data-forward-target="{{ target.pk }}" data-forward-search="{{ target.search_text_ui }}">
-            {% if target.type == 'private' and target.other_user.avatar %}<img class="forward-target__avatar" src="{{ target.other_user.avatar.url }}" alt="">{% else %}<span class="forward-target__avatar forward-target__avatar--fallback">{{ target.avatar_text_ui }}</span>{% endif %}
+            {% if target.type == 'private' and target.other_user_avatar_url_ui %}<img class="forward-target__avatar" src="{{ target.other_user_avatar_url_ui }}" alt="">{% else %}<span class="forward-target__avatar forward-target__avatar--fallback">{{ target.avatar_text_ui }}</span>{% endif %}
             <span><strong>{{ target.display_name_ui }}</strong><small>{% if target.username_ui %}@{{ target.username_ui }}{% else %}{{ target.status_ui }}{% endif %}</small></span>
           </button>
         {% endif %}
@@ -913,8 +913,8 @@
           {% for person in community_candidates %}
             <label class="community-member-row" data-member-row data-member-search="{{ person.display_name|lower }} {{ person.username|lower }}">
               <input type="checkbox" value="{{ person.username }}" hidden>
-              {% if person.avatar %}
-                <img src="{{ person.avatar.url }}" alt="">
+              {% if person.avatar_url_ui %}
+                <img src="{{ person.avatar_url_ui }}" alt="">
               {% else %}
                 <span class="community-member-row__avatar">{{ person.initials }}</span>
               {% endif %}

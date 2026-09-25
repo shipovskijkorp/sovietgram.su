@@ -376,3 +376,65 @@ a { color: var(--red); }
 body:not([data-theme="dark"]) .sidebar__footer {
   background: #f7efe4;
 }
+
+
+/* Auth theme and multi-account mode controls. */
+.auth-card {
+  position: relative;
+}
+
+.auth-theme-toggle {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(84, 58, 35, .12);
+  border-radius: 50%;
+  background: rgba(255, 250, 241, .66);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 17px;
+  line-height: 1;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+
+.auth-theme-toggle:hover {
+  border-color: rgba(141, 30, 40, .24);
+  background: #fffaf1;
+  color: var(--red);
+}
+
+.auth-mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin: -4px 0 18px;
+  padding: 4px;
+  border-radius: 12px;
+  background: rgba(86, 63, 42, .08);
+}
+
+.auth-mode-switch a {
+  min-height: 36px;
+  display: grid;
+  place-items: center;
+  padding: 0 10px;
+  border-radius: 9px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.auth-mode-switch a:hover {
+  color: var(--ink);
+}
+
+.auth-mode-switch a.is-active {
+  background: var(--panel-strong);
+  color: var(--red);
+  box-shadow: 0 2px 8px rgba(57, 39, 27, .08);
+}

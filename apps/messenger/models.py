@@ -1,3 +1,4 @@
+from datetime import timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -70,6 +71,7 @@ class Chat(models.Model):
     members_can_pin_messages = models.BooleanField(default=False)
     slow_mode_seconds = models.PositiveSmallIntegerField(default=0)
     signatures_enabled = models.BooleanField(default=False)
+    auto_delete_seconds = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, db_index=True)
 
@@ -169,6 +171,14 @@ class Message(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True, db_index=True)
     edited_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and self.expires_at is None and self.chat_id:
+            seconds = int(getattr(self.chat, "auto_delete_seconds", 0) or 0)
+            if seconds > 0:
+                self.expires_at = timezone.now() + timedelta(seconds=seconds)
+        super().save(*args, **kwargs)
 
     class Meta:
         ordering = ("id",)

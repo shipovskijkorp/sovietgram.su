@@ -19,7 +19,7 @@
     </div>
 
     <div class="public-profile-main">
-      {% if profile_user.avatar %}
+      {% if profile_user.avatar and profile_avatar_visible %}
         <img class="public-profile-avatar" src="{{ profile_user.avatar.url }}" alt="Фотография {{ profile_user.display_name }}">
       {% else %}
         <span class="public-profile-avatar public-profile-avatar--fallback">{{ profile_user.initials }}</span>
@@ -53,7 +53,9 @@
               {% endif %}
             {% endif %}
           {% else %}
-            <a class="profile-action profile-action--primary" href="{% url 'accounts:login' %}?next={{ request.path|urlencode }}">Войти, чтобы написать</a>
+            {% if profile_messages_allowed %}
+              <a class="profile-action profile-action--primary" href="{% url 'accounts:login' %}?next={{ request.path|urlencode }}">Войти, чтобы написать</a>
+            {% endif %}
           {% endif %}
         </div>
       </div>
@@ -61,7 +63,7 @@
       <button class="public-profile-copy" type="button" data-copy-profile data-profile-url="{% url 'accounts:public_profile' profile_user.username %}">Скопировать ссылку</button>
     </div>
 
-    {% if profile_user.bio %}
+    {% if profile_user.bio and profile_bio_visible %}
       <section class="public-profile-section">
         <span class="public-profile-label">О себе</span>
         <p>{{ profile_user.bio|linebreaksbr }}</p>

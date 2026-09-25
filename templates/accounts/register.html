@@ -6,6 +6,9 @@
 {% block content %}
 <main class="auth-shell">
   <section class="auth-card auth-card--wide">
+    <button class="auth-theme-toggle" type="button" data-auth-theme-toggle aria-label="Переключить тему" title="Переключить тему">
+      <span data-auth-theme-icon aria-hidden="true">☾</span>
+    </button>
     <a class="auth-brand" href="{% url 'accounts:login' %}">
       <span class="brand__mark">★</span>
       <span>SOVIETGRAM</span>

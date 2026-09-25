@@ -1,6 +1,8 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.backends import ModelBackend
 
+from .privacy import account_expired_for_inactivity
+
 
 class EmailOrUsernameBackend(ModelBackend):
     """Authenticate with either a username or an email address."""
@@ -15,6 +17,10 @@ class EmailOrUsernameBackend(ModelBackend):
         if user is None:
             user = UserModel._default_manager.filter(email__iexact=identifier).first()
 
-        if user and user.check_password(password) and self.user_can_authenticate(user):
-            return user
+        if user and user.check_password(password):
+            if account_expired_for_inactivity(user):
+                user.delete()
+                return None
+            if self.user_can_authenticate(user):
+                return user
         return None

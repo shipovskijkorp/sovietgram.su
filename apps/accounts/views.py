@@ -1,3 +1,4 @@
+import json
 from datetime import timedelta
 
 from django.contrib import messages
@@ -18,12 +19,26 @@ from .forms import (
     RegisterForm,
     UserSettingsForm,
 )
-from .models import User
+from .models import User, UserBlock
 from .multiaccount import (
     activate_account,
     add_authenticated_account,
     remember_current_account,
     remove_current_account,
+)
+from .privacy import (
+    AUTO_DELETE_CHOICES,
+    INACTIVITY_CHOICES,
+    active_sessions_payload,
+    auto_delete_label,
+    blocked_users_payload,
+    inactivity_label,
+    is_blocked_between,
+    privacy_allows,
+    privacy_rule_payload,
+    remember_session_device,
+    set_privacy_rule,
+    terminate_sessions,
 )
 
 
@@ -103,6 +118,7 @@ class SovietgramLoginView(LoginView):
     def form_valid(self, form):
         response = super().form_valid(form)
         remember_current_account(self.request)
+        remember_session_device(self.request)
         return response
 
 
@@ -156,6 +172,8 @@ def register(request):
     if request.method == "POST" and form.is_valid():
         user = form.save()
         login(request, user, backend="apps.accounts.backends.EmailOrUsernameBackend")
+        remember_current_account(request)
+        remember_session_device(request)
         messages.success(request, "Учётная запись создана.")
         return redirect("messenger:home")
 
@@ -164,14 +182,42 @@ def register(request):
 
 @login_required
 def add_account(request):
-    form = IdentifierAuthenticationForm(request=request, data=request.POST or None)
-    if request.method == "POST" and form.is_valid():
-        user = form.get_user()
-        backend = "apps.accounts.backends.EmailOrUsernameBackend"
+    mode = request.POST.get("mode") or request.GET.get("mode") or "login"
+    mode = "register" if mode == "register" else "login"
+    backend = "apps.accounts.backends.EmailOrUsernameBackend"
+
+    login_form = IdentifierAuthenticationForm(
+        request=request,
+        data=request.POST if request.method == "POST" and mode == "login" else None,
+    )
+    register_form = RegisterForm(
+        request.POST if request.method == "POST" and mode == "register" else None
+    )
+
+    if request.method == "POST" and mode == "login" and login_form.is_valid():
+        user = login_form.get_user()
         add_authenticated_account(request, user, backend)
+        remember_session_device(request)
         messages.success(request, f"Аккаунт @{user.username} добавлен.")
         return redirect("messenger:home")
-    return render(request, "accounts/add_account.html", {"form": form})
+
+    if request.method == "POST" and mode == "register" and register_form.is_valid():
+        user = register_form.save()
+        add_authenticated_account(request, user, backend)
+        remember_session_device(request)
+        messages.success(request, f"Аккаунт @{user.username} создан и добавлен.")
+        return redirect("messenger:home")
+
+    return render(
+        request,
+        "accounts/add_account.html",
+        {
+            "mode": mode,
+            "form": login_form if mode == "login" else register_form,
+            "login_form": login_form,
+            "register_form": register_form,
+        },
+    )
 
 
 @login_required
@@ -248,17 +294,144 @@ def _parse_boolean_setting(value):
     raise ValueError("Некорректное значение настройки.")
 
 
+def _parse_id_list(raw):
+    try:
+        values = json.loads(raw or "[]")
+    except json.JSONDecodeError:
+        values = []
+    if not isinstance(values, list):
+        return []
+    result = []
+    for value in values:
+        try:
+            result.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    return result
+
+
 @login_required
 def settings_view(request):
     wants_json = request.headers.get("x-requested-with") == "XMLHttpRequest"
 
+    if request.method == "GET" and wants_json:
+        action = request.GET.get("action", "").strip()
+        if action == "privacy_state":
+            return JsonResponse(
+                {
+                    "ok": True,
+                    "rules": privacy_rule_payload(request.user),
+                    "blocked": blocked_users_payload(request.user),
+                    "sessions": active_sessions_payload(
+                        request.user,
+                        request.session.session_key or "",
+                    ),
+                    "delete_after_inactive_days": request.user.delete_after_inactive_days,
+                    "delete_after_inactive_label": inactivity_label(
+                        request.user.delete_after_inactive_days
+                    ),
+                    "default_auto_delete_seconds": request.user.default_auto_delete_seconds,
+                    "default_auto_delete_label": auto_delete_label(
+                        request.user.default_auto_delete_seconds
+                    ),
+                }
+            )
+
     if request.method == "GET" and not wants_json:
         section = request.GET.get("section", "main")
-        if section not in {"main", "privacy", "chat", "archive", "password"}:
+        allowed = {
+            "main",
+            "privacy",
+            "chat",
+            "archive",
+            "password",
+            "blocked",
+            "sessions",
+            "privacy-rule",
+            "privacy-exceptions",
+            "inactive",
+            "auto-delete",
+        }
+        if section not in allowed:
             section = "main"
         return redirect(f"{reverse('messenger:home')}?settings={section}")
 
-    if request.method == "POST" and wants_json and "setting" in request.POST:
+    if request.method == "POST" and wants_json:
+        action = request.POST.get("action", "").strip()
+
+        if action == "privacy_rule":
+            key = request.POST.get("key", "").strip()
+            option = request.POST.get("option", "").strip()
+            try:
+                rule = set_privacy_rule(
+                    request.user,
+                    key,
+                    option,
+                    always=_parse_id_list(request.POST.get("always")),
+                    never=_parse_id_list(request.POST.get("never")),
+                )
+            except ValueError as error:
+                return JsonResponse({"ok": False, "error": str(error)}, status=400)
+            return JsonResponse(
+                {
+                    "ok": True,
+                    "key": key,
+                    "rule": privacy_rule_payload(request.user)[key],
+                }
+            )
+
+        if action in {"block", "unblock"}:
+            username = request.POST.get("username", "").strip().lstrip("@")
+            target = get_object_or_404(User, username__iexact=username, is_active=True)
+            if target.pk == request.user.pk:
+                return JsonResponse(
+                    {"ok": False, "error": "Нельзя заблокировать самого себя."},
+                    status=400,
+                )
+            if action == "block":
+                UserBlock.objects.get_or_create(blocker=request.user, blocked=target)
+            else:
+                UserBlock.objects.filter(blocker=request.user, blocked=target).delete()
+            return JsonResponse(
+                {
+                    "ok": True,
+                    "blocked": blocked_users_payload(request.user),
+                }
+            )
+
+        if action == "terminate_session":
+            token = request.POST.get("token", "").strip()
+            terminate_sessions(
+                request.user,
+                request.session.session_key or "",
+                token=token or None,
+            )
+            return JsonResponse(
+                {
+                    "ok": True,
+                    "sessions": active_sessions_payload(
+                        request.user,
+                        request.session.session_key or "",
+                    ),
+                }
+            )
+
+        if action == "terminate_other_sessions":
+            terminate_sessions(
+                request.user,
+                request.session.session_key or "",
+                others=True,
+            )
+            return JsonResponse(
+                {
+                    "ok": True,
+                    "sessions": active_sessions_payload(
+                        request.user,
+                        request.session.session_key or "",
+                    ),
+                }
+            )
+
         setting = request.POST.get("setting", "").strip()
         raw_value = request.POST.get("value", "")
 
@@ -278,6 +451,26 @@ def settings_view(request):
                     {"ok": False, "error": str(error)},
                     status=400,
                 )
+        elif setting == "delete_after_inactive_days":
+            try:
+                value = int(raw_value)
+            except (TypeError, ValueError):
+                value = 0
+            if value not in INACTIVITY_CHOICES:
+                return JsonResponse(
+                    {"ok": False, "error": "Неизвестный срок неактивности."},
+                    status=400,
+                )
+        elif setting == "default_auto_delete_seconds":
+            try:
+                value = int(raw_value)
+            except (TypeError, ValueError):
+                value = -1
+            if value not in AUTO_DELETE_CHOICES:
+                return JsonResponse(
+                    {"ok": False, "error": "Неизвестный срок автоудаления."},
+                    status=400,
+                )
         else:
             return JsonResponse(
                 {"ok": False, "error": "Неизвестная настройка."},
@@ -291,15 +484,27 @@ def settings_view(request):
                 "ok": True,
                 "setting": setting,
                 "value": value,
+                "label": (
+                    inactivity_label(value)
+                    if setting == "delete_after_inactive_days"
+                    else auto_delete_label(value)
+                    if setting == "default_auto_delete_seconds"
+                    else ""
+                ),
             }
         )
 
     form = UserSettingsForm(request.POST or None, instance=request.user)
-    if request.method == "POST" and form.is_valid():
-        form.save()
-        messages.success(request, "Настройки сохранены.")
+    if request.method == "POST":
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Настройки сохранены.")
+        else:
+            for field_errors in form.errors.values():
+                for error in field_errors:
+                    messages.error(request, error)
         return redirect(f"{reverse('messenger:home')}?settings=main")
-    return render(request, "accounts/settings.html", {"form": form})
+    return redirect(f"{reverse('messenger:home')}?settings=main")
 
 
 @login_required
@@ -327,59 +532,79 @@ def public_profile(request, username):
     from apps.messenger.models import Contact
 
     profile_user = get_object_or_404(User, username__iexact=username, is_active=True)
+    viewer = request.user if request.user.is_authenticated else None
+    is_self = bool(viewer and viewer.pk == profile_user.pk)
     is_contact = False
-    if request.user.is_authenticated and request.user.pk != profile_user.pk:
-        is_contact = Contact.objects.filter(owner=request.user, user=profile_user).exists()
+    if viewer and not is_self:
+        is_contact = Contact.objects.filter(owner=viewer, user=profile_user).exists()
 
     if request.user.is_authenticated and request.headers.get("x-requested-with") != "XMLHttpRequest":
         return redirect(f"{reverse('messenger:home')}?profile={profile_user.username}")
 
     if request.headers.get("x-requested-with") == "XMLHttpRequest":
-        if profile_user.is_online:
-            status = "в сети"
-        elif profile_user.last_seen_at:
-            seen = timezone.localtime(profile_user.last_seen_at)
-            if seen.date() == timezone.localdate():
-                status = f"был(а) сегодня в {seen:%H:%M}"
-            elif seen.date() == timezone.localdate() - timedelta(days=1):
-                status = f"был(а) вчера в {seen:%H:%M}"
+        last_seen_visible = privacy_allows(profile_user, viewer, "last_seen")
+        if is_self or last_seen_visible:
+            if profile_user.is_online:
+                status = "в сети"
+            elif profile_user.last_seen_at:
+                seen = timezone.localtime(profile_user.last_seen_at)
+                if seen.date() == timezone.localdate():
+                    status = f"был(а) сегодня в {seen:%H:%M}"
+                elif seen.date() == timezone.localdate() - timedelta(days=1):
+                    status = f"был(а) вчера в {seen:%H:%M}"
+                else:
+                    status = f"был(а) {seen:%d.%m.%Y}"
             else:
-                status = f"был(а) {seen:%d.%m.%Y}"
+                status = "был(а) давно"
+        elif profile_user.last_seen_at and timezone.now() - profile_user.last_seen_at < timedelta(days=3):
+            status = "был(а) недавно"
         else:
             status = "был(а) давно"
+
+        photo_visible = is_self or privacy_allows(profile_user, viewer, "profile_photo")
+        bio_visible = is_self or privacy_allows(profile_user, viewer, "bio")
+        birthday_visible = is_self or privacy_allows(profile_user, viewer, "birthday")
+        blocked = bool(viewer and not is_self and is_blocked_between(viewer, profile_user))
+        messages_allowed = bool(
+            viewer
+            and not is_self
+            and not blocked
+            and privacy_allows(profile_user, viewer, "messages")
+        )
 
         return JsonResponse(
             {
                 "ok": True,
                 "display_name": profile_user.display_name,
                 "username": profile_user.username,
-                "bio": profile_user.bio,
+                "bio": profile_user.bio if bio_visible else "",
                 "status": status,
-                "avatar_url": profile_user.avatar.url if profile_user.avatar else "",
-                "birthday": profile_user.birthday.isoformat() if profile_user.birthday else "",
+                "avatar_url": (
+                    profile_user.avatar.url
+                    if profile_user.avatar and photo_visible
+                    else ""
+                ),
+                "birthday": (
+                    profile_user.birthday.isoformat()
+                    if profile_user.birthday and birthday_visible
+                    else ""
+                ),
                 "birthday_display": (
                     profile_user.birthday.strftime("%d.%m.%Y")
-                    if profile_user.birthday
+                    if profile_user.birthday and birthday_visible
                     else ""
                 ),
                 "personal_channel": _personal_channel_payload(
                     profile_user.personal_channel,
-                    request.user if request.user.is_authenticated else None,
+                    viewer,
                 ),
                 "initials": profile_user.initials,
                 "is_contact": is_contact,
-                "is_self": bool(
-                    request.user.is_authenticated
-                    and request.user.pk == profile_user.pk
-                ),
+                "is_self": is_self,
+                "is_blocked": blocked,
                 "first_name": profile_user.first_name,
                 "last_name": profile_user.last_name,
-                "edit_url": (
-                    reverse("accounts:profile")
-                    if request.user.is_authenticated
-                    and request.user.pk == profile_user.pk
-                    else ""
-                ),
+                "edit_url": reverse("accounts:profile") if is_self else "",
                 "owned_channels": (
                     [
                         {
@@ -397,38 +622,29 @@ def public_profile(request, username):
                         .exclude(chat__username="")
                         .order_by("chat__title", "chat_id")
                     ]
-                    if request.user.is_authenticated
-                    and request.user.pk == profile_user.pk
+                    if is_self
                     else []
                 ),
                 "start_chat_url": (
                     reverse("messenger:start_chat", args=[profile_user.username])
-                    if request.user.is_authenticated
-                    and request.user.pk != profile_user.pk
+                    if messages_allowed
                     else ""
                 ),
                 "add_contact_url": (
                     reverse("messenger:add_contact", args=[profile_user.username])
-                    if request.user.is_authenticated
-                    and request.user.pk != profile_user.pk
+                    if viewer and not is_self
                     else ""
                 ),
                 "remove_contact_url": (
                     reverse("messenger:remove_contact", args=[profile_user.username])
-                    if request.user.is_authenticated
-                    and request.user.pk != profile_user.pk
+                    if viewer and not is_self
                     else ""
                 ),
                 "profile_url": reverse(
                     "accounts:public_profile",
                     args=[profile_user.username],
                 ),
-                "remove_avatar_url": (
-                    reverse("accounts:remove_avatar")
-                    if request.user.is_authenticated
-                    and request.user.pk == profile_user.pk
-                    else ""
-                ),
+                "remove_avatar_url": reverse("accounts:remove_avatar") if is_self else "",
             }
         )
 
@@ -438,5 +654,21 @@ def public_profile(request, username):
         {
             "profile_user": profile_user,
             "is_contact": is_contact,
+            "profile_avatar_visible": privacy_allows(
+                profile_user,
+                viewer,
+                "profile_photo",
+            ),
+            "profile_bio_visible": privacy_allows(
+                profile_user,
+                viewer,
+                "bio",
+            ),
+            "profile_messages_allowed": privacy_allows(
+                profile_user,
+                viewer,
+                "messages",
+            ),
         },
     )
+

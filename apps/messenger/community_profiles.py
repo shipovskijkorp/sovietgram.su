@@ -13,6 +13,8 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
+from apps.accounts.privacy import is_blocked_between, privacy_allows
+
 from .forms import IMAGE_FORMATS, MEDIA_CONTENT_TYPES, _validate_inline_image
 from .models import (
     Chat,
@@ -98,12 +100,22 @@ def _membership(chat, user):
     return get_object_or_404(ChatParticipant, chat=chat, user=user)
 
 
-def _presence_text(user):
-    if user.is_online:
+def _presence_text(user, viewer=None):
+    exact = bool(
+        viewer
+        and getattr(viewer, "is_authenticated", False)
+        and privacy_allows(user, viewer, "last_seen")
+    )
+    if viewer and getattr(viewer, "pk", None) == user.pk:
+        exact = True
+
+    if exact and user.is_online:
         return "в сети"
     if not user.last_seen_at:
         return "был(а) давно"
     delta = timezone.now() - user.last_seen_at
+    if not exact:
+        return "был(а) недавно" if delta < timedelta(days=3) else "был(а) давно"
     seen = timezone.localtime(user.last_seen_at)
     if delta.total_seconds() < 15 * 60:
         return "был(а) недавно"
@@ -177,8 +189,12 @@ def _member_payload(actor, membership):
         "display_name": user.display_name,
         "username": user.username,
         "initials": user.initials,
-        "avatar_url": user.avatar.url if user.avatar else "",
-        "presence": _presence_text(user),
+        "avatar_url": (
+            user.avatar.url
+            if user.avatar and privacy_allows(user, actor.user, "profile_photo")
+            else ""
+        ),
+        "presence": _presence_text(user, actor.user),
         "role": membership.role,
         "role_label": membership.get_role_display(),
         "profile_url": reverse("accounts:public_profile", args=[user.username]),
@@ -624,7 +640,13 @@ def community_member_candidates(request, chat_id):
             | Q(first_name__icontains=query)
             | Q(last_name__icontains=query)
         )
-    users = list(users.order_by("-last_seen_at", "username")[:40])
+    users = list(users.order_by("-last_seen_at", "username")[:80])
+    users = [
+        user
+        for user in users
+        if not is_blocked_between(request.user, user)
+        and privacy_allows(user, request.user, "invites")
+    ][:40]
     return JsonResponse(
         {
             "ok": True,
@@ -633,8 +655,12 @@ def community_member_candidates(request, chat_id):
                     "display_name": user.display_name,
                     "username": user.username,
                     "initials": user.initials,
-                    "avatar_url": user.avatar.url if user.avatar else "",
-                    "presence": _presence_text(user),
+                    "avatar_url": (
+                        user.avatar.url
+                        if user.avatar and privacy_allows(user, request.user, "profile_photo")
+                        else ""
+                    ),
+                    "presence": _presence_text(user, request.user),
                 }
                 for user in users
             ],
@@ -667,6 +693,13 @@ def community_member_action(request, chat_id):
     if action == "add":
         if target is not None:
             return _json_error("Пользователь уже состоит здесь.")
+        if is_blocked_between(request.user, target_user):
+            return _json_error("Пользователь недоступен из-за блокировки.", status=403)
+        if not privacy_allows(target_user, request.user, "invites"):
+            return _json_error(
+                "Пользователь запретил добавлять себя в группы и каналы.",
+                status=403,
+            )
         ChatParticipant.objects.create(
             chat=chat,
             user=target_user,

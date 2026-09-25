@@ -13,7 +13,12 @@ def get_or_create_direct_chat(first_user, second_user):
         direct_key = f"self:{first_user.pk}"
         chat, created = Chat.objects.get_or_create(
             direct_key=direct_key,
-            defaults={"type": Chat.Type.PRIVATE},
+            defaults={
+                "type": Chat.Type.PRIVATE,
+                "auto_delete_seconds": int(
+                    getattr(first_user, "default_auto_delete_seconds", 0) or 0
+                ),
+            },
         )
         if created:
             ChatParticipant.objects.create(
@@ -27,7 +32,12 @@ def get_or_create_direct_chat(first_user, second_user):
     direct_key = f"{low_id}:{high_id}"
     chat, created = Chat.objects.get_or_create(
         direct_key=direct_key,
-        defaults={"type": Chat.Type.PRIVATE},
+        defaults={
+            "type": Chat.Type.PRIVATE,
+            "auto_delete_seconds": int(
+                getattr(first_user, "default_auto_delete_seconds", 0) or 0
+            ),
+        },
     )
     if created:
         ChatParticipant.objects.bulk_create(
@@ -407,3 +417,18 @@ def serialize_pins(chat):
         }
         for pin in pins
     ]
+
+
+
+def purge_expired_messages(limit=100):
+    now = timezone.now()
+    expired = list(
+        Message.objects.filter(
+            expires_at__isnull=False,
+            expires_at__lte=now,
+        ).order_by("expires_at", "id")[:limit]
+    )
+    for message in expired:
+        delete_message_content(message)
+        message.delete()
+    return len(expired)
