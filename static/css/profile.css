@@ -849,7 +849,7 @@ body[data-theme="dark"] .profile-account-add:hover {
 }
 
 
-/* Stalingram palette for multi-account switcher */
+/* Sovietgram palette for multi-account switcher */
 .profile-account-list {
   background: #fff8ee;
   border-bottom-color: rgba(92, 63, 40, .10);
@@ -907,7 +907,7 @@ body[data-theme="dark"] .profile-account-badge {
 }
 
 
-/* Telegram Desktop profile geometry — Stalingram palette */
+/* Telegram Desktop profile geometry — Sovietgram palette */
 .user-profile-overlay {
   position: fixed;
   inset: 0;
@@ -1816,7 +1816,7 @@ body.has-profile-overlay {
   overflow: hidden;
 }
 
-/* Light palette keeps Telegram geometry, only Stalingram colors change. */
+/* Light palette keeps Telegram geometry, only Sovietgram colors change. */
 body:not([data-theme="dark"]) .tg-profile,
 body:not([data-theme="dark"]) .tg-profile-edit {
   border-color: rgba(88, 61, 38, .11);

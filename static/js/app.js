@@ -23,8 +23,8 @@ if (easterStar) {
   });
 }
 
-const NAVIGATION_STACK_KEY = "stalingram.navigation.stack.v1";
-const LAST_WORKSPACE_KEY = "stalingram.navigation.workspace.v1";
+const NAVIGATION_STACK_KEY = "sovietgram.navigation.stack.v1";
+const LAST_WORKSPACE_KEY = "sovietgram.navigation.workspace.v1";
 const MAX_NAVIGATION_DEPTH = 32;
 
 function currentInternalUrl() {

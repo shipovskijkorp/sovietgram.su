@@ -21,7 +21,7 @@ from .services import get_or_create_direct_chat
 
 
 class ChatFeatureTests(TestCase):
-    password = "Stalingram-test-1945"
+    password = "Sovietgram-test-1945"
 
     @classmethod
     def setUpClass(cls):
@@ -181,8 +181,8 @@ class ChatFeatureTests(TestCase):
             reverse("messenger:create_community"),
             {
                 "type": Chat.Type.CHANNEL,
-                "title": "Радио Stalingram",
-                "username": "radio_stalingram",
+                "title": "Радио Sovietgram",
+                "username": "radio_sovietgram",
                 "description": "Вести с цифровых полей.",
                 "members": "",
             },
@@ -192,10 +192,10 @@ class ChatFeatureTests(TestCase):
 
         search = self.client.get(
             reverse("messenger:contacts"),
-            {"q": "radio_stalingram"},
+            {"q": "radio_sovietgram"},
         )
-        self.assertContains(search, "Радио Stalingram")
-        self.assertContains(search, "@radio_stalingram")
+        self.assertContains(search, "Радио Sovietgram")
+        self.assertContains(search, "@radio_sovietgram")
 
         self.client.force_login(self.charlie)
         join = self.client.post(
@@ -233,11 +233,11 @@ class ChatFeatureTests(TestCase):
         self.client.force_login(self.alice)
         allowed = self.client.post(
             reverse("messenger:send_message", args=[channel.pk]),
-            {"text": "Говорит Stalingram."},
+            {"text": "Говорит Sovietgram."},
         )
         self.assertEqual(allowed.status_code, 302)
         self.assertTrue(
-            Message.objects.filter(chat=channel, text="Говорит Stalingram.").exists()
+            Message.objects.filter(chat=channel, text="Говорит Sovietgram.").exists()
         )
 
     def test_group_and_channel_pages_render_without_private_chat_assumptions(self):
@@ -555,7 +555,7 @@ class ChatFeatureTests(TestCase):
         self.assertEqual(by_file[0]["id"], file_message.pk)
 
     @override_settings(
-        STALINGRAM_RATE_LIMITS={
+        SOVIETGRAM_RATE_LIMITS={
             "send_message": {"limit": 2, "window": 60},
         }
     )
@@ -577,7 +577,7 @@ class ChatFeatureTests(TestCase):
         self.assertEqual(Message.objects.filter(chat=self.chat).count(), 2)
 
     @override_settings(
-        STALINGRAM_RATE_LIMITS={
+        SOVIETGRAM_RATE_LIMITS={
             "search_messages": {"limit": 2, "window": 60},
         }
     )
@@ -591,7 +591,7 @@ class ChatFeatureTests(TestCase):
         self.assertTrue(limited.json()["rate_limited"])
 
     @override_settings(
-        STALINGRAM_RATE_LIMITS={
+        SOVIETGRAM_RATE_LIMITS={
             "typing": {"limit": 2, "window": 60},
         }
     )
@@ -606,7 +606,7 @@ class ChatFeatureTests(TestCase):
 
     def test_wrong_http_method_does_not_consume_send_rate_limit(self):
         with override_settings(
-            STALINGRAM_RATE_LIMITS={
+            SOVIETGRAM_RATE_LIMITS={
                 "send_message": {"limit": 1, "window": 60},
             }
         ):

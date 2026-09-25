@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}{% if selected_chat %}{{ selected_chat.display_name_ui }} — Stalingram{% else %}Stalingram{% endif %}{% endblock %}
+{% block title %}{% if selected_chat %}{{ selected_chat.display_name_ui }} — Sovietgram{% else %}Sovietgram{% endif %}{% endblock %}
 {% block body_class %}app-body{% endblock %}
 {% block extra_head %}
 <link rel="stylesheet" href="{% static 'css/messenger.css' %}?v={{ static_version }}">
@@ -537,7 +537,7 @@
       {% csrf_token %}
       <button type="submit"><span class="tg-native-icon tg-native-icon--leave" aria-hidden="true"></span> Выйти из аккаунта</button>
     </form>
-    <small>Stalingram · связь трудящихся</small>
+    <small>Sovietgram · связь трудящихся</small>
   </div>
 </aside>
 

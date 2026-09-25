@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Настройки — Stalingram{% endblock %}
+{% block title %}Настройки — Sovietgram{% endblock %}
 {% block body_class %}profile-body{% endblock %}
 {% block extra_head %}<link rel="stylesheet" href="{% static 'css/settings.css' %}">{% endblock %}
 
@@ -10,7 +10,7 @@
   <aside class="settings-sidebar">
     <a class="settings-brand" href="{% url 'messenger:home' %}">
       <span class="brand__mark">★</span>
-      <span>STALINGRAM</span>
+      <span>SOVIETGRAM</span>
     </a>
 
     <div class="settings-user">
@@ -42,7 +42,7 @@
     <header class="settings-header">
       <a class="settings-back" href="{% url 'messenger:home' %}" aria-label="Назад к чатам"><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span></a>
       <div>
-        <p class="eyebrow">Stalingram</p>
+        <p class="eyebrow">Sovietgram</p>
         <h1>Настройки</h1>
       </div>
     </header>

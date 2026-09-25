@@ -12,7 +12,7 @@ from .models import User
 
 
 class ProfileTests(TestCase):
-    password = "Stalingram-test-1945"
+    password = "Sovietgram-test-1945"
 
     def setUp(self):
         self.user = User.objects.create_user(

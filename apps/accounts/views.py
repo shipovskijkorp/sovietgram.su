@@ -95,7 +95,7 @@ def _personal_channel_payload(channel, viewer=None):
     }
 
 
-class StalingramLoginView(LoginView):
+class SovietgramLoginView(LoginView):
     authentication_form = IdentifierAuthenticationForm
     template_name = "accounts/login.html"
     redirect_authenticated_user = True
@@ -106,7 +106,7 @@ class StalingramLoginView(LoginView):
         return response
 
 
-class StalingramLogoutView:
+class SovietgramLogoutView:
     @classmethod
     def as_view(cls):
         @login_required
@@ -122,7 +122,7 @@ class StalingramLogoutView:
         return view
 
 
-class StalingramPasswordChangeView(LoginRequiredMixin, PasswordChangeView):
+class SovietgramPasswordChangeView(LoginRequiredMixin, PasswordChangeView):
     template_name = "accounts/password_change.html"
     success_url = reverse_lazy("accounts:profile")
 

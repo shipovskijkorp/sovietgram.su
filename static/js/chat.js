@@ -824,7 +824,7 @@ function validateSelection(files, mode) {
   if (files.length > MAX_ATTACHMENTS) return `За раз можно отправить не больше ${MAX_ATTACHMENTS} файлов.`;
   let total = 0;
   for (const file of files) {
-    if (isGif(file)) return "GIF в Stalingram пока отключены.";
+    if (isGif(file)) return "GIF в Sovietgram пока отключены.";
     if (mode === "media" && !isMediaFile(file)) return "В режиме фото и видео поддерживаются PNG, JPEG, WebP, MP4, WebM и MOV.";
     if (file.size > MAX_FILE_SIZE) return `${file.name}: файл больше 25 МБ.`;
     total += file.size;

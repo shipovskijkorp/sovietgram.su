@@ -1,4 +1,4 @@
-# Stalingram
+# Sovietgram
 
 Мессенджер с привычной логикой Telegram, советской визуальной айдентикой и небольшими тематическими пасхалками.
 
@@ -103,7 +103,7 @@ python manage.py collectstatic --noinput
 python manage.py check --deploy
 ```
 
-4. Адаптировать пути и пользователя в `deploy/systemd/stalingram.service`.
-5. Установить `deploy/nginx/stalingram.conf` и подключить HTTPS.
+4. Адаптировать пути и пользователя в `deploy/systemd/sovietgram.service`.
+5. Установить `deploy/nginx/sovietgram.conf` и подключить HTTPS.
 
 Пользовательские вложения лежат в `var/media/messages/`, аватары — в `var/media/avatars/`. Архитектура позволяет позже заменить локальное media-хранилище на S3-совместимое.

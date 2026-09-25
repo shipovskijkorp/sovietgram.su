@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Профиль — Stalingram{% endblock %}
+{% block title %}Профиль — Sovietgram{% endblock %}
 {% block body_class %}profile-body{% endblock %}
 
 {% block content %}
@@ -9,7 +9,7 @@
   <aside class="settings-sidebar">
     <a class="settings-brand" href="{% url 'messenger:home' %}">
       <span class="brand__mark">★</span>
-      <span>STALINGRAM</span>
+      <span>SOVIETGRAM</span>
     </a>
 
     <div class="settings-user">
@@ -81,7 +81,7 @@
         <div class="settings-card__heading">
           <div>
             <h2>Публичный профиль</h2>
-            <p>Эти данные будут видны другим пользователям Stalingram.</p>
+            <p>Эти данные будут видны другим пользователям Sovietgram.</p>
           </div>
           <button class="link-button" type="button" data-copy-profile data-profile-url="{% url 'accounts:public_profile' request.user.username %}">Скопировать ссылку</button>
         </div>

@@ -11,7 +11,7 @@ DEBUG = os.getenv("DJANGO_DEBUG", "1").lower() in {"1", "true", "yes", "on"}
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-only-change-me")
 
 if not DEBUG and SECRET_KEY == "dev-only-change-me":
-    raise ImproperlyConfigured("Set DJANGO_SECRET_KEY before starting Stalingram in production.")
+    raise ImproperlyConfigured("Set DJANGO_SECRET_KEY before starting Sovietgram in production.")
 
 
 def env_list(name, default=""):
@@ -21,7 +21,7 @@ def env_list(name, default=""):
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost")
 CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS")
 
-STALINGRAM_RATE_LIMITS = {
+SOVIETGRAM_RATE_LIMITS = {
     "send_message": {
         "limit": int(os.getenv("RATE_LIMIT_SEND_PER_MINUTE", "30")),
         "window": 60,
@@ -86,8 +86,8 @@ if os.getenv("DB_ENGINE", "sqlite").lower() in {"postgres", "postgresql"}:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
-            "NAME": os.getenv("POSTGRES_DB", "stalingram"),
-            "USER": os.getenv("POSTGRES_USER", "stalingram"),
+            "NAME": os.getenv("POSTGRES_DB", "sovietgram"),
+            "USER": os.getenv("POSTGRES_USER", "sovietgram"),
             "PASSWORD": os.getenv("POSTGRES_PASSWORD", ""),
             "HOST": os.getenv("POSTGRES_HOST", "127.0.0.1"),
             "PORT": os.getenv("POSTGRES_PORT", "5432"),

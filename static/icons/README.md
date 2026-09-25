@@ -3,11 +3,11 @@
 The files under `static/icons/telegram-original/` are copied byte-for-byte
 from the Telegram Desktop 7.2.9 source archive supplied for this project.
 
-Stalingram does not redraw or trace these icons. Telegram Desktop ships many
-interface icons as opaque grayscale raster masks; Stalingram uses those same
+Sovietgram does not redraw or trace these icons. Telegram Desktop ships many
+interface icons as opaque grayscale raster masks; Sovietgram uses those same
 PNG files as CSS luminance masks. This preserves Telegram's original geometry,
 optical bounds and antialiasing while letting the interface apply the
-Stalingram palette.
+Sovietgram palette.
 
 The previous handcrafted `telegram.svg` sprite was removed after the original
 assets were integrated.

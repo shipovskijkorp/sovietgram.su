@@ -11,8 +11,8 @@ class AccountFlowTests(TestCase):
             {
                 "username": "ivan",
                 "email": "ivan@example.com",
-                "password1": "Stalingram-test-1945",
-                "password2": "Stalingram-test-1945",
+                "password1": "Sovietgram-test-1945",
+                "password2": "Sovietgram-test-1945",
             },
         )
         self.assertRedirects(response, reverse("messenger:home"))
@@ -20,30 +20,30 @@ class AccountFlowTests(TestCase):
         self.assertEqual(int(self.client.session["_auth_user_id"]), User.objects.get(username="ivan").pk)
 
     def test_login_accepts_username(self):
-        User.objects.create_user("zhukov", "zhukov@example.com", "Stalingram-test-1945")
+        User.objects.create_user("zhukov", "zhukov@example.com", "Sovietgram-test-1945")
         response = self.client.post(
             reverse("accounts:login"),
-            {"username": "zhukov", "password": "Stalingram-test-1945"},
+            {"username": "zhukov", "password": "Sovietgram-test-1945"},
         )
         self.assertRedirects(response, reverse("messenger:home"))
 
     def test_login_accepts_email(self):
-        User.objects.create_user("rokossovsky", "marshal@example.com", "Stalingram-test-1945")
+        User.objects.create_user("rokossovsky", "marshal@example.com", "Sovietgram-test-1945")
         response = self.client.post(
             reverse("accounts:login"),
-            {"username": "marshal@example.com", "password": "Stalingram-test-1945"},
+            {"username": "marshal@example.com", "password": "Sovietgram-test-1945"},
         )
         self.assertRedirects(response, reverse("messenger:home"))
 
     def test_registration_rejects_duplicate_email_case_insensitively(self):
-        User.objects.create_user("first", "user@example.com", "Stalingram-test-1945")
+        User.objects.create_user("first", "user@example.com", "Sovietgram-test-1945")
         response = self.client.post(
             reverse("accounts:register"),
             {
                 "username": "second",
                 "email": "USER@example.com",
-                "password1": "Stalingram-test-1945",
-                "password2": "Stalingram-test-1945",
+                "password1": "Sovietgram-test-1945",
+                "password2": "Sovietgram-test-1945",
             },
         )
         self.assertEqual(response.status_code, 200)
@@ -55,7 +55,7 @@ class UserSettingsTests(TestCase):
         self.user = User.objects.create_user(
             "settings_user",
             "settings@example.com",
-            "Stalingram-test-1945",
+            "Sovietgram-test-1945",
         )
         self.client.force_login(self.user)
 

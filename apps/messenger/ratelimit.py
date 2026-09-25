@@ -13,7 +13,7 @@ DEFAULT_RATE_LIMITS = {
 
 
 def _limit_config(scope):
-    configured = getattr(settings, "STALINGRAM_RATE_LIMITS", {})
+    configured = getattr(settings, "SOVIETGRAM_RATE_LIMITS", {})
     values = DEFAULT_RATE_LIMITS[scope].copy()
     values.update(configured.get(scope, {}))
     return max(1, int(values["limit"])), max(1, int(values["window"]))
@@ -30,7 +30,7 @@ def rate_limit(scope):
             identity = getattr(request.user, "pk", None) or request.META.get(
                 "REMOTE_ADDR", "anonymous"
             )
-            key = f"stalingram:rate:{scope}:{identity}"
+            key = f"sovietgram:rate:{scope}:{identity}"
 
             if cache.add(key, 1, timeout=window):
                 count = 1

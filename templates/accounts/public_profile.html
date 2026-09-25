@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}{{ profile_user.display_name }} — Stalingram{% endblock %}
+{% block title %}{{ profile_user.display_name }} — Sovietgram{% endblock %}
 {% block body_class %}profile-body{% endblock %}
 {% block extra_head %}<link rel="stylesheet" href="{% static 'css/messenger.css' %}">{% endblock %}
 
@@ -74,7 +74,7 @@
         <p>@{{ profile_user.username }}</p>
       </div>
       <div>
-        <span class="public-profile-label">В Stalingram с</span>
+        <span class="public-profile-label">В Sovietgram с</span>
         <p>{{ profile_user.date_joined|date:'d.m.Y' }}</p>
       </div>
     </section>

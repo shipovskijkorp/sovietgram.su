@@ -17,7 +17,7 @@ VALID_PNG = base64.b64decode(
 
 
 class MessengerTests(TestCase):
-    password = "Stalingram-test-1945"
+    password = "Sovietgram-test-1945"
 
     @classmethod
     def setUpClass(cls):

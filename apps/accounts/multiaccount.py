@@ -8,7 +8,7 @@ from django.utils.crypto import constant_time_compare
 from django.middleware.csrf import rotate_token
 
 
-MULTI_ACCOUNT_KEY = "stalingram_accounts_v1"
+MULTI_ACCOUNT_KEY = "sovietgram_accounts_v1"
 MAX_ACCOUNTS = 8
 
 

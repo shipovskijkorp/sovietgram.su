@@ -111,7 +111,7 @@ class MessageForm(forms.Form):
             extension = Path(uploaded.name).suffix.lower()
             content_type = (getattr(uploaded, "content_type", "") or "").lower()
             if extension == ".gif" or content_type == "image/gif":
-                raise forms.ValidationError("GIF в Stalingram пока отключены.")
+                raise forms.ValidationError("GIF в Sovietgram пока отключены.")
             if mode == self.MODE_MEDIA:
                 if extension not in MEDIA_EXTENSIONS:
                     raise forms.ValidationError(

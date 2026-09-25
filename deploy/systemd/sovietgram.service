@@ -1,0 +1,16 @@
+[Unit]
+Description=Sovietgram Django application
+After=network.target
+
+[Service]
+Type=simple
+User=sovietgram
+Group=www-data
+WorkingDirectory=/opt/sovietgram
+EnvironmentFile=/opt/sovietgram/.env
+ExecStart=/opt/sovietgram/.venv/bin/gunicorn config.wsgi:application --bind 127.0.0.1:8000 --workers 2 --timeout 60
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

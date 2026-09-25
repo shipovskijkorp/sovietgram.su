@@ -6,7 +6,7 @@ from .models import User
 
 
 class MultiAccountTests(TestCase):
-    password = "Stalingram-test-1945"
+    password = "Sovietgram-test-1945"
 
     def setUp(self):
         self.first = User.objects.create_user(
@@ -35,7 +35,7 @@ class MultiAccountTests(TestCase):
         self.assertEqual(int(session[SESSION_KEY]), self.second.pk)
         account_ids = {
             int(item["user_id"])
-            for item in session["stalingram_accounts_v1"]
+            for item in session["sovietgram_accounts_v1"]
         }
         self.assertEqual(account_ids, {self.first.pk, self.second.pk})
 
@@ -66,7 +66,7 @@ class MultiAccountTests(TestCase):
         response = self.client.post(reverse("accounts:logout"))
         self.assertRedirects(response, reverse("messenger:home"))
         self.assertEqual(int(self.client.session[SESSION_KEY]), self.first.pk)
-        remaining = self.client.session["stalingram_accounts_v1"]
+        remaining = self.client.session["sovietgram_accounts_v1"]
         self.assertEqual([int(item["user_id"]) for item in remaining], [self.first.pk])
 
     def test_sidebar_uses_single_full_header_account_toggle(self):
