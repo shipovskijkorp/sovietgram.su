@@ -112,7 +112,12 @@
   </aside>
 
   {% if selected_chat %}
-    <main class="conversation conversation--chat" data-chat-id="{{ selected_chat.pk }}" data-chat-url="{% url 'messenger:chat' selected_chat.pk %}">
+    <main class="conversation conversation--chat"
+          data-chat-id="{{ selected_chat.pk }}"
+          data-chat-url="{% url 'messenger:chat' selected_chat.pk %}"
+          data-channel-signatures="{{ selected_chat.signatures_enabled|yesno:'true,false' }}"
+          data-can-send-text="{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_messages %}false{% else %}true{% endif %}"
+          data-can-send-media="{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_media %}false{% else %}true{% endif %}">
       <header class="conversation-header">
         <a class="icon-button mobile-back" href="{% if show_archived %}{% url 'messenger:home' %}?archived=1{% else %}{% url 'messenger:home' %}{% endif %}" aria-label="Назад"><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span></a>
         {% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}
@@ -289,6 +294,7 @@
 
               {% if message.text %}<p class="message__text">{{ message.text|urlize|linebreaksbr }}</p>{% endif %}
               <footer>
+                {% if selected_chat.type == 'channel' and selected_chat.signatures_enabled %}<span class="message-channel-signature">{{ message.sender.display_name }}</span>{% endif %}
                 {% if message.edited_at %}<span class="message-edited">изм.</span>{% endif %}
                 <time>{{ message.created_at|date:'H:i' }}</time>
                 {% if message.sender_id == request.user.pk %}<span class="message-check">{% if message.is_read_ui %}✓✓{% else %}✓{% endif %}</span>{% endif %}
@@ -308,7 +314,7 @@
           <button id="composerReplyClose" type="button" aria-label="Отменить ответ"><span class="tg-native-icon tg-native-icon--close tg-native-icon--compact" aria-hidden="true"></span></button>
         </div>
         <input id="replyToInput" type="hidden" name="reply_to" value="">
-        <div class="attachment-control" id="attachmentControl">
+        <div class="attachment-control" id="attachmentControl"{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_media %} hidden{% endif %}>
           <button class="composer__attach composer__attach-button" id="attachmentButton" type="button" aria-label="Прикрепить" aria-expanded="false" aria-controls="attachmentMenu" title="Прикрепить"><span class="tg-native-icon tg-native-icon--attach" aria-hidden="true"></span></button>
           <div class="attachment-menu" id="attachmentMenu" role="menu" hidden>
             <button type="button" role="menuitem" data-attachment-mode="media">
@@ -325,12 +331,12 @@
         <input id="fileAttachmentsInput" class="visually-hidden" type="file" multiple>
         <input id="attachmentModeInput" type="hidden" name="attachment_mode" value="media">
         <div class="composer__field">
-          <textarea id="messageInput" name="text" rows="1" maxlength="4096" placeholder="Сообщение" autocomplete="off">{{ active_membership.draft_text }}</textarea>
+          <textarea id="messageInput" name="text" rows="1" maxlength="4096" placeholder="{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_messages %}Можно отправлять только медиа{% else %}Сообщение{% endif %}" autocomplete="off"{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_messages %} readonly{% endif %}>{{ active_membership.draft_text }}</textarea>
         </div>
         <button class="send-button" id="sendButton" type="submit" aria-label="Отправить"><span class="tg-native-icon tg-native-icon--send" aria-hidden="true"></span></button>
       </form>
       {% else %}
-      <div class="channel-readonly"><span>☭</span><strong>Только чтение</strong><small>Публиковать здесь могут владелец и администраторы канала.</small></div>
+      <div class="channel-readonly"><span>☭</span><strong>Только чтение</strong><small>{% if selected_chat.type == 'channel' %}Публиковать здесь могут владелец и администраторы канала.{% else %}Администраторы запретили обычным участникам отправлять сообщения и медиа.{% endif %}</small></div>
       {% endif %}
 
       <div class="chat-drop-overlay" id="chatDropOverlay" hidden aria-hidden="true">
@@ -375,7 +381,9 @@
   <button type="button" data-message-action="copy"><span class="tg-native-icon tg-native-icon--copy" aria-hidden="true"></span>Копировать текст</button>
   <button type="button" data-message-action="edit"><span class="tg-native-icon tg-native-icon--edit" aria-hidden="true"></span>Изменить</button>
   <button type="button" data-message-action="forward"><span class="tg-native-icon tg-native-icon--forward" aria-hidden="true"></span>Переслать</button>
+  {% if selected_chat.type == 'private' or active_membership.role != 'member' or selected_chat.type == 'group' and selected_chat.members_can_pin_messages %}
   <button type="button" data-message-action="pin"><span class="tg-native-icon tg-native-icon--pin" aria-hidden="true"></span><b id="messagePinLabel">Закрепить</b></button>
+  {% endif %}
   <button class="message-context-menu__danger" type="button" data-message-action="delete"><span class="tg-native-icon tg-native-icon--clear" aria-hidden="true"></span>Удалить сообщение</button>
 </div>
 
@@ -648,4 +656,5 @@
 <script src="{% static 'js/messenger.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/chat.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/community-profile.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/community-settings.js' %}?v={{ static_version }}"></script>
 {% endblock %}

@@ -62,12 +62,16 @@
       </section>
 
       <section class="telegram-section">
-        <div class="telegram-section__title">Каналы</div>
+        <div class="telegram-section__title">Сообщества</div>
         <div class="people-list people-list--flat">
           {% for channel in channel_results %}
             <article class="person-row person-row--telegram">
               <span class="person-row__identity">
-                <span class="person-row__avatar person-row__avatar--fallback">К</span>
+                {% if channel.avatar %}
+                  <img class="person-row__avatar" src="{{ channel.avatar.url }}" alt="">
+                {% else %}
+                  <span class="person-row__avatar person-row__avatar--fallback">{% if channel.type == 'channel' %}К{% else %}Г{% endif %}</span>
+                {% endif %}
                 <span>
                   <strong>{{ channel.title }}</strong>
                   <small>@{{ channel.username }}{% if channel.description %} · {{ channel.description|truncatechars:60 }}{% endif %}</small>
@@ -77,12 +81,12 @@
                 <a class="telegram-row-button" href="{% url 'messenger:chat' channel.pk %}">Открыть</a>
               {% else %}
                 <form method="post" action="{% url 'messenger:join_public_chat' channel.username %}">
-                  {% csrf_token %}<button class="telegram-row-button" type="submit">Подписаться</button>
+                  {% csrf_token %}<button class="telegram-row-button" type="submit">{% if channel.type == 'channel' %}Подписаться{% else %}Вступить{% endif %}</button>
                 </form>
               {% endif %}
             </article>
           {% empty %}
-            <div class="people-empty">Каналов по такому адресу нет.</div>
+            <div class="people-empty">Сообществ по такому адресу нет.</div>
           {% endfor %}
         </div>
       </section>

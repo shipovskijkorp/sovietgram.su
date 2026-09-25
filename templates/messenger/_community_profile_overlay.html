@@ -1,15 +1,23 @@
 <div class="community-profile-backdrop" id="communityProfileBackdrop" hidden></div>
 <aside class="community-profile" id="communityProfile"
        data-profile-url="{% url 'messenger:community_profile' selected_chat.pk %}"
+       data-settings-url="{% url 'messenger:community_settings' selected_chat.pk %}"
        aria-hidden="true" hidden>
   <header class="community-profile__topbar">
     <button class="community-profile__topbar-button" id="communityProfileClose" type="button" aria-label="Закрыть информацию">
       <span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span>
     </button>
     <strong>Информация</strong>
-    <button class="community-profile__topbar-button" id="communityProfileEdit" type="button" aria-label="Изменить" title="Изменить" hidden>
-      <span class="tg-native-icon tg-native-icon--edit" aria-hidden="true"></span>
-    </button>
+    <span class="community-profile__topbar-actions">
+      {% if active_membership.role == 'owner' or active_membership.role == 'admin' %}
+      <button class="community-profile__topbar-button" id="communityProfileSettingsOpen" type="button" aria-label="Управление" title="Управление">
+        <span class="tg-native-icon tg-native-icon--settings" aria-hidden="true"></span>
+      </button>
+      {% endif %}
+      <button class="community-profile__topbar-button" id="communityProfileEdit" type="button" aria-label="Изменить" title="Изменить" hidden>
+        <span class="tg-native-icon tg-native-icon--edit" aria-hidden="true"></span>
+      </button>
+    </span>
   </header>
 
   <div class="community-profile__view" id="communityProfileView">
@@ -131,6 +139,208 @@
       <button type="submit" id="communityProfileEditorSave">Сохранить</button>
     </footer>
   </form>
+
+  {% if active_membership.role == 'owner' or active_membership.role == 'admin' %}
+  <section class="community-settings" id="communitySettings" hidden>
+    <header class="community-settings__header">
+      <button id="communitySettingsClose" type="button" aria-label="Назад">
+        <span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span>
+      </button>
+      <strong id="communitySettingsTitle">Управление</strong>
+      <span></span>
+    </header>
+
+    <div class="community-settings__overview" id="communitySettingsOverview">
+      <section class="community-settings__identity">
+        <strong id="communitySettingsCommunityName">{{ selected_chat.display_name_ui }}</strong>
+        <small id="communitySettingsCommunityMeta">{{ selected_chat.status_ui }}</small>
+      </section>
+
+      <div class="community-settings__group">
+        <button class="community-settings-row" type="button" data-community-settings-open="type">
+          <span class="community-settings-row__icon"><span class="tg-native-icon tg-native-icon--lock" aria-hidden="true"></span></span>
+          <span class="community-settings-row__copy">
+            <strong id="communitySettingsTypeLabel">{% if selected_chat.type == 'channel' %}Тип канала{% else %}Тип группы{% endif %}</strong>
+            <small id="communitySettingsTypeSummary"></small>
+          </span>
+          <b>›</b>
+        </button>
+
+        {% if selected_chat.type == 'group' %}
+        <button class="community-settings-row" type="button" data-community-settings-open="permissions">
+          <span class="community-settings-row__icon"><span class="tg-native-icon tg-native-icon--settings" aria-hidden="true"></span></span>
+          <span class="community-settings-row__copy">
+            <strong>Разрешения</strong>
+            <small id="communitySettingsPermissionsSummary"></small>
+          </span>
+          <b>›</b>
+        </button>
+        {% else %}
+        <label class="community-settings-row community-settings-row--toggle">
+          <span class="community-settings-row__icon"><span class="tg-native-icon tg-native-icon--edit" aria-hidden="true"></span></span>
+          <span class="community-settings-row__copy">
+            <strong>Подписывать сообщения</strong>
+            <small>Показывать имя автора под публикациями</small>
+          </span>
+          <span class="community-settings-switch">
+            <input id="communitySettingsSignatures" type="checkbox">
+            <span><i></i></span>
+          </span>
+        </label>
+        {% endif %}
+      </div>
+
+      <div class="community-settings__group">
+        <button class="community-settings-row" type="button" data-community-settings-open="invites">
+          <span class="community-settings-row__icon"><span class="tg-native-icon tg-native-icon--copy" aria-hidden="true"></span></span>
+          <span class="community-settings-row__copy">
+            <strong>Ссылки-приглашения</strong>
+            <small id="communitySettingsInviteSummary"></small>
+          </span>
+          <b>›</b>
+        </button>
+        <button class="community-settings-row" type="button" data-community-settings-open="admins">
+          <span class="community-settings-row__icon"><span class="tg-native-icon tg-native-icon--profile" aria-hidden="true"></span></span>
+          <span class="community-settings-row__copy">
+            <strong>Администраторы</strong>
+            <small id="communitySettingsAdminSummary"></small>
+          </span>
+          <b>›</b>
+        </button>
+        <button class="community-settings-row" type="button" data-community-settings-open="members">
+          <span class="community-settings-row__icon"><span class="tg-native-icon tg-native-icon--groups" aria-hidden="true"></span></span>
+          <span class="community-settings-row__copy">
+            <strong id="communitySettingsMembersLabel">{% if selected_chat.type == 'channel' %}Подписчики{% else %}Участники{% endif %}</strong>
+            <small id="communitySettingsMemberSummary"></small>
+          </span>
+          <b>›</b>
+        </button>
+        <button class="community-settings-row" type="button" data-community-settings-open="log">
+          <span class="community-settings-row__icon"><span class="tg-native-icon tg-native-icon--info" aria-hidden="true"></span></span>
+          <span class="community-settings-row__copy">
+            <strong>Недавние действия</strong>
+            <small>Изменения настроек и состава</small>
+          </span>
+          <b>›</b>
+        </button>
+      </div>
+
+      {% if active_membership.role == 'owner' %}
+      <button class="community-settings__delete" id="communitySettingsDelete" type="button">
+        <span class="tg-native-icon tg-native-icon--clear" aria-hidden="true"></span>
+        <strong>{% if selected_chat.type == 'channel' %}Удалить канал{% else %}Удалить группу{% endif %}</strong>
+      </button>
+      {% endif %}
+    </div>
+
+    <section class="community-settings__subview" data-community-settings-view="type" hidden>
+      <header class="community-settings__subheader">
+        <button type="button" data-community-settings-back><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span></button>
+        <strong id="communitySettingsTypeTitle">Тип сообщества</strong>
+        <span></span>
+      </header>
+      <form class="community-settings__form" id="communitySettingsTypeForm">
+        <label class="community-settings-choice">
+          <input type="radio" name="community_settings_visibility" value="public">
+          <span class="community-settings-radio"></span>
+          <span><strong>Публичное</strong><small>Его можно найти по адресу и вступить без приглашения.</small></span>
+        </label>
+        <label class="community-settings-choice">
+          <input type="radio" name="community_settings_visibility" value="private">
+          <span class="community-settings-radio"></span>
+          <span><strong>Частное</strong><small>Вступление только по ссылке-приглашению или через администратора.</small></span>
+        </label>
+        <label class="community-settings-field" id="communitySettingsUsernameField">
+          <span>Публичная ссылка</span>
+          <div><b>@</b><input id="communitySettingsUsername" type="text" maxlength="64" autocomplete="off"></div>
+        </label>
+        <p class="community-settings__error" id="communitySettingsTypeError" hidden></p>
+        <footer><button type="submit">Сохранить</button></footer>
+      </form>
+    </section>
+
+    {% if selected_chat.type == 'group' %}
+    <section class="community-settings__subview" data-community-settings-view="permissions" hidden>
+      <header class="community-settings__subheader">
+        <button type="button" data-community-settings-back><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span></button>
+        <strong>Разрешения</strong>
+        <span></span>
+      </header>
+      <form class="community-settings__form" id="communitySettingsPermissionsForm">
+        <p class="community-settings__hint">Что могут делать обычные участники группы.</p>
+        <label class="community-settings-toggle-row"><span><strong>Отправлять сообщения</strong></span><span class="community-settings-switch"><input name="send_messages" type="checkbox"><span><i></i></span></span></label>
+        <label class="community-settings-toggle-row"><span><strong>Отправлять медиа и файлы</strong></span><span class="community-settings-switch"><input name="send_media" type="checkbox"><span><i></i></span></span></label>
+        <label class="community-settings-toggle-row"><span><strong>Отправлять ссылки</strong></span><span class="community-settings-switch"><input name="send_links" type="checkbox"><span><i></i></span></span></label>
+        <label class="community-settings-toggle-row"><span><strong>Добавлять участников</strong></span><span class="community-settings-switch"><input name="add_members" type="checkbox"><span><i></i></span></span></label>
+        <label class="community-settings-toggle-row"><span><strong>Закреплять сообщения</strong></span><span class="community-settings-switch"><input name="pin_messages" type="checkbox"><span><i></i></span></span></label>
+        <label class="community-settings-toggle-row community-settings-toggle-row--history">
+          <span><strong>История для новых участников</strong><small>Если выключено, они увидят только сообщения после вступления.</small></span>
+          <span class="community-settings-switch"><input name="history_visible" type="checkbox"><span><i></i></span></span>
+        </label>
+        <label class="community-settings-field">
+          <span>Медленный режим</span>
+          <select name="slow_mode_seconds" id="communitySettingsSlowMode">
+            <option value="0">Выкл.</option>
+            <option value="10">10 секунд</option>
+            <option value="30">30 секунд</option>
+            <option value="60">1 минута</option>
+            <option value="300">5 минут</option>
+            <option value="900">15 минут</option>
+            <option value="3600">1 час</option>
+          </select>
+        </label>
+        <p class="community-settings__error" id="communitySettingsPermissionsError" hidden></p>
+        <footer><button type="submit">Сохранить</button></footer>
+      </form>
+    </section>
+    {% endif %}
+
+    <section class="community-settings__subview" data-community-settings-view="invites" hidden>
+      <header class="community-settings__subheader">
+        <button type="button" data-community-settings-back><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span></button>
+        <strong>Ссылки-приглашения</strong>
+        <button class="community-settings__header-action" id="communitySettingsInviteCreateOpen" type="button">Создать</button>
+      </header>
+      <form class="community-settings__invite-form" id="communitySettingsInviteForm" hidden>
+        <label><span>Название</span><input name="name" type="text" maxlength="64" placeholder="Например, Для друзей"></label>
+        <label><span>Срок действия</span><select name="expires_hours"><option value="0">Без срока</option><option value="1">1 час</option><option value="24">1 день</option><option value="168">1 неделя</option><option value="720">30 дней</option></select></label>
+        <label><span>Лимит вступлений</span><input name="usage_limit" type="number" min="0" max="100000" value="0"><small>0 — без лимита</small></label>
+        <div><button type="button" id="communitySettingsInviteCancel">Отмена</button><button type="submit">Создать ссылку</button></div>
+      </form>
+      <div class="community-settings-list" id="communitySettingsInviteList"></div>
+    </section>
+
+    <section class="community-settings__subview" data-community-settings-view="admins" hidden>
+      <header class="community-settings__subheader">
+        <button type="button" data-community-settings-back><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span></button>
+        <strong>Администраторы</strong><span></span>
+      </header>
+      <div class="community-settings-list" id="communitySettingsAdminList"></div>
+    </section>
+
+    <section class="community-settings__subview" data-community-settings-view="members" hidden>
+      <header class="community-settings__subheader">
+        <button type="button" data-community-settings-back><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span></button>
+        <strong id="communitySettingsMembersTitle">{% if selected_chat.type == 'channel' %}Подписчики{% else %}Участники{% endif %}</strong>
+        <button class="community-settings__header-action" id="communitySettingsAddMember" type="button">Добавить</button>
+      </header>
+      <div class="community-settings-member-search" id="communitySettingsMemberSearchWrap" hidden>
+        <span class="tg-native-icon tg-native-icon--search" aria-hidden="true"></span>
+        <input id="communitySettingsMemberSearch" type="search" placeholder="Найти пользователя" autocomplete="off">
+      </div>
+      <div class="community-settings-list" id="communitySettingsCandidateList" hidden></div>
+      <div class="community-settings-list" id="communitySettingsMemberList"></div>
+    </section>
+
+    <section class="community-settings__subview" data-community-settings-view="log" hidden>
+      <header class="community-settings__subheader">
+        <button type="button" data-community-settings-back><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span></button>
+        <strong>Недавние действия</strong><span></span>
+      </header>
+      <div class="community-settings-list community-settings-list--log" id="communitySettingsLogList"></div>
+    </section>
+  </section>
+  {% endif %}
 </aside>
 
 <div class="community-member-picker" id="communityMemberPicker" hidden>

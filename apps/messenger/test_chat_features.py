@@ -7,7 +7,16 @@ from django.urls import reverse
 
 from apps.accounts.models import User
 
-from .models import Chat, ChatParticipant, Contact, Message, MessageAttachment, PinnedMessage
+from .models import (
+    Chat,
+    ChatAdminLog,
+    ChatInviteLink,
+    ChatParticipant,
+    Contact,
+    Message,
+    MessageAttachment,
+    PinnedMessage,
+)
 from .services import get_or_create_direct_chat
 
 
@@ -842,3 +851,326 @@ class ChatFeatureTests(TestCase):
         self.assertFalse(
             ChatParticipant.objects.filter(chat=group, user=self.bob).exists()
         )
+
+
+    def test_group_and_channel_management_controls_render_for_admins(self):
+        group = Chat.objects.create(type=Chat.Type.GROUP, title="Управляемая группа")
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.alice,
+            role=ChatParticipant.Role.OWNER,
+        )
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.bob,
+            role=ChatParticipant.Role.MEMBER,
+        )
+
+        owner_page = self.client.get(reverse("messenger:chat", args=[group.pk]))
+        self.assertContains(owner_page, 'id="communityProfileSettingsOpen"', html=False)
+        self.assertContains(owner_page, 'id="communitySettingsPermissionsForm"', html=False)
+        self.assertContains(owner_page, "Ссылки-приглашения")
+        self.assertContains(owner_page, "Недавние действия")
+
+        self.client.force_login(self.bob)
+        member_page = self.client.get(reverse("messenger:chat", args=[group.pk]))
+        self.assertNotContains(member_page, 'id="communityProfileSettingsOpen"', html=False)
+        denied = self.client.get(reverse("messenger:community_settings", args=[group.pk]))
+        self.assertEqual(denied.status_code, 403)
+
+    def test_group_settings_permissions_are_enforced(self):
+        group = Chat.objects.create(type=Chat.Type.GROUP, title="Группа с правилами")
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.alice,
+            role=ChatParticipant.Role.OWNER,
+        )
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.bob,
+            role=ChatParticipant.Role.MEMBER,
+        )
+
+        response = self.client.post(
+            reverse("messenger:community_settings", args=[group.pk]),
+            {
+                "section": "permissions",
+                "send_messages": "1",
+                "add_members": "1",
+                "pin_messages": "1",
+                "history_visible": "1",
+                "slow_mode_seconds": "30",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        group.refresh_from_db()
+        self.assertTrue(group.members_can_send_messages)
+        self.assertFalse(group.members_can_send_media)
+        self.assertFalse(group.members_can_send_links)
+        self.assertTrue(group.members_can_add_members)
+        self.assertTrue(group.members_can_pin_messages)
+        self.assertEqual(group.slow_mode_seconds, 30)
+
+        self.client.force_login(self.bob)
+        linked = self.client.post(
+            reverse("messenger:send_message", args=[group.pk]),
+            {"text": "https://example.com"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(linked.status_code, 403)
+
+        media = SimpleUploadedFile(
+            "rules.pdf",
+            b"pdf",
+            content_type="application/pdf",
+        )
+        blocked_media = self.client.post(
+            reverse("messenger:send_message", args=[group.pk]),
+            {
+                "text": "",
+                "attachment_mode": "file",
+                "attachments": media,
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(blocked_media.status_code, 403)
+
+        first = self.client.post(
+            reverse("messenger:send_message", args=[group.pk]),
+            {"text": "Первое разрешённое"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(first.status_code, 200)
+        first_message = Message.objects.get(chat=group, text="Первое разрешённое")
+
+        pinned = self.client.post(
+            reverse("messenger:pin_message", args=[group.pk, first_message.pk]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(pinned.status_code, 200)
+        self.assertTrue(pinned.json()["pinned"])
+
+        slowed = self.client.post(
+            reverse("messenger:send_message", args=[group.pk]),
+            {"text": "Слишком быстро"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(slowed.status_code, 403)
+        self.assertIn("Retry-After", slowed)
+
+        candidate = self.client.get(
+            reverse("messenger:community_member_candidates", args=[group.pk]),
+            {"q": "charlie"},
+        )
+        self.assertEqual(candidate.status_code, 200)
+        added = self.client.post(
+            reverse("messenger:community_member_action", args=[group.pk]),
+            {"action": "add", "username": self.charlie.username},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(added.status_code, 200)
+        self.assertTrue(
+            ChatParticipant.objects.filter(chat=group, user=self.charlie).exists()
+        )
+
+    def test_hidden_history_only_applies_to_members_joining_after_setting_change(self):
+        group = Chat.objects.create(type=Chat.Type.GROUP, title="История группы")
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.alice,
+            role=ChatParticipant.Role.OWNER,
+        )
+        existing = ChatParticipant.objects.create(
+            chat=group,
+            user=self.bob,
+            role=ChatParticipant.Role.MEMBER,
+        )
+        old_message = Message.objects.create(
+            chat=group,
+            sender=self.alice,
+            text="Старое сообщение",
+        )
+
+        settings_response = self.client.post(
+            reverse("messenger:community_settings", args=[group.pk]),
+            {
+                "section": "permissions",
+                "send_messages": "1",
+                "send_media": "1",
+                "send_links": "1",
+                "slow_mode_seconds": "0",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(settings_response.status_code, 200)
+        group.refresh_from_db()
+        self.assertFalse(group.history_visible_to_new_members)
+
+        existing.refresh_from_db()
+        self.assertTrue(existing.can_see_pre_join_history)
+
+        self.client.force_login(self.bob)
+        existing_page = self.client.get(reverse("messenger:chat", args=[group.pk]))
+        self.assertContains(existing_page, old_message.text)
+
+        self.client.force_login(self.alice)
+        added = self.client.post(
+            reverse("messenger:community_member_action", args=[group.pk]),
+            {"action": "add", "username": self.charlie.username},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(added.status_code, 200)
+        new_membership = ChatParticipant.objects.get(chat=group, user=self.charlie)
+        self.assertFalse(new_membership.can_see_pre_join_history)
+
+        self.client.force_login(self.charlie)
+        new_page = self.client.get(reverse("messenger:chat", args=[group.pk]))
+        self.assertNotContains(new_page, old_message.text)
+
+        self.client.force_login(self.alice)
+        new_message = Message.objects.create(
+            chat=group,
+            sender=self.alice,
+            text="Новое сообщение",
+        )
+        self.client.force_login(self.charlie)
+        refreshed = self.client.get(reverse("messenger:chat", args=[group.pk]))
+        self.assertContains(refreshed, new_message.text)
+
+    def test_channel_signatures_setting_renders_author_name(self):
+        channel = Chat.objects.create(
+            type=Chat.Type.CHANNEL,
+            title="Подписанный эфир",
+            username="signed_air",
+        )
+        ChatParticipant.objects.create(
+            chat=channel,
+            user=self.alice,
+            role=ChatParticipant.Role.OWNER,
+        )
+        Message.objects.create(
+            chat=channel,
+            sender=self.alice,
+            text="Публикация",
+        )
+
+        changed = self.client.post(
+            reverse("messenger:community_settings", args=[channel.pk]),
+            {"section": "signatures", "enabled": "1"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(changed.status_code, 200)
+        channel.refresh_from_db()
+        self.assertTrue(channel.signatures_enabled)
+
+        page = self.client.get(reverse("messenger:chat", args=[channel.pk]))
+        self.assertContains(page, "message-channel-signature")
+        self.assertContains(page, self.alice.display_name)
+
+    def test_invite_links_join_limits_and_recent_actions(self):
+        group = Chat.objects.create(type=Chat.Type.GROUP, title="Группа по ссылке")
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.alice,
+            role=ChatParticipant.Role.OWNER,
+        )
+
+        created = self.client.post(
+            reverse("messenger:community_invite_action", args=[group.pk]),
+            {
+                "action": "create",
+                "name": "Одноразовая",
+                "expires_hours": "24",
+                "usage_limit": "1",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(created.status_code, 200)
+        invite = ChatInviteLink.objects.get(chat=group)
+        self.assertTrue(invite.is_active)
+
+        self.client.force_login(self.charlie)
+        joined = self.client.get(
+            reverse("messenger:join_invite", args=[invite.token])
+        )
+        self.assertRedirects(
+            joined,
+            reverse("messenger:chat", args=[group.pk]),
+            fetch_redirect_response=False,
+        )
+        self.assertTrue(
+            ChatParticipant.objects.filter(chat=group, user=self.charlie).exists()
+        )
+        invite.refresh_from_db()
+        self.assertEqual(invite.usage_count, 1)
+        self.assertFalse(invite.is_active)
+
+        self.client.force_login(self.alice)
+        settings_payload = self.client.get(
+            reverse("messenger:community_settings", args=[group.pk])
+        ).json()["settings"]
+        self.assertTrue(settings_payload["recent_actions"])
+        self.assertTrue(
+            ChatAdminLog.objects.filter(chat=group, action="join_invite").exists()
+        )
+
+    def test_group_can_be_made_public_and_found_in_community_search(self):
+        group = Chat.objects.create(type=Chat.Type.GROUP, title="Открытая группа")
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.alice,
+            role=ChatParticipant.Role.OWNER,
+        )
+
+        changed = self.client.post(
+            reverse("messenger:community_settings", args=[group.pk]),
+            {
+                "section": "type",
+                "visibility": "public",
+                "username": "open_group",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(changed.status_code, 200)
+        group.refresh_from_db()
+        self.assertEqual(group.username, "open_group")
+
+        search = self.client.get(
+            reverse("messenger:contacts"),
+            {"q": "open_group"},
+        )
+        self.assertContains(search, "Открытая группа")
+        self.assertContains(search, "Вступить")
+
+    def test_only_owner_can_delete_collective(self):
+        group = Chat.objects.create(type=Chat.Type.GROUP, title="Удаляемая группа")
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.alice,
+            role=ChatParticipant.Role.OWNER,
+        )
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.bob,
+            role=ChatParticipant.Role.ADMIN,
+        )
+
+        self.client.force_login(self.bob)
+        denied = self.client.post(
+            reverse("messenger:community_profile_action", args=[group.pk]),
+            {"action": "delete"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(denied.status_code, 403)
+        self.assertTrue(Chat.objects.filter(pk=group.pk).exists())
+
+        self.client.force_login(self.alice)
+        deleted = self.client.post(
+            reverse("messenger:community_profile_action", args=[group.pk]),
+            {"action": "delete"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(deleted.status_code, 200)
+        self.assertTrue(deleted.json()["deleted"])
+        self.assertFalse(Chat.objects.filter(pk=group.pk).exists())

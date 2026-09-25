@@ -257,6 +257,12 @@ function buildMessageArticle(message) {
   }
 
   const footer = document.createElement("footer");
+  if (conversation?.dataset.channelSignatures === "true") {
+    const signature = document.createElement("span");
+    signature.className = "message-channel-signature";
+    signature.textContent = message.sender_name || "";
+    footer.appendChild(signature);
+  }
   if (message.is_edited) {
     const edited = document.createElement("span");
     edited.className = "message-edited";
@@ -933,6 +939,10 @@ function autoSizeCaption() {
   mediaComposeCaption.style.height = `${Math.min(mediaComposeCaption.scrollHeight, 120)}px`;
 }
 function openMediaComposer(files, mode, preserveCaption = false) {
+  if (conversation?.dataset.canSendMedia === "false") {
+    notify("Администраторы запретили участникам отправлять медиа и файлы.");
+    return;
+  }
   const validationError = validateSelection(files, mode);
   if (validationError) { notify(validationError); return; }
   const oldCaption = mediaComposeCaption?.value || "";

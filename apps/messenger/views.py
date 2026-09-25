@@ -1,3 +1,4 @@
+import re
 from datetime import timedelta
 from pathlib import Path
 
@@ -17,7 +18,7 @@ from django.db.models import (
     Value,
 )
 from django.db.models.functions import Coalesce
-from django.http import FileResponse, HttpResponseForbidden, JsonResponse
+from django.http import FileResponse, Http404, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -148,6 +149,107 @@ def _base_message_queryset(chat):
     )
 
 
+_LINK_RE = re.compile(
+    r"(?:https?://\S+|www\.\S+|\b[\w.-]+\.[a-z]{2,}(?=[:/?#\s.,!?)]|$))",
+    re.IGNORECASE,
+)
+
+
+def _visible_message_queryset(chat, user):
+    queryset = _base_message_queryset(chat)
+    if chat.type != Chat.Type.PRIVATE:
+        membership = ChatParticipant.objects.get(chat=chat, user=user)
+        if (
+            not chat.history_visible_to_new_members
+            and not membership.can_see_pre_join_history
+        ):
+            queryset = queryset.filter(created_at__gte=membership.joined_at)
+    return queryset
+
+
+def _visible_pins_queryset(chat, user):
+    queryset = PinnedMessage.objects.filter(chat=chat, message__is_deleted=False)
+    if chat.type != Chat.Type.PRIVATE:
+        membership = ChatParticipant.objects.get(chat=chat, user=user)
+        if (
+            not chat.history_visible_to_new_members
+            and not membership.can_see_pre_join_history
+        ):
+            queryset = queryset.filter(message__created_at__gte=membership.joined_at)
+    return queryset
+
+
+def _posting_restriction(
+    chat,
+    membership,
+    text="",
+    has_attachments=False,
+    check_slow_mode=True,
+):
+    if membership.role in {ChatParticipant.Role.OWNER, ChatParticipant.Role.ADMIN}:
+        return None
+
+    if chat.type == Chat.Type.CHANNEL:
+        return ("Публиковать в канале могут только администраторы.", 0)
+
+    if chat.type != Chat.Type.GROUP:
+        return None
+
+    if text and not has_attachments and not chat.members_can_send_messages:
+        return ("Администраторы запретили участникам отправлять текстовые сообщения.", 0)
+    if has_attachments and not chat.members_can_send_media:
+        return ("Администраторы запретили участникам отправлять медиа и файлы.", 0)
+    if text and not chat.members_can_send_links and _LINK_RE.search(text):
+        return ("Администраторы запретили участникам отправлять ссылки.", 0)
+
+    if check_slow_mode and chat.slow_mode_seconds:
+        last_sent = (
+            Message.objects.filter(
+                chat=chat,
+                sender=membership.user,
+                is_deleted=False,
+            )
+            .order_by("-created_at")
+            .values_list("created_at", flat=True)
+            .first()
+        )
+        if last_sent:
+            remaining = chat.slow_mode_seconds - int(
+                (timezone.now() - last_sent).total_seconds()
+            )
+            if remaining > 0:
+                return (f"Медленный режим: подождите ещё {remaining} сек.", remaining)
+    return None
+
+
+def _hide_inaccessible_reply_previews(chat, user, messages):
+    if chat.type == Chat.Type.PRIVATE:
+        return
+    membership = ChatParticipant.objects.get(chat=chat, user=user)
+    if chat.history_visible_to_new_members or membership.can_see_pre_join_history:
+        return
+    for message in messages:
+        if (
+            message.reply_to is not None
+            and message.reply_to.created_at < membership.joined_at
+        ):
+            message.reply_to = None
+
+
+def _serialize_visible_pins(chat, user):
+    return [
+        {
+            "id": pin.pk,
+            "message_id": pin.message_id,
+            "sender_name": pin.message.sender.display_name,
+            "preview": pin.message.preview[:180],
+        }
+        for pin in _visible_pins_queryset(chat, user)
+        .select_related("message", "message__sender")
+        .order_by("-pinned_at", "-id")[:8]
+    ]
+
+
 def _prepare_sidebar_chats(user, archived=False):
     last_message = Message.objects.filter(chat=OuterRef("pk"), is_deleted=False).order_by("-id")
     membership = ChatParticipant.objects.filter(chat=OuterRef("pk"), user=user)
@@ -175,6 +277,11 @@ def _prepare_sidebar_chats(user, archived=False):
             draft_text_ui=Subquery(
                 membership.values("draft_text")[:1], output_field=TextField()
             ),
+            joined_at_ui=Subquery(membership.values("joined_at")[:1]),
+            can_see_pre_join_history_ui=Subquery(
+                membership.values("can_see_pre_join_history")[:1],
+                output_field=BooleanField(),
+            ),
         )
         .annotate(
             unread_count_ui=Count(
@@ -195,9 +302,46 @@ def _prepare_sidebar_chats(user, archived=False):
     )
 
     for chat in chats:
+        if (
+            chat.type != Chat.Type.PRIVATE
+            and not chat.history_visible_to_new_members
+            and chat.can_see_pre_join_history_ui is False
+            and chat.joined_at_ui
+        ):
+            visible = Message.objects.filter(
+                chat=chat,
+                is_deleted=False,
+                created_at__gte=chat.joined_at_ui,
+            )
+            latest_visible = visible.order_by("-id").values(
+                "id", "text", "sender_id", "created_at"
+            ).first()
+            if latest_visible:
+                chat.last_message_id_ui = latest_visible["id"]
+                chat.last_message_text_ui = latest_visible["text"]
+                chat.last_message_sender_id_ui = latest_visible["sender_id"]
+                chat.last_message_created_at_ui = latest_visible["created_at"]
+            else:
+                chat.last_message_id_ui = None
+                chat.last_message_text_ui = ""
+                chat.last_message_sender_id_ui = None
+                chat.last_message_created_at_ui = None
+            chat.unread_count_ui = visible.exclude(sender=user).filter(
+                id__gt=chat.last_read_message_id_ui or 0
+            ).count()
+
         _decorate_chat_ui(chat, user)
         preview = " ".join((chat.last_message_text_ui or "").split())
         chat.last_message_preview_ui = preview or "Медиа"
+
+    chats.sort(
+        key=lambda chat: (
+            1 if chat.is_pinned_ui else 0,
+            (chat.last_message_created_at_ui or chat.updated_at).timestamp(),
+            chat.updated_at.timestamp(),
+        ),
+        reverse=True,
+    )
     return chats
 
 
@@ -221,17 +365,26 @@ def _account_slots_with_unread(request):
         memberships = ChatParticipant.objects.filter(user=slot_user).values(
             "chat_id",
             "last_read_message_id",
+            "joined_at",
+            "chat__type",
+            "can_see_pre_join_history",
+            "chat__history_visible_to_new_members",
         )
         for membership in memberships:
-            unread += (
-                Message.objects.filter(
-                    chat_id=membership["chat_id"],
-                    is_deleted=False,
-                    id__gt=membership["last_read_message_id"] or 0,
-                )
-                .exclude(sender=slot_user)
-                .count()
+            message_query = Message.objects.filter(
+                chat_id=membership["chat_id"],
+                is_deleted=False,
+                id__gt=membership["last_read_message_id"] or 0,
             )
+            if (
+                membership["chat__type"] != Chat.Type.PRIVATE
+                and not membership["chat__history_visible_to_new_members"]
+                and not membership["can_see_pre_join_history"]
+            ):
+                message_query = message_query.filter(
+                    created_at__gte=membership["joined_at"]
+                )
+            unread += message_query.exclude(sender=slot_user).count()
         slot["unread_count"] = unread
     return slots
 
@@ -284,7 +437,7 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
     )
 
     pins = list(
-        PinnedMessage.objects.filter(chat=selected_chat, message__is_deleted=False)
+        _visible_pins_queryset(selected_chat, user)
         .select_related("message", "message__sender")
         .order_by("-pinned_at", "-id")[:8]
     )
@@ -294,21 +447,29 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
         message.is_read_ui = message.sender_id == user.pk and message.pk <= other_last_read_id
 
     shared_items = []
-    attachments = (
-        MessageAttachment.objects.filter(message__chat=selected_chat, message__is_deleted=False)
-        .select_related("message")
-        .order_by("-id")[:36]
-    )
+    attachments = MessageAttachment.objects.filter(
+        message__in=_visible_message_queryset(selected_chat, user).filter(is_deleted=False)
+    ).select_related("message").order_by("-id")[:36]
     for attachment in attachments:
         attachment.ui_url = attachment_url(attachment)
         shared_items.append(attachment)
 
     can_post = not (
-        selected_chat.type == Chat.Type.CHANNEL
-        and membership.role not in {
-            ChatParticipant.Role.OWNER,
-            ChatParticipant.Role.ADMIN,
-        }
+        (
+            selected_chat.type == Chat.Type.CHANNEL
+            and membership.role not in {
+                ChatParticipant.Role.OWNER,
+                ChatParticipant.Role.ADMIN,
+            }
+        )
+        or (
+            selected_chat.type == Chat.Type.GROUP
+            and membership.role == ChatParticipant.Role.MEMBER
+            and not (
+                selected_chat.members_can_send_messages
+                or selected_chat.members_can_send_media
+            )
+        )
     )
 
     context.update(
@@ -329,8 +490,7 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
 
 def _serialized_message(message, user, chat):
     pinned_ids = set(
-        PinnedMessage.objects.filter(chat=chat, message__is_deleted=False)
-        .values_list("message_id", flat=True)
+        _visible_pins_queryset(chat, user).values_list("message_id", flat=True)
     )
     return serialize_message(
         message,
@@ -358,7 +518,7 @@ def home(request):
 def chat_detail(request, chat_id):
     chat = _chat_for_user(request.user, chat_id)
     membership = _membership(chat, request.user)
-    latest = chat.messages.filter(is_deleted=False).order_by("-id").first()
+    latest = _visible_message_queryset(chat, request.user).filter(is_deleted=False).order_by("-id").first()
     if latest:
         mark_chat_read(chat, request.user, latest)
 
@@ -367,7 +527,7 @@ def chat_detail(request, chat_id):
     except (TypeError, ValueError):
         focus_id = 0
 
-    base = _base_message_queryset(chat).filter(is_deleted=False)
+    base = _visible_message_queryset(chat, request.user).filter(is_deleted=False)
     focus = base.filter(pk=focus_id).first() if focus_id else None
     if focus is not None:
         before = list(base.filter(id__lte=focus.pk).order_by("-id")[:50])
@@ -378,6 +538,8 @@ def chat_detail(request, chat_id):
         chat_messages = list(base.order_by("-id")[:100])
         chat_messages.reverse()
         focus_id = 0
+
+    _hide_inaccessible_reply_previews(chat, request.user, chat_messages)
 
     return render(
         request,
@@ -495,7 +657,10 @@ def join_public_chat(request, username):
     ChatParticipant.objects.get_or_create(
         chat=chat,
         user=request.user,
-        defaults={"role": ChatParticipant.Role.MEMBER},
+        defaults={
+            "role": ChatParticipant.Role.MEMBER,
+            "can_see_pre_join_history": chat.history_visible_to_new_members,
+        },
     )
     return redirect("messenger:chat", chat_id=chat.pk)
 
@@ -531,10 +696,13 @@ def contacts(request):
 
         channel_results = list(
             Chat.objects.filter(
-                type=Chat.Type.CHANNEL,
-                username__icontains=query,
+                type__in=(Chat.Type.GROUP, Chat.Type.CHANNEL),
             )
             .exclude(username__isnull=True)
+            .filter(
+                Q(username__icontains=query)
+                | Q(title__icontains=query)
+            )
             .order_by("username")[:30]
         )
         joined_chat_ids = set(
@@ -592,14 +760,6 @@ def remove_contact(request, username):
 def send_message(request, chat_id):
     chat = _chat_for_user(request.user, chat_id)
     membership = _membership(chat, request.user)
-    if (
-        chat.type == Chat.Type.CHANNEL
-        and membership.role not in {ChatParticipant.Role.OWNER, ChatParticipant.Role.ADMIN}
-    ):
-        return JsonResponse(
-            {"ok": False, "error": "Публиковать в канале могут только администраторы."},
-            status=403,
-        )
     form = MessageForm(request.POST, request.FILES)
     wants_json = _wants_json(request)
 
@@ -613,10 +773,29 @@ def send_message(request, chat_id):
                 messages.error(request, error)
         return redirect("messenger:chat", chat_id=chat.pk)
 
+    restriction = _posting_restriction(
+        chat,
+        membership,
+        text=form.cleaned_data["text"],
+        has_attachments=bool(form.cleaned_data["attachments"]),
+    )
+    if restriction:
+        error, retry_after = restriction
+        if wants_json:
+            response = JsonResponse({"ok": False, "error": error}, status=403)
+            if retry_after:
+                response["Retry-After"] = str(retry_after)
+            return response
+        messages.error(request, error)
+        return redirect("messenger:chat", chat_id=chat.pk)
+
     reply_to = None
     reply_id = form.cleaned_data.get("reply_to")
     if reply_id:
-        reply_to = chat.messages.filter(pk=reply_id, is_deleted=False).first()
+        reply_to = _visible_message_queryset(chat, request.user).filter(
+            pk=reply_id,
+            is_deleted=False,
+        ).first()
         if reply_to is None:
             payload = {"ok": False, "errors": {"reply_to": [{"message": "Сообщение для ответа больше недоступно."}]}}
             if wants_json:
@@ -663,7 +842,7 @@ def send_message(request, chat_id):
 def edit_message(request, chat_id, message_id):
     chat = _chat_for_user(request.user, chat_id)
     message = get_object_or_404(
-        _base_message_queryset(chat),
+        _visible_message_queryset(chat, request.user),
         pk=message_id,
         sender=request.user,
         is_deleted=False,
@@ -673,6 +852,18 @@ def edit_message(request, chat_id, message_id):
         return JsonResponse({"ok": False, "errors": form.errors.get_json_data()}, status=400)
 
     text = form.cleaned_data["text"]
+    edit_restriction = _posting_restriction(
+        chat,
+        _membership(chat, request.user),
+        text=text,
+        has_attachments=message.attachments.exists(),
+        check_slow_mode=False,
+    )
+    if edit_restriction:
+        return JsonResponse(
+            {"ok": False, "error": edit_restriction[0]},
+            status=403,
+        )
     if not text and not message.attachments.exists():
         return JsonResponse(
             {"ok": False, "errors": {"text": [{"message": "Текстовое сообщение не может быть пустым."}]}},
@@ -691,7 +882,7 @@ def edit_message(request, chat_id, message_id):
 def delete_message(request, chat_id, message_id):
     chat = _chat_for_user(request.user, chat_id)
     message = get_object_or_404(
-        _base_message_queryset(chat),
+        _visible_message_queryset(chat, request.user),
         pk=message_id,
         sender=request.user,
         is_deleted=False,
@@ -706,7 +897,11 @@ def delete_message(request, chat_id, message_id):
 @require_POST
 def forward_message(request, chat_id, message_id):
     source_chat = _chat_for_user(request.user, chat_id)
-    source = get_object_or_404(_base_message_queryset(source_chat), pk=message_id, is_deleted=False)
+    source = get_object_or_404(
+        _visible_message_queryset(source_chat, request.user),
+        pk=message_id,
+        is_deleted=False,
+    )
     raw_target = request.POST.get("target_chat_id", "").strip()
 
     if raw_target == "saved":
@@ -719,17 +914,17 @@ def forward_message(request, chat_id, message_id):
         target_chat = _chat_for_user(request.user, target_chat_id)
 
     target_membership = _membership(target_chat, request.user)
-    if (
-        target_chat.type == Chat.Type.CHANNEL
-        and target_membership.role not in {
-            ChatParticipant.Role.OWNER,
-            ChatParticipant.Role.ADMIN,
-        }
-    ):
-        return JsonResponse(
-            {"ok": False, "error": "Публиковать в канале могут только администраторы."},
-            status=403,
-        )
+    restriction = _posting_restriction(
+        target_chat,
+        target_membership,
+        text=source.text,
+        has_attachments=source.attachments.exists(),
+    )
+    if restriction:
+        response = JsonResponse({"ok": False, "error": restriction[0]}, status=403)
+        if restriction[1]:
+            response["Retry-After"] = str(restriction[1])
+        return response
 
     origin = source.forwarded_from or source
     origin_name = source.forwarded_from_name or source.sender.display_name
@@ -765,18 +960,28 @@ def forward_message(request, chat_id, message_id):
 def pin_message(request, chat_id, message_id):
     chat = _chat_for_user(request.user, chat_id)
     membership = _membership(chat, request.user)
-    if (
-        chat.type != Chat.Type.PRIVATE
-        and membership.role not in {
-            ChatParticipant.Role.OWNER,
-            ChatParticipant.Role.ADMIN,
-        }
-    ):
+    if chat.type == Chat.Type.CHANNEL and membership.role not in {
+        ChatParticipant.Role.OWNER,
+        ChatParticipant.Role.ADMIN,
+    }:
         return JsonResponse(
-            {"ok": False, "error": "Закреплять сообщения здесь могут только администраторы."},
+            {"ok": False, "error": "Закреплять сообщения в канале могут только администраторы."},
             status=403,
         )
-    message = get_object_or_404(chat.messages, pk=message_id, is_deleted=False)
+    if (
+        chat.type == Chat.Type.GROUP
+        and membership.role == ChatParticipant.Role.MEMBER
+        and not chat.members_can_pin_messages
+    ):
+        return JsonResponse(
+            {"ok": False, "error": "Администраторы запретили участникам закреплять сообщения."},
+            status=403,
+        )
+    message = get_object_or_404(
+        _visible_message_queryset(chat, request.user),
+        pk=message_id,
+        is_deleted=False,
+    )
     pin = PinnedMessage.objects.filter(chat=chat, message=message).first()
     if pin is None:
         PinnedMessage.objects.create(chat=chat, message=message, pinned_by=request.user)
@@ -784,7 +989,11 @@ def pin_message(request, chat_id, message_id):
     else:
         pin.delete()
         pinned = False
-    return JsonResponse({"ok": True, "pinned": pinned, "pins": serialize_pins(chat)})
+    return JsonResponse({
+        "ok": True,
+        "pinned": pinned,
+        "pins": _serialize_visible_pins(chat, request.user),
+    })
 
 
 @login_required
@@ -796,7 +1005,7 @@ def search_messages(request, chat_id):
     if not query:
         return JsonResponse({"ok": True, "results": []})
 
-    base = _base_message_queryset(chat).filter(is_deleted=False)
+    base = _visible_message_queryset(chat, request.user).filter(is_deleted=False)
     if connection.vendor == "postgresql":
         from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
 
@@ -926,12 +1135,22 @@ def typing(request, chat_id):
 
 
 def _attachment_for_user(user, attachment_id):
-    return get_object_or_404(
+    attachment = get_object_or_404(
         MessageAttachment.objects.select_related("message", "message__chat"),
         pk=attachment_id,
         message__chat__participants=user,
         message__is_deleted=False,
     )
+    chat = attachment.message.chat
+    if chat.type != Chat.Type.PRIVATE:
+        membership = ChatParticipant.objects.get(chat=chat, user=user)
+        if (
+            not chat.history_visible_to_new_members
+            and not membership.can_see_pre_join_history
+            and attachment.message.created_at < membership.joined_at
+        ):
+            raise Http404
+    return attachment
 
 
 INLINE_MEDIA_TYPES = {
@@ -999,7 +1218,7 @@ def poll_messages(request, chat_id):
     elif timezone.is_naive(since):
         since = timezone.make_aware(since, timezone.get_current_timezone())
 
-    base = _base_message_queryset(chat)
+    base = _visible_message_queryset(chat, request.user)
     new_messages = list(
         base.filter(id__gt=after_id, is_deleted=False).order_by("id")[:100]
     )
@@ -1010,6 +1229,8 @@ def poll_messages(request, chat_id):
         base.filter(id__lte=after_id, updated_at__gt=since)
         .order_by("updated_at", "id")[:100]
     )
+    _hide_inaccessible_reply_previews(chat, request.user, new_messages)
+    _hide_inaccessible_reply_previews(chat, request.user, updated_messages)
     high_watermark = chat.messages.order_by("-id").values_list("id", flat=True).first() or after_id
     other_last_read_id = (
         _other_last_read_id(chat, request.user)
@@ -1017,8 +1238,7 @@ def poll_messages(request, chat_id):
         else 0
     )
     pinned_ids = set(
-        PinnedMessage.objects.filter(chat=chat, message__is_deleted=False)
-        .values_list("message_id", flat=True)
+        _visible_pins_queryset(chat, request.user).values_list("message_id", flat=True)
     )
 
     if chat.type == Chat.Type.PRIVATE:
@@ -1064,7 +1284,7 @@ def poll_messages(request, chat_id):
             "other_last_read_id": other_last_read_id,
             "other_typing": other_typing,
             "other_status": other_status,
-            "pins": serialize_pins(chat),
+            "pins": _serialize_visible_pins(chat, request.user),
             "server_time": now.isoformat(),
         }
     )

@@ -62,6 +62,14 @@ class Chat(models.Model):
     username = models.CharField(max_length=64, unique=True, null=True, blank=True)
     description = models.TextField(max_length=500, blank=True, default="")
     avatar = models.ImageField(upload_to=chat_avatar_path, blank=True)
+    history_visible_to_new_members = models.BooleanField(default=True)
+    members_can_send_messages = models.BooleanField(default=True)
+    members_can_send_media = models.BooleanField(default=True)
+    members_can_send_links = models.BooleanField(default=True)
+    members_can_add_members = models.BooleanField(default=False)
+    members_can_pin_messages = models.BooleanField(default=False)
+    slow_mode_seconds = models.PositiveSmallIntegerField(default=0)
+    signatures_enabled = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, db_index=True)
 
@@ -90,6 +98,7 @@ class ChatParticipant(models.Model):
         default=Role.MEMBER,
         db_index=True,
     )
+    can_see_pre_join_history = models.BooleanField(default=True)
     joined_at = models.DateTimeField(auto_now_add=True)
     last_read_message = models.ForeignKey(
         "Message",
@@ -204,3 +213,62 @@ class PinnedMessage(models.Model):
 
     def __str__(self):
         return f"Pinned {self.message_id} in {self.chat_id}"
+
+
+class ChatInviteLink(models.Model):
+    chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="invite_links")
+    token = models.CharField(max_length=64, unique=True, db_index=True)
+    creator = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="created_chat_invite_links",
+    )
+    name = models.CharField(max_length=64, blank=True, default="")
+    expires_at = models.DateTimeField(null=True, blank=True)
+    usage_limit = models.PositiveIntegerField(null=True, blank=True)
+    usage_count = models.PositiveIntegerField(default=0)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+
+    @property
+    def is_active(self):
+        if self.revoked_at is not None:
+            return False
+        if self.expires_at is not None and self.expires_at <= timezone.now():
+            return False
+        if self.usage_limit is not None and self.usage_count >= self.usage_limit:
+            return False
+        return True
+
+    def __str__(self):
+        return f"Invite for {self.chat_id}: {self.name or self.token[:8]}"
+
+
+class ChatAdminLog(models.Model):
+    chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="admin_log")
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="chat_admin_actions",
+    )
+    action = models.CharField(max_length=64, db_index=True)
+    target_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="chat_admin_actions_targeting",
+    )
+    description = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+
+    def __str__(self):
+        return f"{self.chat_id}: {self.description}"
