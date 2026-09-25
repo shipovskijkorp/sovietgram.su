@@ -456,3 +456,26 @@ body[data-theme="dark"] .message__text a { color: #e37880; }
   display: grid;
   place-items: center;
 }
+/* Keep interactive chat controls above the scrolling message surface. */
+.conversation-header {
+  position: relative;
+  z-index: 40;
+}
+.conversation-header__actions,
+.chat-menu-control {
+  position: relative;
+  z-index: 45;
+}
+.chat-menu {
+  z-index: 80;
+}
+.chat-search-panel {
+  z-index: 75;
+}
+.message-action-trigger {
+  z-index: 6;
+  pointer-events: auto;
+}
+.message-context-menu {
+  z-index: 160;
+}

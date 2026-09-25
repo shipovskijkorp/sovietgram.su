@@ -26,6 +26,7 @@ jobs:
       - name: Check JavaScript syntax
         run: |
           node --check static/js/chat.js
+          node --check static/js/chat-controls.js
           node --check static/js/search.js
           node --check static/js/profile.js
           node --check static/js/community-profile.js

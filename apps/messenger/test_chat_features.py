@@ -1258,6 +1258,7 @@ class ChatFeatureTests(TestCase):
         self.assertContains(response, 'data-open-community-settings', html=False)
         self.assertContains(response, 'id="sidebarGlobalSearch"', html=False)
         self.assertContains(response, 'data-global-search-url=', html=False)
+        self.assertContains(response, "js/chat-controls.js", html=False)
         self.assertNotContains(response, "js/messenger.js", html=False)
 
     def test_member_can_leave_collective_from_chat_menu_action(self):
