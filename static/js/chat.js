@@ -9,7 +9,9 @@ const composerReply = document.getElementById("composerReply");
 const composerReplyName = document.getElementById("composerReplyName");
 const composerReplyPreview = document.getElementById("composerReplyPreview");
 const composerReplyClose = document.getElementById("composerReplyClose");
-const enterToSend = document.body.dataset.enterToSend !== "false";
+function enterToSendEnabled() {
+  return document.body.dataset.enterToSend !== "false";
+}
 const csrfToken = form?.querySelector("[name='csrfmiddlewaretoken']")?.value || "";
 
 function notify(text) {
@@ -48,7 +50,7 @@ async function postForm(url, values = {}) {
 function shouldSendOnEnter(event) {
   if (event.key !== "Enter" || event.shiftKey) return false;
   if (event.ctrlKey || event.metaKey) return true;
-  return enterToSend;
+  return enterToSendEnabled();
 }
 
 function autoSizeInput() {

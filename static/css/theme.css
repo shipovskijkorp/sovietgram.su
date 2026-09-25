@@ -227,6 +227,6 @@ body[data-theme="dark"] .auth-mode-switch a.is-active {
 }
 
 body[data-theme="dark"] .brand__mark {
-  background: #d3aa40;
-  color: #68171d;
+  background-color: #d3aa40;
+  color: transparent;
 }
