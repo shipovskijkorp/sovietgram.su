@@ -181,8 +181,8 @@
   width: 40px;
   height: 40px;
   flex-basis: 40px;
-  mask-image: url("../icons/telegram-original/attach.png");
-  -webkit-mask-image: url("../icons/telegram-original/attach.png");
+  mask-image: url("../icons/telegram-original/input_attach.png");
+  -webkit-mask-image: url("../icons/telegram-original/input_attach.png");
   mask-size: 40px 40px;
   -webkit-mask-size: 40px 40px;
 }
