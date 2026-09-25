@@ -147,6 +147,7 @@ class Message(models.Model):
     )
     forwarded_from_name = models.CharField(max_length=300, blank=True, default="")
     forwarded_from_username = models.CharField(max_length=150, blank=True, default="")
+    signature_name = models.CharField(max_length=300, blank=True, default="")
     is_deleted = models.BooleanField(default=False, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True, db_index=True)

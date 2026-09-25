@@ -257,10 +257,10 @@ function buildMessageArticle(message) {
   }
 
   const footer = document.createElement("footer");
-  if (conversation?.dataset.channelSignatures === "true") {
+  if (message.signature_name) {
     const signature = document.createElement("span");
     signature.className = "message-channel-signature";
-    signature.textContent = message.sender_name || "";
+    signature.textContent = message.signature_name;
     footer.appendChild(signature);
   }
   if (message.is_edited) {

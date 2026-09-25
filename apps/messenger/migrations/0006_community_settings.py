@@ -58,6 +58,11 @@ class Migration(migrations.Migration):
             name="can_see_pre_join_history",
             field=models.BooleanField(default=True),
         ),
+        migrations.AddField(
+            model_name="message",
+            name="signature_name",
+            field=models.CharField(blank=True, default="", max_length=300),
+        ),
         migrations.CreateModel(
             name="ChatInviteLink",
             fields=[

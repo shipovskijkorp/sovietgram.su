@@ -294,7 +294,7 @@
 
               {% if message.text %}<p class="message__text">{{ message.text|urlize|linebreaksbr }}</p>{% endif %}
               <footer>
-                {% if selected_chat.type == 'channel' and selected_chat.signatures_enabled %}<span class="message-channel-signature">{{ message.sender.display_name }}</span>{% endif %}
+                {% if message.signature_name %}<span class="message-channel-signature">{{ message.signature_name }}</span>{% endif %}
                 {% if message.edited_at %}<span class="message-edited">изм.</span>{% endif %}
                 <time>{{ message.created_at|date:'H:i' }}</time>
                 {% if message.sender_id == request.user.pk %}<span class="message-check">{% if message.is_read_ui %}✓✓{% else %}✓{% endif %}</span>{% endif %}

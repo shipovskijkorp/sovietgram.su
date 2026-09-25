@@ -368,25 +368,6 @@
     renderAdmins();
     renderMembers();
     renderLog();
-    const conversation = document.querySelector(".conversation--chat");
-    if (conversation && settings?.type === "channel") {
-      conversation.dataset.channelSignatures = settings.signatures_enabled ? "true" : "false";
-      document.querySelectorAll(".message").forEach((article) => {
-        const footer = article.querySelector("footer");
-        if (!footer) return;
-        let signature = footer.querySelector(".message-channel-signature");
-        if (settings.signatures_enabled) {
-          if (!signature) {
-            signature = document.createElement("span");
-            signature.className = "message-channel-signature";
-            footer.insertBefore(signature, footer.firstChild);
-          }
-          signature.textContent = article.dataset.messageSender || "";
-        } else {
-          signature?.remove();
-        }
-      });
-    }
   }
 
   async function applySettings(values) {

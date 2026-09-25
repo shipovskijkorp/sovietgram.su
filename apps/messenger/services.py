@@ -204,6 +204,7 @@ def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=No
             "name": message.forwarded_from_name,
             "username": message.forwarded_from_username,
         } if message.forwarded_from_name else None,
+        "signature_name": message.signature_name,
         "attachments": attachments,
         "urls": {
             "edit": reverse("messenger:edit_message", args=[message.chat_id, message.pk]),

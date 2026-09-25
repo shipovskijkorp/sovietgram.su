@@ -1049,10 +1049,10 @@ class ChatFeatureTests(TestCase):
             user=self.alice,
             role=ChatParticipant.Role.OWNER,
         )
-        Message.objects.create(
+        unsigned = Message.objects.create(
             chat=channel,
             sender=self.alice,
-            text="Публикация",
+            text="Старая публикация",
         )
 
         changed = self.client.post(
@@ -1063,6 +1063,17 @@ class ChatFeatureTests(TestCase):
         self.assertEqual(changed.status_code, 200)
         channel.refresh_from_db()
         self.assertTrue(channel.signatures_enabled)
+
+        sent = self.client.post(
+            reverse("messenger:send_message", args=[channel.pk]),
+            {"text": "Подписанная публикация"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(sent.status_code, 200)
+        signed = Message.objects.get(chat=channel, text="Подписанная публикация")
+        self.assertEqual(signed.signature_name, self.alice.display_name)
+        unsigned.refresh_from_db()
+        self.assertEqual(unsigned.signature_name, "")
 
         page = self.client.get(reverse("messenger:chat", args=[channel.pk]))
         self.assertContains(page, "message-channel-signature")

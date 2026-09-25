@@ -812,6 +812,11 @@ def send_message(request, chat_id):
             sender=request.user,
             text=form.cleaned_data["text"],
             reply_to=reply_to,
+            signature_name=(
+                request.user.display_name
+                if chat.type == Chat.Type.CHANNEL and chat.signatures_enabled
+                else ""
+            ),
         )
         for uploaded in form.cleaned_data["attachments"]:
             MessageAttachment.objects.create(
@@ -938,6 +943,12 @@ def forward_message(request, chat_id, message_id):
             forwarded_from=origin,
             forwarded_from_name=origin_name,
             forwarded_from_username=origin_username,
+            signature_name=(
+                request.user.display_name
+                if target_chat.type == Chat.Type.CHANNEL
+                and target_chat.signatures_enabled
+                else ""
+            ),
         )
         clone_attachments(source, forwarded)
         touch_chat(target_chat)
