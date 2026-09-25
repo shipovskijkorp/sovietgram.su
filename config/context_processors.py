@@ -21,4 +21,8 @@ STATIC_VERSION = _static_version()
 
 
 def static_version(request):
-    return {"static_version": STATIC_VERSION}
+    # During local development static files can change without Django's
+    # Python autoreloader restarting the process. Recompute the cache key
+    # per request so a git pull cannot leave the browser on stale JS/CSS.
+    version = _static_version() if settings.DEBUG else STATIC_VERSION
+    return {"static_version": version}

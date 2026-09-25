@@ -889,96 +889,11 @@ function validateSelection(files, mode) {
   if (total > MAX_TOTAL_SIZE) return "Общий размер выбранных файлов больше 100 МБ.";
   return "";
 }
-function positionAttachmentMenu() {
-  if (!attachmentMenu || !attachmentButton || attachmentMenu.hidden) return;
-
-  const buttonRect = attachmentButton.getBoundingClientRect();
-  const menuRect = attachmentMenu.getBoundingClientRect();
-  const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
-  const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-  const gutter = 8;
-  const gap = 7;
-
-  let left = buttonRect.left;
-  left = Math.max(gutter, Math.min(left, viewportWidth - menuRect.width - gutter));
-
-  let top = buttonRect.top - menuRect.height - gap;
-  if (top < gutter) {
-    top = Math.min(
-      viewportHeight - menuRect.height - gutter,
-      buttonRect.bottom + gap,
-    );
-  }
-
-  attachmentMenu.style.left = `${Math.round(left)}px`;
-  attachmentMenu.style.top = `${Math.round(Math.max(gutter, top))}px`;
-  attachmentMenu.style.bottom = "auto";
-}
-
-function setAttachmentMenu(open) {
-  if (!attachmentMenu || !attachmentButton) return;
-
-  if (open) {
-    if (attachmentMenu.parentElement !== document.body) {
-      document.body.appendChild(attachmentMenu);
-    }
-    attachmentMenu.classList.add("attachment-menu--portal");
-    attachmentMenu.hidden = false;
-    attachmentButton.setAttribute("aria-expanded", "true");
-    positionAttachmentMenu();
-    return;
-  }
-
-  attachmentMenu.hidden = true;
-  attachmentButton.setAttribute("aria-expanded", "false");
-}
-
-attachmentButton?.addEventListener("click", (event) => {
-  event.preventDefault();
-  event.stopPropagation();
-  setAttachmentMenu(attachmentMenu?.hidden ?? true);
-});
-attachmentButton?.addEventListener("keydown", (event) => {
-  if (!["ArrowDown", "ArrowUp"].includes(event.key)) return;
-  event.preventDefault();
-  setAttachmentMenu(true);
-  const items = [...(attachmentMenu?.querySelectorAll("button:not([disabled])") || [])];
-  const target = event.key === "ArrowUp" ? items.at(-1) : items[0];
-  target?.focus();
-});
-attachmentMenu?.addEventListener("keydown", (event) => {
-  const items = [...attachmentMenu.querySelectorAll("button:not([disabled])")];
-  const current = items.indexOf(document.activeElement);
-  if (event.key === "Escape") {
-    event.preventDefault();
-    setAttachmentMenu(false);
-    attachmentButton?.focus();
-    return;
-  }
-  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-  event.preventDefault();
-  let next = current;
-  if (event.key === "Home") next = 0;
-  else if (event.key === "End") next = items.length - 1;
-  else if (event.key === "ArrowDown") next = current < 0 ? 0 : (current + 1) % items.length;
-  else next = current < 0 ? items.length - 1 : (current - 1 + items.length) % items.length;
-  items[next]?.focus();
-});
 document.querySelectorAll("[data-attachment-mode]").forEach((button) => button.addEventListener("click", () => {
-  setAttachmentMenu(false);
+  window.SovietgramAttachmentMenu?.close();
   openFilePicker(button.dataset.attachmentMode || "media", false);
 }));
-document.addEventListener("click", (event) => {
-  if (
-    !attachmentControl?.contains(event.target)
-    && !attachmentMenu?.contains(event.target)
-  ) {
-    setAttachmentMenu(false);
-  }
-});
-window.addEventListener("resize", () => {
-  if (attachmentMenu && !attachmentMenu.hidden) positionAttachmentMenu();
-});
+
 function openFilePicker(mode, append) {
   appendNextPick = append;
   const input = mode === "file"
