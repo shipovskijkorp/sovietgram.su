@@ -55,28 +55,45 @@ function shouldSendOnEnter(event) {
 
 const TELEGRAM_COMPOSER_MIN_HEIGHT = 28;
 const TELEGRAM_COMPOSER_MAX_HEIGHT = 224;
+const TELEGRAM_COMPOSER_FIELD_CHROME = 16; // 7px top/bottom padding + 1px borders.
 
 function autoSizeInput() {
   if (!messageInput) return;
 
-  // Telegram Desktop keeps the message field between:
-  // historySendSize.height() - 2 * historySendPadding = 28px
-  // and historyComposeFieldMaxHeight = 224px.
-  // Reset first so the textarea can shrink again after text is removed.
-  messageInput.style.height = "0px";
+  // Telegram Desktop grows the *visible compose field*, not just its internal
+  // text document. Measure from the one-line height every time so deleting
+  // text shrinks the field again.
+  messageInput.style.height = `${TELEGRAM_COMPOSER_MIN_HEIGHT}px`;
+  messageInput.style.overflowY = "hidden";
+
   const contentHeight = Math.max(
     TELEGRAM_COMPOSER_MIN_HEIGHT,
     messageInput.scrollHeight,
   );
-  const nextHeight = Math.min(
+  const textHeight = Math.min(
     contentHeight,
     TELEGRAM_COMPOSER_MAX_HEIGHT,
   );
 
-  messageInput.style.height = `${nextHeight}px`;
+  messageInput.style.height = `${textHeight}px`;
   messageInput.style.overflowY = contentHeight > TELEGRAM_COMPOSER_MAX_HEIGHT
     ? "auto"
     : "hidden";
+
+  const field = messageInput.closest(".composer__field");
+  if (field) {
+    const fieldHeight = textHeight + TELEGRAM_COMPOSER_FIELD_CHROME;
+    field.style.height = `${fieldHeight}px`;
+    field.style.maxHeight = `${TELEGRAM_COMPOSER_MAX_HEIGHT + TELEGRAM_COMPOSER_FIELD_CHROME}px`;
+  }
+
+  const composer = messageInput.closest(".composer");
+  if (composer) {
+    composer.classList.toggle(
+      "composer--multiline",
+      textHeight > TELEGRAM_COMPOSER_MIN_HEIGHT,
+    );
+  }
 }
 
 function focusMessageInput() {
@@ -105,12 +122,10 @@ function focusMessageInput() {
 
 autoSizeInput();
 
-const composerField = messageInput?.closest(".composer__field");
-if (composerField && "ResizeObserver" in window) {
-  new ResizeObserver(() => autoSizeInput()).observe(composerField);
-} else {
-  window.addEventListener("resize", autoSizeInput);
-}
+window.addEventListener("resize", autoSizeInput);
+window.addEventListener("orientationchange", () => {
+  window.requestAnimationFrame(autoSizeInput);
+});
 
 function nearBottom() {
   if (!messageStage) return true;

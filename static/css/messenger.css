@@ -84,8 +84,8 @@
 .attachment-chip { flex: 0 0 auto; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 6px 8px; border-radius: 9px; background: #efe2d1; color: #776650; font-size: 10px; }
 .composer__attach { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 12px; color: #786550; cursor: pointer; font-size: 24px; user-select: none; }
 .composer__attach:hover { background: #f0e5d5; }
-.composer__field { min-width: 0; min-height: 44px; display: flex; align-items: flex-end; padding: 7px 12px; border: 1px solid rgba(83, 59, 35, .11); border-radius: 14px; background: #f2e9db; }
-.composer textarea { width: 100%; min-width: 0; min-height: 28px; max-height: 224px; resize: none; overflow-y: hidden; border: 0; outline: 0; background: transparent; color: var(--ink); line-height: 1.45; }
+.composer__field { min-width: 0; height: 44px; min-height: 44px; max-height: 240px; display: flex; align-items: flex-end; padding: 7px 12px; border: 1px solid rgba(83, 59, 35, .11); border-radius: 14px; background: #f2e9db; transition: height .08s linear; }
+.composer textarea { width: 100%; min-width: 0; height: 28px; min-height: 28px; max-height: 224px; resize: none; overflow-y: hidden; border: 0; outline: 0; background: transparent; color: var(--ink); line-height: 1.45; }
 .send-button { width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 50%; background: linear-gradient(180deg, #a12732, #811b24); color: #fff7ea; box-shadow: 0 6px 16px rgba(126, 28, 37, .22); cursor: pointer; transition: transform .14s ease, opacity .14s ease; }
 .send-button:hover { transform: translateY(-1px); }
 .send-button:disabled { opacity: .55; cursor: wait; transform: none; }

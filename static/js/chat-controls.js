@@ -1,4 +1,48 @@
 (() => {
+  // Keep compose-field geometry independent from the large chat.js module.
+  // The wrapper is the visible Telegram-like input field, so its height must
+  // track the textarea explicitly rather than relying on flex intrinsic sizing.
+  const syncComposerHeight = () => {
+    const input = document.getElementById("messageInput");
+    const field = input?.closest(".composer__field");
+    const composer = input?.closest(".composer");
+    if (!input || !field) return;
+
+    const minText = 28;
+    const maxText = 224;
+    const fieldChrome = 16;
+
+    input.style.height = `${minText}px`;
+    input.style.overflowY = "hidden";
+    const content = Math.max(minText, input.scrollHeight);
+    const textHeight = Math.min(content, maxText);
+
+    input.style.height = `${textHeight}px`;
+    input.style.overflowY = content > maxText ? "auto" : "hidden";
+    field.style.height = `${textHeight + fieldChrome}px`;
+    field.style.maxHeight = `${maxText + fieldChrome}px`;
+    composer?.classList.toggle("composer--multiline", textHeight > minText);
+  };
+
+  document.addEventListener("input", (event) => {
+    if (event.target?.id === "messageInput") syncComposerHeight();
+  }, true);
+  document.addEventListener("paste", (event) => {
+    if (event.target?.id === "messageInput") {
+      window.requestAnimationFrame(syncComposerHeight);
+    }
+  }, true);
+  document.addEventListener("cut", (event) => {
+    if (event.target?.id === "messageInput") {
+      window.requestAnimationFrame(syncComposerHeight);
+    }
+  }, true);
+  document.addEventListener("compositionend", (event) => {
+    if (event.target?.id === "messageInput") syncComposerHeight();
+  }, true);
+  window.addEventListener("resize", syncComposerHeight);
+  window.requestAnimationFrame(syncComposerHeight);
+
   // Composer Enter handling lives in capture phase so no other chat/menu
   // handler can swallow the key before the message form sees it.
   document.addEventListener("keydown", (event) => {
