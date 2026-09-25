@@ -673,6 +673,185 @@ def start_chat(request, username):
     return redirect("messenger:chat", chat_id=chat.pk)
 
 
+
+@login_required
+@require_GET
+@rate_limit("global_search")
+def global_search(request):
+    query = request.GET.get("q", "").strip()[:120]
+    if not query:
+        return JsonResponse(
+            {
+                "ok": True,
+                "query": "",
+                "chats": [],
+                "people": [],
+                "communities": [],
+                "messages": [],
+            }
+        )
+
+    normalized = query.lower().lstrip("@")
+    memberships = list(
+        ChatParticipant.objects.filter(user=request.user)
+        .select_related("chat")
+        .order_by("-is_pinned", "-chat__updated_at")[:120]
+    )
+    joined_ids = {membership.chat_id for membership in memberships}
+
+    chat_results = []
+    chat_by_id = {}
+    for membership in memberships:
+        chat = membership.chat
+        _decorate_chat_ui(chat, request.user)
+        chat_by_id[chat.pk] = chat
+        haystack = (chat.search_text_ui or "").lower()
+        if normalized not in haystack:
+            continue
+        chat_results.append(
+            {
+                "id": chat.pk,
+                "type": chat.type,
+                "title": chat.display_name_ui,
+                "username": chat.username_ui,
+                "status": chat.status_ui,
+                "avatar_url": (
+                    chat.other_user.avatar.url
+                    if (
+                        chat.type == Chat.Type.PRIVATE
+                        and chat.other_user
+                        and chat.other_user.avatar
+                    )
+                    else chat.avatar.url
+                    if chat.type != Chat.Type.PRIVATE and chat.avatar
+                    else ""
+                ),
+                "avatar_text": chat.avatar_text_ui,
+                "url": reverse("messenger:chat", args=[chat.pk]),
+                "is_archived": membership.is_archived,
+            }
+        )
+        if len(chat_results) >= 12:
+            break
+
+    people = list(
+        User.objects.filter(is_active=True)
+        .exclude(pk=request.user.pk)
+        .filter(
+            Q(username__icontains=normalized)
+            | Q(first_name__icontains=query)
+            | Q(last_name__icontains=query)
+        )
+        .order_by("-last_seen_at", "username")[:10]
+    )
+    people_results = [
+        {
+            "id": user.pk,
+            "display_name": user.display_name,
+            "username": user.username,
+            "avatar_url": user.avatar.url if user.avatar else "",
+            "avatar_text": user.initials,
+            "status": _presence_text(user),
+            "profile_url": reverse(
+                "accounts:public_profile",
+                args=[user.username],
+            ),
+        }
+        for user in people
+    ]
+
+    communities = list(
+        Chat.objects.filter(
+            type__in=(Chat.Type.GROUP, Chat.Type.CHANNEL),
+        )
+        .exclude(username__isnull=True)
+        .exclude(username="")
+        .exclude(pk__in=joined_ids)
+        .filter(
+            Q(username__icontains=normalized)
+            | Q(title__icontains=query)
+        )
+        .annotate(member_count_ui=Count("memberships"))
+        .order_by("title", "username")[:10]
+    )
+    community_results = [
+        {
+            "id": chat.pk,
+            "type": chat.type,
+            "title": chat.title or (
+                "Канал" if chat.type == Chat.Type.CHANNEL else "Группа"
+            ),
+            "username": chat.username or "",
+            "avatar_url": chat.avatar.url if chat.avatar else "",
+            "avatar_text": "К" if chat.type == Chat.Type.CHANNEL else "Г",
+            "status": (
+                f"канал · {chat.member_count_ui} подписчик(ов)"
+                if chat.type == Chat.Type.CHANNEL
+                else f"группа · {chat.member_count_ui} участник(ов)"
+            ),
+            "join_url": reverse(
+                "messenger:join_public_chat",
+                args=[chat.username],
+            ),
+        }
+        for chat in communities
+    ]
+
+    message_results = []
+    for membership in memberships:
+        if len(message_results) >= 18:
+            break
+        chat = membership.chat
+        matches = list(
+            _visible_message_queryset(chat, request.user)
+            .filter(is_deleted=False)
+            .filter(
+                Q(text__icontains=query)
+                | Q(attachments__original_name__icontains=query)
+            )
+            .select_related("sender")
+            .distinct()
+            .order_by("-id")[:4]
+        )
+        if not matches:
+            continue
+        decorated = chat_by_id.get(chat.pk)
+        if decorated is None:
+            _decorate_chat_ui(chat, request.user)
+            decorated = chat
+            chat_by_id[chat.pk] = chat
+        for message in matches:
+            message_results.append(
+                {
+                    "id": message.pk,
+                    "chat_id": chat.pk,
+                    "chat_title": decorated.display_name_ui,
+                    "sender_name": message.sender.display_name,
+                    "preview": message.preview[:180],
+                    "time": timezone.localtime(message.created_at).strftime(
+                        "%d.%m.%Y %H:%M"
+                    ),
+                    "url": (
+                        f"{reverse('messenger:chat', args=[chat.pk])}"
+                        f"?message={message.pk}#message-{message.pk}"
+                    ),
+                }
+            )
+            if len(message_results) >= 18:
+                break
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "query": query,
+            "chats": chat_results,
+            "people": people_results,
+            "communities": community_results,
+            "messages": message_results,
+        }
+    )
+
+
 @login_required
 def contacts(request):
     query = request.GET.get("q", "").strip().lstrip("@")[:150]
