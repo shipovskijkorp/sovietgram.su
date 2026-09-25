@@ -570,7 +570,7 @@ class ProfileTests(TestCase):
         )
         self.assertRedirects(
             response,
-            f"{reverse('accounts:settings')}#privacy",
+            f"{reverse('messenger:home')}?settings=privacy",
             fetch_redirect_response=False,
         )
         self.user.refresh_from_db()

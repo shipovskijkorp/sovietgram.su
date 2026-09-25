@@ -34,7 +34,7 @@ class SettingsTests(TestCase):
                 "archive_unknown_chats": "on",
             },
         )
-        self.assertRedirects(response, reverse("accounts:settings"))
+        self.assertRedirects(response, f"{reverse('messenger:home')}?settings=main")
 
         self.user.refresh_from_db()
         self.assertEqual(self.user.theme, User.Theme.DARK)
@@ -51,7 +51,7 @@ class SettingsTests(TestCase):
                 "archive_in_main_menu": "on",
             },
         )
-        self.assertRedirects(response, reverse("accounts:settings"))
+        self.assertRedirects(response, f"{reverse('messenger:home')}?settings=main")
 
         self.user.refresh_from_db()
         self.assertTrue(self.user.archive_in_main_menu)
