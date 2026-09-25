@@ -53,13 +53,64 @@ function shouldSendOnEnter(event) {
   return enterToSendEnabled();
 }
 
+const TELEGRAM_COMPOSER_MIN_HEIGHT = 28;
+const TELEGRAM_COMPOSER_MAX_HEIGHT = 224;
+
 function autoSizeInput() {
   if (!messageInput) return;
-  messageInput.style.height = "auto";
-  messageInput.style.height = `${Math.min(messageInput.scrollHeight, 132)}px`;
+
+  // Telegram Desktop keeps the message field between:
+  // historySendSize.height() - 2 * historySendPadding = 28px
+  // and historyComposeFieldMaxHeight = 224px.
+  // Reset first so the textarea can shrink again after text is removed.
+  messageInput.style.height = "0px";
+  const contentHeight = Math.max(
+    TELEGRAM_COMPOSER_MIN_HEIGHT,
+    messageInput.scrollHeight,
+  );
+  const nextHeight = Math.min(
+    contentHeight,
+    TELEGRAM_COMPOSER_MAX_HEIGHT,
+  );
+
+  messageInput.style.height = `${nextHeight}px`;
+  messageInput.style.overflowY = contentHeight > TELEGRAM_COMPOSER_MAX_HEIGHT
+    ? "auto"
+    : "hidden";
+}
+
+function focusMessageInput() {
+  if (!messageInput || messageInput.disabled || messageInput.readOnly) return;
+
+  const focus = () => {
+    if (!messageInput.isConnected) return;
+    try {
+      messageInput.focus({ preventScroll: true });
+    } catch (_error) {
+      messageInput.focus();
+    }
+    const caret = messageInput.value.length;
+    try {
+      messageInput.setSelectionRange(caret, caret);
+    } catch (_error) {
+      // Some browsers can reject selection during transient focus changes.
+    }
+  };
+
+  // Match Telegram's behaviour: the compose field owns keyboard focus again
+  // after the send action and after the UI has finished updating.
+  focus();
+  window.requestAnimationFrame(focus);
 }
 
 autoSizeInput();
+
+const composerField = messageInput?.closest(".composer__field");
+if (composerField && "ResizeObserver" in window) {
+  new ResizeObserver(() => autoSizeInput()).observe(composerField);
+} else {
+  window.addEventListener("resize", autoSizeInput);
+}
 
 function nearBottom() {
   if (!messageStage) return true;
@@ -823,7 +874,7 @@ async function sendTextMessage() {
     autoSizeInput();
     clearReplyState();
     clearDraftState();
-    messageInput.focus();
+    focusMessageInput();
     scrollToBottom(true);
   } catch (error) {
     notify(error.message);
@@ -832,6 +883,12 @@ async function sendTextMessage() {
   }
 }
 form?.addEventListener("submit", (event) => { event.preventDefault(); sendTextMessage(); });
+
+sendButton?.addEventListener("mousedown", (event) => {
+  // Clicking Telegram's send control does not transfer typing focus away from
+  // the compose field. Keep the same behaviour in the web client.
+  event.preventDefault();
+});
 
 const attachmentControl = document.getElementById("attachmentControl");
 const attachmentButton = document.getElementById("attachmentButton");
