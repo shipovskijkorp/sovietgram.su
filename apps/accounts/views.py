@@ -7,7 +7,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView, PasswordChangeView
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse, reverse_lazy
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -124,7 +124,9 @@ class SovietgramLogoutView:
 
 class SovietgramPasswordChangeView(LoginRequiredMixin, PasswordChangeView):
     template_name = "accounts/password_change.html"
-    success_url = reverse_lazy("accounts:profile")
+
+    def get_success_url(self):
+        return f"{reverse('accounts:settings')}#privacy"
 
     def form_valid(self, form):
         messages.success(self.request, "Пароль изменён.")
@@ -214,8 +216,63 @@ def profile(request):
     return render(request, "accounts/profile.html", {"form": form})
 
 
+_BOOLEAN_SETTINGS = {
+    "enter_to_send",
+    "keep_archived_chats",
+    "archive_unknown_chats",
+    "archive_in_main_menu",
+}
+
+
+def _parse_boolean_setting(value):
+    normalized = str(value or "").strip().lower()
+    if normalized in {"1", "true", "on", "yes"}:
+        return True
+    if normalized in {"0", "false", "off", "no"}:
+        return False
+    raise ValueError("Некорректное значение настройки.")
+
+
 @login_required
 def settings_view(request):
+    wants_json = request.headers.get("x-requested-with") == "XMLHttpRequest"
+
+    if request.method == "POST" and wants_json and "setting" in request.POST:
+        setting = request.POST.get("setting", "").strip()
+        raw_value = request.POST.get("value", "")
+
+        if setting == "theme":
+            allowed_themes = {value for value, _label in User.Theme.choices}
+            if raw_value not in allowed_themes:
+                return JsonResponse(
+                    {"ok": False, "error": "Неизвестная тема оформления."},
+                    status=400,
+                )
+            value = raw_value
+        elif setting in _BOOLEAN_SETTINGS:
+            try:
+                value = _parse_boolean_setting(raw_value)
+            except ValueError as error:
+                return JsonResponse(
+                    {"ok": False, "error": str(error)},
+                    status=400,
+                )
+        else:
+            return JsonResponse(
+                {"ok": False, "error": "Неизвестная настройка."},
+                status=400,
+            )
+
+        setattr(request.user, setting, value)
+        request.user.save(update_fields=[setting])
+        return JsonResponse(
+            {
+                "ok": True,
+                "setting": setting,
+                "value": value,
+            }
+        )
+
     form = UserSettingsForm(request.POST or None, instance=request.user)
     if request.method == "POST" and form.is_valid():
         form.save()

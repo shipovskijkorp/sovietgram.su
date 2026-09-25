@@ -568,6 +568,10 @@ class ProfileTests(TestCase):
                 "new_password2": "Much-better-password-2026",
             },
         )
-        self.assertRedirects(response, reverse("accounts:profile"))
+        self.assertRedirects(
+            response,
+            f"{reverse('accounts:settings')}#privacy",
+            fetch_redirect_response=False,
+        )
         self.user.refresh_from_db()
         self.assertTrue(self.user.check_password("Much-better-password-2026"))
