@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from django.contrib import messages
-from django.contrib.auth import login, logout
+from django.contrib.auth import login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView, PasswordChangeView
@@ -126,11 +126,26 @@ class SovietgramPasswordChangeView(LoginRequiredMixin, PasswordChangeView):
     template_name = "accounts/password_change.html"
 
     def get_success_url(self):
-        return f"{reverse('accounts:settings')}#privacy"
+        return f"{reverse('messenger:home')}?settings=privacy"
+
+    def get(self, request, *args, **kwargs):
+        return redirect(f"{reverse('messenger:home')}?settings=password")
 
     def form_valid(self, form):
+        user = form.save()
+        update_session_auth_hash(self.request, user)
+        if self.request.headers.get("x-requested-with") == "XMLHttpRequest":
+            return JsonResponse({"ok": True})
         messages.success(self.request, "Пароль изменён.")
-        return super().form_valid(form)
+        return redirect(self.get_success_url())
+
+    def form_invalid(self, form):
+        if self.request.headers.get("x-requested-with") == "XMLHttpRequest":
+            return JsonResponse(
+                {"ok": False, "errors": form.errors.get_json_data()},
+                status=400,
+            )
+        return super().form_invalid(form)
 
 
 def register(request):
@@ -237,6 +252,12 @@ def _parse_boolean_setting(value):
 def settings_view(request):
     wants_json = request.headers.get("x-requested-with") == "XMLHttpRequest"
 
+    if request.method == "GET" and not wants_json:
+        section = request.GET.get("section", "main")
+        if section not in {"main", "privacy", "chat", "archive", "password"}:
+            section = "main"
+        return redirect(f"{reverse('messenger:home')}?settings={section}")
+
     if request.method == "POST" and wants_json and "setting" in request.POST:
         setting = request.POST.get("setting", "").strip()
         raw_value = request.POST.get("value", "")
@@ -277,7 +298,7 @@ def settings_view(request):
     if request.method == "POST" and form.is_valid():
         form.save()
         messages.success(request, "Настройки сохранены.")
-        return redirect("accounts:settings")
+        return redirect(f"{reverse('messenger:home')}?settings=main")
     return render(request, "accounts/settings.html", {"form": form})
 
 

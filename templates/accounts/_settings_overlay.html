@@ -1,0 +1,299 @@
+{% load static %}
+<div
+  class="tg-settings-overlay"
+  id="telegramSettings"
+  data-settings-url="{% url 'accounts:settings' %}"
+  data-auto-open="{{ request.GET.settings|default:'' }}"
+  hidden
+>
+  <button class="tg-settings-backdrop" type="button" data-settings-close aria-label="Закрыть настройки"></button>
+
+  <section class="tg-settings-window" role="dialog" aria-modal="true" aria-labelledby="settingsTopbarTitle">
+    <header class="tg-settings-topbar" id="settingsTopbar">
+      <button class="tg-settings-topbar__back" id="settingsSectionBack" type="button" aria-label="Назад" hidden>
+        <span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span>
+      </button>
+
+      <strong class="tg-settings-topbar__title" id="settingsTopbarTitle">Настройки</strong>
+
+      <div class="tg-settings-topbar__actions">
+        <button class="tg-settings-topbar__action" id="settingsMenuButton" type="button" aria-label="Меню" aria-expanded="false">
+          <span class="tg-settings-more" aria-hidden="true"><i></i><i></i><i></i></span>
+        </button>
+        <button class="tg-settings-topbar__action" type="button" data-settings-close aria-label="Закрыть">
+          <span class="tg-native-icon tg-native-icon--close" aria-hidden="true"></span>
+        </button>
+      </div>
+
+      <div class="tg-settings-popup" id="settingsMenu" hidden>
+        <a href="{% url 'accounts:add_account' %}">
+          <span class="tg-native-icon tg-native-icon--add-account" aria-hidden="true"></span>
+          <span>Добавить аккаунт</span>
+        </a>
+        <a href="{% url 'messenger:home' %}?profile={{ request.user.username|urlencode }}" data-settings-close-on-follow>
+          <span class="tg-native-icon tg-native-icon--edit" aria-hidden="true"></span>
+          <span>Редактировать профиль</span>
+        </a>
+        <form method="post" action="{% url 'accounts:logout' %}">
+          {% csrf_token %}
+          <button type="submit">
+            <span class="tg-native-icon tg-native-icon--leave" aria-hidden="true"></span>
+            <span>Выйти</span>
+          </button>
+        </form>
+      </div>
+    </header>
+
+    <div class="tg-settings-scroll" id="settingsScroll">
+      <section class="tg-settings-screen" data-settings-screen="main">
+        <a
+          class="tg-settings-cover"
+          href="{% url 'messenger:home' %}?profile={{ request.user.username|urlencode }}"
+          data-settings-close-on-follow
+          aria-label="Открыть профиль"
+        >
+          {% if request.user.avatar %}
+            <img class="tg-settings-cover__avatar" src="{{ request.user.avatar.url }}" alt="">
+          {% else %}
+            <span class="tg-settings-cover__avatar tg-settings-cover__avatar--fallback">{{ request.user.initials }}</span>
+          {% endif %}
+          <span class="tg-settings-cover__copy">
+            <strong>{{ request.user.display_name }}</strong>
+            <small>{{ request.user.email }}</small>
+            <small>@{{ request.user.username }}</small>
+          </span>
+        </a>
+
+        <div class="tg-settings-divider" aria-hidden="true"></div>
+        <div class="tg-settings-section-gap" aria-hidden="true"></div>
+
+        <nav class="tg-settings-list" aria-label="Разделы настроек">
+          <a
+            class="tg-settings-row"
+            href="{% url 'messenger:home' %}?profile={{ request.user.username|urlencode }}"
+            data-settings-close-on-follow
+          >
+            <span class="tg-settings-section-icon tg-settings-section-icon--account" aria-hidden="true"></span>
+            <span class="tg-settings-row__label">Мой аккаунт</span>
+          </a>
+
+          <button class="tg-settings-row" type="button" data-settings-target="privacy">
+            <span class="tg-settings-section-icon tg-settings-section-icon--lock" aria-hidden="true"></span>
+            <span class="tg-settings-row__label">Конфиденциальность и безопасность</span>
+          </button>
+
+          <button class="tg-settings-row" type="button" data-settings-target="chat">
+            <span class="tg-settings-section-icon tg-settings-section-icon--chat" aria-hidden="true"></span>
+            <span class="tg-settings-row__label">Настройки чатов</span>
+          </button>
+        </nav>
+      </section>
+
+      <section class="tg-settings-screen" data-settings-screen="privacy" hidden>
+        <div class="tg-settings-subsection">
+          <h2>Безопасность</h2>
+          <button class="tg-settings-row tg-settings-row--plain" type="button" data-settings-target="password">
+            <span class="tg-settings-row__label">Пароль</span>
+            <span class="tg-settings-row__value">Изменить</span>
+          </button>
+        </div>
+
+        <div class="tg-settings-divider" aria-hidden="true"></div>
+        <div class="tg-settings-section-gap" aria-hidden="true"></div>
+
+        <div class="tg-settings-subsection" id="newChatsSettings">
+          <h2>Новые чаты от незнакомых</h2>
+          <label class="tg-settings-toggle-row" for="id_archive_unknown_chats">
+            <span class="tg-settings-toggle-row__copy">
+              <strong>Архивировать и отключать уведомления</strong>
+              <small>Новые личные чаты от пользователей не из контактов будут попадать в архив без уведомлений.</small>
+            </span>
+            <span class="tg-settings-switch">
+              <input
+                id="id_archive_unknown_chats"
+                type="checkbox"
+                data-setting="archive_unknown_chats"
+                {% if request.user.archive_unknown_chats %}checked{% endif %}
+              >
+              <span class="tg-settings-switch__track"><span></span></span>
+            </span>
+          </label>
+        </div>
+      </section>
+
+      <section class="tg-settings-screen" data-settings-screen="chat" hidden>
+        <div class="tg-settings-subsection tg-settings-theme-section">
+          <h2>Оформление</h2>
+          <div class="tg-settings-themes" role="radiogroup" aria-label="Тема оформления">
+            <label class="tg-settings-theme{% if request.user.theme == 'light' %} is-selected{% endif %}" data-theme-option="light">
+              <span class="tg-settings-theme__preview tg-settings-theme__preview--light" aria-hidden="true">
+                <i class="tg-settings-theme__sidebar"></i>
+                <i class="tg-settings-theme__bubble tg-settings-theme__bubble--one"></i>
+                <i class="tg-settings-theme__bubble tg-settings-theme__bubble--two"></i>
+                <i class="tg-settings-theme__composer"></i>
+              </span>
+              <span class="tg-settings-theme__choice">
+                <input
+                  type="radio"
+                  name="theme-preview"
+                  value="light"
+                  data-setting="theme"
+                  data-value="light"
+                  {% if request.user.theme == 'light' %}checked{% endif %}
+                >
+                <span></span><b>Светлая</b>
+              </span>
+            </label>
+
+            <label class="tg-settings-theme{% if request.user.theme == 'dark' %} is-selected{% endif %}" data-theme-option="dark">
+              <span class="tg-settings-theme__preview tg-settings-theme__preview--dark" aria-hidden="true">
+                <i class="tg-settings-theme__sidebar"></i>
+                <i class="tg-settings-theme__bubble tg-settings-theme__bubble--one"></i>
+                <i class="tg-settings-theme__bubble tg-settings-theme__bubble--two"></i>
+                <i class="tg-settings-theme__composer"></i>
+              </span>
+              <span class="tg-settings-theme__choice">
+                <input
+                  type="radio"
+                  name="theme-preview"
+                  value="dark"
+                  data-setting="theme"
+                  data-value="dark"
+                  {% if request.user.theme == 'dark' %}checked{% endif %}
+                >
+                <span></span><b>Тёмная</b>
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <div class="tg-settings-divider" aria-hidden="true"></div>
+        <div class="tg-settings-section-gap" aria-hidden="true"></div>
+
+        <div class="tg-settings-subsection">
+          <h2>Сообщения</h2>
+
+          <label class="tg-settings-radio-row" for="sendModeEnter">
+            <input
+              id="sendModeEnter"
+              type="radio"
+              name="send-mode"
+              data-setting="enter_to_send"
+              data-value="true"
+              {% if request.user.enter_to_send %}checked{% endif %}
+            >
+            <span class="tg-settings-radio-row__control"></span>
+            <span class="tg-settings-radio-row__copy">
+              <strong>Отправлять по Enter</strong>
+              <small>Shift+Enter — новая строка</small>
+            </span>
+          </label>
+
+          <label class="tg-settings-radio-row" for="sendModeCtrlEnter">
+            <input
+              id="sendModeCtrlEnter"
+              type="radio"
+              name="send-mode"
+              data-setting="enter_to_send"
+              data-value="false"
+              {% if not request.user.enter_to_send %}checked{% endif %}
+            >
+            <span class="tg-settings-radio-row__control"></span>
+            <span class="tg-settings-radio-row__copy">
+              <strong>Отправлять по Ctrl+Enter</strong>
+              <small>Enter — новая строка</small>
+            </span>
+          </label>
+        </div>
+
+        <div class="tg-settings-divider" aria-hidden="true"></div>
+        <div class="tg-settings-section-gap" aria-hidden="true"></div>
+
+        <div class="tg-settings-subsection">
+          <button class="tg-settings-row" type="button" data-settings-target="archive">
+            <span class="tg-settings-section-icon tg-settings-section-icon--archive" aria-hidden="true"></span>
+            <span class="tg-settings-row__label">Настройки архива</span>
+            <span class="tg-settings-chevron" aria-hidden="true"></span>
+          </button>
+        </div>
+      </section>
+
+      <section class="tg-settings-screen" data-settings-screen="archive" id="archiveSettings" hidden>
+        <div class="tg-settings-subsection">
+          <h2>Архив</h2>
+
+          <label class="tg-settings-toggle-row" for="id_keep_archived_chats">
+            <span class="tg-settings-toggle-row__copy">
+              <strong>Всегда оставлять в архиве</strong>
+              <small>Новые сообщения не будут возвращать незаглушённые чаты в основной список.</small>
+            </span>
+            <span class="tg-settings-switch">
+              <input
+                id="id_keep_archived_chats"
+                type="checkbox"
+                data-setting="keep_archived_chats"
+                {% if request.user.keep_archived_chats %}checked{% endif %}
+              >
+              <span class="tg-settings-switch__track"><span></span></span>
+            </span>
+          </label>
+
+          <label class="tg-settings-toggle-row" for="id_archive_in_main_menu">
+            <span class="tg-settings-toggle-row__copy">
+              <strong>Архив в главном меню</strong>
+              <small>Показывать Архив отдельным пунктом бокового меню вместо строки над чатами.</small>
+            </span>
+            <span class="tg-settings-switch">
+              <input
+                id="id_archive_in_main_menu"
+                type="checkbox"
+                data-setting="archive_in_main_menu"
+                {% if request.user.archive_in_main_menu %}checked{% endif %}
+              >
+              <span class="tg-settings-switch__track"><span></span></span>
+            </span>
+          </label>
+        </div>
+      </section>
+
+      <section class="tg-settings-screen" data-settings-screen="password" hidden>
+        <div class="tg-settings-subsection">
+          <h2>Смена пароля</h2>
+          <p class="tg-settings-about">Введите текущий пароль, затем новый пароль дважды.</p>
+        </div>
+
+        <form
+          class="tg-settings-password-form"
+          id="settingsPasswordForm"
+          method="post"
+          action="{% url 'accounts:password_change' %}"
+          novalidate
+        >
+          {% csrf_token %}
+          <label class="tg-settings-password-field">
+            <span>Текущий пароль</span>
+            <input type="password" name="old_password" autocomplete="current-password" required>
+          </label>
+          <label class="tg-settings-password-field">
+            <span>Новый пароль</span>
+            <input type="password" name="new_password1" autocomplete="new-password" required>
+          </label>
+          <label class="tg-settings-password-field">
+            <span>Повторите новый пароль</span>
+            <input type="password" name="new_password2" autocomplete="new-password" required>
+          </label>
+          <div class="tg-settings-password-error" id="settingsPasswordError" hidden></div>
+          <div class="tg-settings-password-actions">
+            <button type="submit">Изменить пароль</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  </section>
+
+  <form id="settingsAjaxForm" method="post" hidden>
+    {% csrf_token %}
+  </form>
+
+  <div class="tg-settings-toast" id="settingsStatus" role="status" aria-live="polite" hidden></div>
+</div>

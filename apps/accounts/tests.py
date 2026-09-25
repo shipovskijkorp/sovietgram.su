@@ -70,7 +70,7 @@ class UserSettingsTests(TestCase):
             reverse("accounts:settings"),
             {"theme": "dark"},
         )
-        self.assertRedirects(response, reverse("accounts:settings"))
+        self.assertRedirects(response, f"{reverse('messenger:home')}?settings=main")
         self.user.refresh_from_db()
         self.assertEqual(self.user.theme, User.Theme.DARK)
         self.assertFalse(self.user.enter_to_send)
@@ -82,6 +82,6 @@ class UserSettingsTests(TestCase):
             reverse("accounts:settings"),
             {"theme": "light", "enter_to_send": "on"},
         )
-        self.assertRedirects(response, reverse("accounts:settings"))
+        self.assertRedirects(response, f"{reverse('messenger:home')}?settings=main")
         self.user.refresh_from_db()
         self.assertTrue(self.user.enter_to_send)

@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="{% static 'css/media.css' %}?v={{ static_version }}">
 <link rel="stylesheet" href="{% static 'css/chat.css' %}?v={{ static_version }}">
 <link rel="stylesheet" href="{% static 'css/community-profile.css' %}?v={{ static_version }}">
+<link rel="stylesheet" href="{% static 'css/settings.css' %}?v={{ static_version }}">
 {% endblock %}
 
 {% block content %}
@@ -37,7 +38,7 @@
           <strong>Архив</strong>
           <small>{{ archived_count }} чат{{ archived_count|pluralize:'а,ов' }}</small>
         </span>
-        <a href="{% url 'accounts:settings' %}#archiveSettings" aria-label="Настройки архива" title="Настройки архива">
+        <a href="{% url 'messenger:home' %}?archived=1&settings=archive" data-open-settings="archive" aria-label="Настройки архива" title="Настройки архива">
           <span class="tg-native-icon tg-native-icon--settings" aria-hidden="true"></span>
         </a>
       </div>
@@ -848,7 +849,7 @@
     <a href="{% url 'messenger:contacts' %}"><span class="tg-native-icon tg-native-icon--contacts" aria-hidden="true"></span><strong>Контакты</strong></a>
     <a href="{% url 'messenger:calls' %}"><span class="tg-native-icon tg-native-icon--phone" aria-hidden="true"></span><strong>Звонки</strong></a>
     <a href="{% url 'messenger:saved_messages' %}"><span class="tg-native-icon tg-native-icon--saved" aria-hidden="true"></span><strong>Избранное</strong></a>
-    <a href="{% url 'accounts:settings' %}"><span class="tg-native-icon tg-native-icon--settings" aria-hidden="true"></span><strong>Настройки</strong></a>
+    <a href="{% url 'messenger:home' %}?settings=main" data-open-settings="main"><span class="tg-native-icon tg-native-icon--settings" aria-hidden="true"></span><strong>Настройки</strong></a>
   </nav>
 
   <div class="profile-drawer__footer profile-drawer__footer--telegram">
@@ -967,6 +968,7 @@
 </div>
 
 {% include 'accounts/_profile_overlay.html' %}
+{% include 'accounts/_settings_overlay.html' %}
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 {% endblock %}
@@ -980,4 +982,5 @@
 <script src="{% static 'js/chat-controls.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/community-profile.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/community-settings.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/settings.js' %}?v={{ static_version }}"></script>
 {% endblock %}

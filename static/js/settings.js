@@ -2,45 +2,89 @@
   const root = document.getElementById("telegramSettings");
   if (!root) return;
 
-  const endpoint = root.dataset.settingsUrl || window.location.pathname;
-  const csrfToken = document.querySelector("#settingsAjaxForm [name='csrfmiddlewaretoken']")?.value || "";
-  const screens = [...root.querySelectorAll("[data-settings-screen]")];
+  const endpoint = root.dataset.settingsUrl || "/settings/";
+  const csrfToken = root.querySelector("#settingsAjaxForm [name='csrfmiddlewaretoken']")?.value || "";
+  const scroll = document.getElementById("settingsScroll");
+  const topbar = document.getElementById("settingsTopbar");
   const title = document.getElementById("settingsTopbarTitle");
-  const homeBack = root.querySelector(".tg-settings-topbar__home");
-  const sectionBack = document.getElementById("settingsSectionBack");
+  const backButton = document.getElementById("settingsSectionBack");
   const menuButton = document.getElementById("settingsMenuButton");
   const menu = document.getElementById("settingsMenu");
   const status = document.getElementById("settingsStatus");
   const themeMeta = document.querySelector('meta[name="theme-color"]');
-  const enterHint = document.getElementById("enterModeHint");
+  const screens = [...root.querySelectorAll("[data-settings-screen]")];
+
+  const passwordForm = document.getElementById("settingsPasswordForm");
+  const passwordError = document.getElementById("settingsPasswordError");
 
   const screenTitles = {
     main: "Настройки",
     privacy: "Конфиденциальность и безопасность",
     chat: "Настройки чатов",
+    archive: "Настройки архива",
+    password: "Пароль",
+  };
+
+  const parentScreen = {
+    privacy: "main",
+    chat: "main",
+    archive: "chat",
+    password: "privacy",
+  };
+
+  const hashAliases = {
+    archiveSettings: "archive",
+    newChatsSettings: "privacy",
   };
 
   const currentValues = new Map();
   let currentScreen = "main";
   let toastTimer = 0;
 
-  function settingControls(setting) {
+  function normalizeScreen(value) {
+    const aliased = hashAliases[value] || value;
+    return Object.hasOwn(screenTitles, aliased) ? aliased : "main";
+  }
+
+  function currentUrl() {
+    return new URL(window.location.href);
+  }
+
+  function setUrlScreen(screen, mode = "push") {
+    const url = currentUrl();
+    url.searchParams.set("settings", normalizeScreen(screen));
+    url.hash = "";
+    const method = mode === "replace" ? "replaceState" : "pushState";
+    window.history[method]({ settingsScreen: screen }, "", url);
+  }
+
+  function clearUrlScreen(mode = "push") {
+    const url = currentUrl();
+    url.searchParams.delete("settings");
+    if (url.hash === "#archiveSettings" || url.hash === "#newChatsSettings") {
+      url.hash = "";
+    }
+    const method = mode === "replace" ? "replaceState" : "pushState";
+    window.history[method]({}, "", url);
+  }
+
+  function controlsFor(setting) {
     return [...root.querySelectorAll("[data-setting]")].filter(
-      (control) => control.dataset.setting === setting
+      (control) => control.dataset.setting === setting,
     );
   }
 
-  function inputValue(input) {
-    if (input.type === "checkbox") {
-      return input.checked ? "true" : "false";
+  function controlValue(control) {
+    if (control.type === "checkbox") {
+      return control.checked ? "true" : "false";
     }
-    return input.dataset.value ?? input.value;
+    return control.dataset.value ?? control.value;
   }
 
   function initializeValues() {
-    root.querySelectorAll("[data-setting]").forEach((input) => {
-      if (input.type === "radio" && !input.checked) return;
-      currentValues.set(input.dataset.setting, inputValue(input));
+    root.querySelectorAll("[data-setting]").forEach((control) => {
+      if (control.type === "radio" && !control.checked) return;
+      currentValues.set(control.dataset.setting, controlValue(control));
     });
   }
 
@@ -52,7 +96,7 @@
     status.hidden = false;
     toastTimer = window.setTimeout(() => {
       status.hidden = true;
-    }, isError ? 4200 : 1500);
+    }, isError ? 4200 : 1400);
   }
 
   function closeMenu() {
@@ -62,18 +106,14 @@
   }
 
   function toggleMenu() {
-    if (!menu || !menuButton) return;
+    if (!menu || !menuButton || menuButton.hidden) return;
     const opening = menu.hidden;
     menu.hidden = !opening;
     menuButton.setAttribute("aria-expanded", opening ? "true" : "false");
   }
 
-  function normalizedScreen(value) {
-    return Object.hasOwn(screenTitles, value) ? value : "main";
-  }
-
-  function showScreen(value, options = {}) {
-    const next = normalizedScreen(value);
+  function renderScreen(value) {
+    const next = normalizeScreen(value);
     currentScreen = next;
 
     screens.forEach((screen) => {
@@ -81,29 +121,40 @@
     });
 
     if (title) title.textContent = screenTitles[next];
-    if (homeBack) homeBack.hidden = next !== "main";
-    if (sectionBack) sectionBack.hidden = next === "main";
+    if (backButton) backButton.hidden = next === "main";
+    topbar?.classList.toggle("has-back", next !== "main");
+    if (menuButton) menuButton.hidden = next !== "main";
     closeMenu();
 
-    if (options.history === "push") {
-      const hash = next === "main" ? "" : "#" + next;
-      window.history.pushState(
-        { settingsScreen: next },
-        "",
-        window.location.pathname + window.location.search + hash,
-      );
-    } else if (options.history === "replace") {
-      const hash = next === "main" ? "" : "#" + next;
-      window.history.replaceState(
-        { settingsScreen: next },
-        "",
-        window.location.pathname + window.location.search + hash,
-      );
+    if (scroll) scroll.scrollTop = 0;
+  }
+
+  function openSettings(screen = "main", options = {}) {
+    const next = normalizeScreen(screen);
+    if (typeof window.setProfileMenu === "function") {
+      window.setProfileMenu(false);
+    } else {
+      const profileMenu = document.getElementById("profileMenu");
+      const profileBackdrop = document.getElementById("profileMenuBackdrop");
+      profileMenu?.classList.remove("is-open");
+      profileBackdrop?.classList.remove("is-open");
     }
 
-    const scroll = root.querySelector(".tg-settings-scroll");
-    if (scroll) scroll.scrollTop = 0;
-    window.scrollTo(0, 0);
+    root.hidden = false;
+    document.body.classList.add("settings-open");
+    renderScreen(next);
+
+    if (options.history === "replace") setUrlScreen(next, "replace");
+    if (options.history === "push") setUrlScreen(next, "push");
+  }
+
+  function closeSettings(options = {}) {
+    closeMenu();
+    root.hidden = true;
+    document.body.classList.remove("settings-open");
+
+    if (options.history === "replace") clearUrlScreen("replace");
+    if (options.history === "push") clearUrlScreen("push");
   }
 
   function previewTheme(theme) {
@@ -111,39 +162,32 @@
     root.querySelectorAll("[data-theme-option]").forEach((option) => {
       option.classList.toggle("is-selected", option.dataset.themeOption === theme);
     });
-    if (themeMeta) {
-      themeMeta.content = theme === "dark" ? "#171412" : "#8d1e28";
-    }
+    if (themeMeta) themeMeta.content = theme === "dark" ? "#171412" : "#cc0000";
   }
 
-  function updateEnterHint(value) {
-    const enterSends = value === "true";
-    document.body.dataset.enterToSend = enterSends ? "true" : "false";
-    if (!enterHint) return;
-    enterHint.textContent = enterSends
-      ? "Enter отправляет сообщение, Shift+Enter создаёт новую строку."
-      : "Enter создаёт новую строку, Ctrl+Enter отправляет сообщение.";
+  function updateSendMode(value) {
+    document.body.dataset.enterToSend = value === "true" ? "true" : "false";
   }
 
   function applyValue(setting, value) {
-    settingControls(setting).forEach((control) => {
+    controlsFor(setting).forEach((control) => {
       if (control.type === "checkbox") {
         control.checked = value === "true";
       } else if (control.type === "radio") {
-        control.checked = inputValue(control) === value;
+        control.checked = controlValue(control) === value;
       } else {
         control.value = value;
       }
     });
 
     if (setting === "theme") previewTheme(value);
-    if (setting === "enter_to_send") updateEnterHint(value);
+    if (setting === "enter_to_send") updateSendMode(value);
   }
 
   function setSaving(setting, saving) {
-    settingControls(setting).forEach((control) => {
+    controlsFor(setting).forEach((control) => {
       const row = control.closest(
-        ".tg-settings-toggle-row, .tg-settings-radio-row, .tg-settings-theme"
+        ".tg-settings-toggle-row, .tg-settings-radio-row, .tg-settings-theme",
       );
       row?.classList.toggle("is-saving", saving);
       control.disabled = saving;
@@ -154,11 +198,10 @@
     const setting = control.dataset.setting;
     if (!setting) return;
 
-    const nextValue = inputValue(control);
+    const nextValue = controlValue(control);
     const previousValue = currentValues.get(setting);
     if (previousValue === nextValue) {
-      if (setting === "theme") previewTheme(nextValue);
-      if (setting === "enter_to_send") updateEnterHint(nextValue);
+      applyValue(setting, nextValue);
       return;
     }
 
@@ -174,9 +217,7 @@
       const response = await fetch(endpoint, {
         method: "POST",
         credentials: "same-origin",
-        headers: {
-          "X-Requested-With": "XMLHttpRequest",
-        },
+        headers: { "X-Requested-With": "XMLHttpRequest" },
         body: data,
       });
       const payload = await response.json().catch(() => ({}));
@@ -187,6 +228,7 @@
       const savedValue = typeof payload.value === "boolean"
         ? (payload.value ? "true" : "false")
         : String(payload.value);
+
       currentValues.set(setting, savedValue);
       applyValue(setting, savedValue);
       showStatus("Сохранено");
@@ -198,14 +240,80 @@
     }
   }
 
-  root.querySelectorAll("[data-settings-target]").forEach((button) => {
-    button.addEventListener("click", () => {
-      showScreen(button.dataset.settingsTarget || "main", { history: "push" });
+  function passwordErrorsText(errors) {
+    if (!errors || typeof errors !== "object") return "Не удалось изменить пароль.";
+    const messages = [];
+    Object.values(errors).forEach((fieldErrors) => {
+      if (!Array.isArray(fieldErrors)) return;
+      fieldErrors.forEach((entry) => {
+        if (typeof entry === "string") messages.push(entry);
+        else if (entry?.message) messages.push(entry.message);
+      });
+    });
+    return messages.join(" ") || "Не удалось изменить пароль.";
+  }
+
+  async function submitPassword(event) {
+    event.preventDefault();
+    if (!passwordForm || !passwordError) return;
+
+    passwordError.hidden = true;
+    passwordError.textContent = "";
+
+    const submit = passwordForm.querySelector('button[type="submit"]');
+    if (submit) submit.disabled = true;
+
+    try {
+      const response = await fetch(passwordForm.action, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+        body: new FormData(passwordForm),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.ok) {
+        throw new Error(passwordErrorsText(payload.errors));
+      }
+
+      passwordForm.reset();
+      renderScreen("privacy");
+      setUrlScreen("privacy", "replace");
+      showStatus("Пароль изменён");
+    } catch (error) {
+      passwordError.textContent = error.message || "Не удалось изменить пароль.";
+      passwordError.hidden = false;
+    } finally {
+      if (submit) submit.disabled = false;
+    }
+  }
+
+  document.querySelectorAll("[data-open-settings]").forEach((control) => {
+    control.addEventListener("click", (event) => {
+      event.preventDefault();
+      openSettings(control.dataset.openSettings || "main", { history: "push" });
     });
   });
 
-  sectionBack?.addEventListener("click", () => {
-    showScreen("main", { history: "replace" });
+  root.querySelectorAll("[data-settings-target]").forEach((control) => {
+    control.addEventListener("click", () => {
+      const next = normalizeScreen(control.dataset.settingsTarget || "main");
+      renderScreen(next);
+      setUrlScreen(next, "push");
+    });
+  });
+
+  root.querySelectorAll("[data-settings-close]").forEach((control) => {
+    control.addEventListener("click", () => closeSettings({ history: "push" }));
+  });
+
+  root.querySelectorAll("[data-settings-close-on-follow]").forEach((control) => {
+    control.addEventListener("click", () => closeSettings({ history: "replace" }));
+  });
+
+  backButton?.addEventListener("click", () => {
+    const next = parentScreen[currentScreen] || "main";
+    renderScreen(next);
+    setUrlScreen(next, "replace");
   });
 
   menuButton?.addEventListener("click", (event) => {
@@ -213,10 +321,7 @@
     toggleMenu();
   });
 
-  menu?.addEventListener("click", (event) => {
-    event.stopPropagation();
-  });
-
+  menu?.addEventListener("click", (event) => event.stopPropagation());
   document.addEventListener("click", closeMenu);
 
   root.querySelectorAll("[data-setting]").forEach((control) => {
@@ -226,31 +331,44 @@
     });
   });
 
-  window.addEventListener("popstate", () => {
-    showScreen(window.location.hash.slice(1) || "main");
-  });
+  passwordForm?.addEventListener("submit", submitPassword);
 
-  window.addEventListener("hashchange", () => {
-    const fromHash = normalizedScreen(window.location.hash.slice(1) || "main");
-    if (fromHash !== currentScreen) showScreen(fromHash);
+  window.addEventListener("popstate", () => {
+    const url = currentUrl();
+    const requested = url.searchParams.get("settings");
+    if (requested) {
+      openSettings(requested);
+    } else {
+      closeSettings();
+    }
   });
 
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return;
+    if (event.key !== "Escape" || root.hidden) return;
+
     if (menu && !menu.hidden) {
       event.preventDefault();
       closeMenu();
       return;
     }
+
     if (currentScreen !== "main") {
       event.preventDefault();
-      showScreen("main", { history: "replace" });
+      const next = parentScreen[currentScreen] || "main";
+      renderScreen(next);
+      setUrlScreen(next, "replace");
+      return;
     }
+
+    event.preventDefault();
+    closeSettings({ history: "push" });
   });
 
   initializeValues();
-  const initial = normalizedScreen(window.location.hash.slice(1) || "main");
-  showScreen(initial, { history: "replace" });
   previewTheme(currentValues.get("theme") || document.body.dataset.theme || "light");
-  updateEnterHint(currentValues.get("enter_to_send") || "true");
+  updateSendMode(currentValues.get("enter_to_send") || "true");
+
+  const url = currentUrl();
+  const requested = root.dataset.autoOpen || url.searchParams.get("settings");
+  if (requested) openSettings(requested);
 })();
