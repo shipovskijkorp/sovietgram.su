@@ -147,12 +147,21 @@ def _clean_special_payload(special_type, raw_payload):
 
     if special_type == Message.SpecialType.ARTICLE:
         title = str(raw_payload.get("title", "")).strip()[:200]
-        body = str(raw_payload.get("body", "")).strip()[:12000]
+        subtitle = str(raw_payload.get("subtitle", "")).strip()[:300]
+        body = str(raw_payload.get("body", "")).strip()[:40000]
         if not title:
             raise ValueError("Введите заголовок статьи.")
         if not body:
             raise ValueError("Введите текст статьи.")
-        return {"title": title, "body": body}, title
+        search_text = "\n".join(
+            part for part in (title, subtitle, body[:3000]) if part
+        )[:4096]
+        return {
+            "title": title,
+            "subtitle": subtitle,
+            "body": body,
+            "format": "sovietgram-markdown-v1",
+        }, search_text
 
     if special_type == Message.SpecialType.LOCATION:
         label = str(raw_payload.get("label", "")).strip()[:120]
@@ -1508,6 +1517,50 @@ def special_message_action(request, chat_id, message_id):
             data["tasks"] = tasks
             message.special_data = data
             message.save(update_fields=("special_data", "updated_at"))
+        elif message.special_type == Message.SpecialType.ARTICLE:
+            if action != "edit":
+                return JsonResponse(
+                    {"ok": False, "error": "Неизвестное действие статьи."},
+                    status=400,
+                )
+            can_edit = message.sender_id == request.user.pk
+            if (
+                not can_edit
+                and chat.type != Chat.Type.PRIVATE
+                and membership.role in {
+                    ChatParticipant.Role.OWNER,
+                    ChatParticipant.Role.ADMIN,
+                }
+            ):
+                can_edit = True
+            if not can_edit:
+                return JsonResponse(
+                    {"ok": False, "error": "У вас нет права редактировать эту статью."},
+                    status=403,
+                )
+            try:
+                raw_payload = json.loads(request.POST.get("payload", "{}"))
+                article_data, search_text = _clean_special_payload(
+                    Message.SpecialType.ARTICLE,
+                    raw_payload,
+                )
+            except (json.JSONDecodeError, ValueError) as error:
+                return JsonResponse(
+                    {"ok": False, "error": str(error)},
+                    status=400,
+                )
+            message.special_data = article_data
+            message.text = search_text
+            message.edited_at = timezone.now()
+            message.save(
+                update_fields=(
+                    "special_data",
+                    "text",
+                    "edited_at",
+                    "updated_at",
+                )
+            )
+            touch_chat(chat)
         else:
             return JsonResponse(
                 {

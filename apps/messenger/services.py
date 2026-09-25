@@ -293,10 +293,31 @@ def serialize_special_content(message, current_user):
         }
 
     if special_type == Message.SpecialType.ARTICLE:
+        can_edit = message.sender_id == current_user.pk
+        if not can_edit and message.chat.type != Chat.Type.PRIVATE:
+            role = (
+                ChatParticipant.objects.filter(
+                    chat=message.chat,
+                    user=current_user,
+                )
+                .values_list("role", flat=True)
+                .first()
+            )
+            can_edit = role in {
+                ChatParticipant.Role.OWNER,
+                ChatParticipant.Role.ADMIN,
+            }
         return {
             "type": "article",
             "title": str(data.get("title", ""))[:200],
-            "body": str(data.get("body", ""))[:12000],
+            "subtitle": str(data.get("subtitle", ""))[:300],
+            "body": str(data.get("body", ""))[:40000],
+            "format": str(data.get("format", "sovietgram-markdown-v1"))[:64],
+            "can_edit": can_edit,
+            "action_url": reverse(
+                "messenger:special_message_action",
+                args=[message.chat_id, message.pk],
+            ),
         }
 
     if special_type == Message.SpecialType.LOCATION:

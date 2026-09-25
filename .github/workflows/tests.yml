@@ -26,8 +26,10 @@ jobs:
       - name: Check JavaScript syntax
         run: |
           node --check static/js/attachment-menu.js
+          node --check static/js/attachment-files.js
           node --check static/js/chat.js
           node --check static/js/attachment-special.js
+          node --check static/js/article-editor.js
           node --check static/js/chat-controls.js
           node --check static/js/search.js
           node --check static/js/profile.js

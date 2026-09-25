@@ -1,10 +1,12 @@
 import json
 import tempfile
+from io import BytesIO
 
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from PIL import Image
 
 from apps.accounts.models import User
 
@@ -1502,7 +1504,16 @@ class ChatFeatureTests(TestCase):
             self.assertContains(response, label)
         self.assertNotContains(response, "Кошелёк")
         self.assertContains(response, 'id="attachSpecialBackdrop"', html=False)
+        self.assertContains(response, "js/attachment-files.js", html=False)
         self.assertContains(response, "js/attachment-special.js", html=False)
+        self.assertContains(response, "js/article-editor.js", html=False)
+        self.assertContains(response, 'id="attachArticleToolbar"', html=False)
+        self.assertContains(response, 'data-article-command="bold"', html=False)
+        self.assertContains(response, 'data-article-command="subscript"', html=False)
+        self.assertContains(response, 'data-article-command="details"', html=False)
+        self.assertContains(response, 'data-article-command="table"', html=False)
+        self.assertContains(response, 'data-article-command="location"', html=False)
+        self.assertContains(response, 'id="articleViewerBackdrop"', html=False)
 
     def test_special_poll_can_be_created_and_voted(self):
         create = self.client.post(
@@ -1705,3 +1716,194 @@ class ChatFeatureTests(TestCase):
             response.json()["message"]["attachments"][0]["kind"],
             "audio",
         )
+
+
+    def test_photo_video_mode_accepts_valid_image_and_serializes_inline_media(self):
+        image_buffer = BytesIO()
+        Image.new("RGB", (2, 2), "white").save(image_buffer, format="PNG")
+        upload = SimpleUploadedFile(
+            "photo.png",
+            image_buffer.getvalue(),
+            content_type="image/png",
+        )
+        response = self.client.post(
+            reverse("messenger:send_message", args=[self.chat.pk]),
+            {
+                "attachment_mode": "media",
+                "attachments": upload,
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        attachment = MessageAttachment.objects.get(
+            message_id=response.json()["message"]["id"]
+        )
+        self.assertEqual(attachment.kind, MessageAttachment.Kind.IMAGE)
+        serialized = response.json()["message"]["attachments"][0]
+        self.assertEqual(serialized["kind"], "image")
+        self.assertEqual(
+            self.client.get(
+                reverse("messenger:view_attachment", args=[attachment.pk])
+            ).status_code,
+            200,
+        )
+
+    def test_document_mode_accepts_arbitrary_file_and_keeps_download_semantics(self):
+        upload = SimpleUploadedFile(
+            "report.pdf",
+            b"%PDF-1.4\nsovietgram-test\n%%EOF",
+            content_type="application/pdf",
+        )
+        response = self.client.post(
+            reverse("messenger:send_message", args=[self.chat.pk]),
+            {
+                "attachment_mode": "file",
+                "attachments": upload,
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        attachment = MessageAttachment.objects.get(
+            message_id=response.json()["message"]["id"]
+        )
+        self.assertEqual(attachment.kind, MessageAttachment.Kind.FILE)
+        serialized = response.json()["message"]["attachments"][0]
+        self.assertEqual(serialized["kind"], "file")
+        self.assertIn(
+            reverse("messenger:download_attachment", args=[attachment.pk]),
+            serialized["url"],
+        )
+
+    def test_music_mode_uses_inline_audio_endpoint(self):
+        upload = SimpleUploadedFile(
+            "song.ogg",
+            b"OggS" + (b"\0" * 96),
+            content_type="audio/ogg",
+        )
+        response = self.client.post(
+            reverse("messenger:send_message", args=[self.chat.pk]),
+            {
+                "attachment_mode": "audio",
+                "attachments": upload,
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        attachment = MessageAttachment.objects.get(
+            message_id=response.json()["message"]["id"]
+        )
+        self.assertEqual(attachment.kind, MessageAttachment.Kind.AUDIO)
+        serialized = response.json()["message"]["attachments"][0]
+        self.assertEqual(serialized["kind"], "audio")
+        inline = self.client.get(
+            reverse("messenger:view_attachment", args=[attachment.pk])
+        )
+        self.assertEqual(inline.status_code, 200)
+        self.assertTrue(
+            inline["Content-Type"].startswith("audio/"),
+            inline["Content-Type"],
+        )
+
+    def test_article_supports_rich_payload_and_author_editing(self):
+        create = self.client.post(
+            reverse("messenger:send_special_message", args=[self.chat.pk]),
+            {
+                "special_type": "article",
+                "payload": json.dumps(
+                    {
+                        "title": "Большая статья",
+                        "subtitle": "Подзаголовок",
+                        "body": (
+                            "# Заголовок\n\n"
+                            "**Жирный** и *курсив*.\n\n"
+                            "> Цитата\n\n"
+                            "- пункт\n"
+                            "- [ ] задача\n\n"
+                            "| A | B |\n"
+                            "| --- | --- |\n"
+                            "| 1 | 2 |"
+                        ),
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(create.status_code, 200)
+        special = create.json()["message"]["special"]
+        self.assertEqual(special["type"], "article")
+        self.assertEqual(special["title"], "Большая статья")
+        self.assertEqual(special["subtitle"], "Подзаголовок")
+        self.assertTrue(special["can_edit"])
+        self.assertEqual(special["format"], "sovietgram-markdown-v1")
+        self.assertTrue(special["action_url"])
+
+        message = Message.objects.get(pk=create.json()["message"]["id"])
+        edit = self.client.post(
+            reverse(
+                "messenger:special_message_action",
+                args=[self.chat.pk, message.pk],
+            ),
+            {
+                "action": "edit",
+                "payload": json.dumps(
+                    {
+                        "title": "Обновлённая статья",
+                        "subtitle": "Новый подзаголовок",
+                        "body": "## После редактирования\n\nНовый текст.",
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(edit.status_code, 200)
+        updated = edit.json()["message"]["special"]
+        self.assertEqual(updated["title"], "Обновлённая статья")
+        self.assertEqual(updated["subtitle"], "Новый подзаголовок")
+        message.refresh_from_db()
+        self.assertIsNotNone(message.edited_at)
+        self.assertEqual(
+            message.special_data["format"],
+            "sovietgram-markdown-v1",
+        )
+
+    def test_other_private_participant_cannot_edit_article(self):
+        create = self.client.post(
+            reverse("messenger:send_special_message", args=[self.chat.pk]),
+            {
+                "special_type": "article",
+                "payload": json.dumps(
+                    {
+                        "title": "Авторская статья",
+                        "body": "Текст.",
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(create.status_code, 200)
+        message_id = create.json()["message"]["id"]
+
+        self.client.force_login(self.bob)
+        edit = self.client.post(
+            reverse(
+                "messenger:special_message_action",
+                args=[self.chat.pk, message_id],
+            ),
+            {
+                "action": "edit",
+                "payload": json.dumps(
+                    {
+                        "title": "Чужая правка",
+                        "body": "Не должно сохраниться.",
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(edit.status_code, 403)
+        message = Message.objects.get(pk=message_id)
+        self.assertEqual(message.special_data["title"], "Авторская статья")

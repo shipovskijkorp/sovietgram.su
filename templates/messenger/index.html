@@ -358,10 +358,18 @@
                   {% endif %}
                 </section>
               {% elif message.special_type == 'article' and message.special_ui %}
-                <section class="message-special message-article" data-special-message data-special-type="article">
+                <section class="message-special message-article"
+                         data-special-message
+                         data-special-type="article"
+                         data-article-action-url="{{ message.special_ui.action_url }}"
+                         data-article-can-edit="{{ message.special_ui.can_edit|yesno:'true,false' }}">
                   <small class="message-special__eyebrow">Статья</small>
                   <strong class="message-special__title">{{ message.special_ui.title }}</strong>
-                  <div class="message-article__body">{{ message.special_ui.body|linebreaksbr }}</div>
+                  {% if message.special_ui.subtitle %}<span class="message-article__subtitle">{{ message.special_ui.subtitle }}</span>{% endif %}
+                  <p class="message-article__excerpt">{{ message.special_ui.body|truncatechars:360 }}</p>
+                  <textarea class="message-article__source" hidden>{{ message.special_ui.body }}</textarea>
+                  <button class="message-article__open" type="button" data-article-open>Открыть статью</button>
+                  {% if message.special_ui.can_edit %}<button class="message-article__edit" type="button" data-article-edit>Изменить</button>{% endif %}
                 </section>
               {% elif message.special_type == 'location' and message.special_ui %}
                 <a class="message-special message-location"
@@ -469,9 +477,9 @@
             {% endif %}
           </div>
         </div>
-        <input id="mediaAttachmentsInput" class="visually-hidden" type="file" multiple accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,video/quicktime,video/x-m4v">
-        <input id="fileAttachmentsInput" class="visually-hidden" type="file" multiple>
-        <input id="audioAttachmentsInput" class="visually-hidden" type="file" multiple accept="audio/mpeg,audio/mp4,audio/aac,audio/ogg,audio/wav,audio/x-wav,audio/flac,audio/x-flac,audio/opus,.mp3,.m4a,.aac,.ogg,.oga,.wav,.flac,.opus">
+        <input id="mediaAttachmentsInput" class="visually-hidden" type="file" name="attachments" multiple accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,video/quicktime,video/x-m4v">
+        <input id="fileAttachmentsInput" class="visually-hidden" type="file" name="attachments" multiple>
+        <input id="audioAttachmentsInput" class="visually-hidden" type="file" name="attachments" multiple accept="audio/mpeg,audio/mp4,audio/aac,audio/ogg,audio/wav,audio/x-wav,audio/flac,audio/x-flac,audio/opus,.mp3,.m4a,.aac,.ogg,.oga,.wav,.flac,.opus">
         <input id="attachmentModeInput" type="hidden" name="attachment_mode" value="media">
         <div class="composer__field">
           <textarea id="messageInput" name="text" rows="1" maxlength="4096" placeholder="{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_messages %}Можно отправлять только медиа{% else %}Сообщение{% endif %}" autocomplete="off"{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_messages %} readonly{% endif %}>{{ active_membership.draft_text }}</textarea>
@@ -549,9 +557,59 @@
       </div>
     </div>
 
-    <div class="attach-special-panel" data-special-panel="article" hidden>
+    <div class="attach-special-panel attach-article-editor" data-special-panel="article" hidden>
       <label class="attach-special-field"><span>Заголовок</span><input id="attachArticleTitle" type="text" maxlength="200" placeholder="Заголовок статьи"></label>
-      <label class="attach-special-field attach-special-field--grow"><span>Текст</span><textarea id="attachArticleBody" rows="10" maxlength="12000" placeholder="Текст статьи"></textarea></label>
+      <label class="attach-special-field"><span>Подзаголовок</span><input id="attachArticleSubtitle" type="text" maxlength="300" placeholder="Необязательно"></label>
+
+      <div class="attach-article-toolbar" id="attachArticleToolbar" role="toolbar" aria-label="Форматирование статьи">
+        <div class="attach-article-toolbar__group">
+          <button type="button" data-article-command="undo" title="Отменить">↶</button>
+          <button type="button" data-article-command="redo" title="Повторить">↷</button>
+        </div>
+        <div class="attach-article-toolbar__group">
+          <button type="button" data-article-command="bold" title="Жирный"><b>B</b></button>
+          <button type="button" data-article-command="italic" title="Курсив"><i>I</i></button>
+          <button type="button" data-article-command="underline" title="Подчёркнутый"><u>U</u></button>
+          <button type="button" data-article-command="strike" title="Зачёркнутый"><s>S</s></button>
+          <button type="button" data-article-command="subscript" title="Нижний индекс">X₂</button>
+          <button type="button" data-article-command="superscript" title="Верхний индекс">X²</button>
+          <button type="button" data-article-command="marked" title="Выделение">▰</button>
+          <button type="button" data-article-command="spoiler" title="Спойлер">◫</button>
+          <button type="button" data-article-command="code-inline" title="Код">&lt;/&gt;</button>
+          <button type="button" data-article-command="plain" title="Очистить форматирование">Tx</button>
+        </div>
+        <div class="attach-article-toolbar__group">
+          <button type="button" data-article-command="h1" title="Заголовок 1">H1</button>
+          <button type="button" data-article-command="h2" title="Заголовок 2">H2</button>
+          <button type="button" data-article-command="h3" title="Заголовок 3">H3</button>
+          <button type="button" data-article-command="h4" title="Заголовок 4">H4</button>
+          <button type="button" data-article-command="h5" title="Заголовок 5">H5</button>
+          <button type="button" data-article-command="h6" title="Заголовок 6">H6</button>
+          <button type="button" data-article-command="quote" title="Цитата">❝</button>
+          <button type="button" data-article-command="pullquote" title="Выносная цитата">❞</button>
+          <button type="button" data-article-command="details" title="Сворачиваемый блок">▸</button>
+          <button type="button" data-article-command="code-block" title="Блок кода">{ }</button>
+          <button type="button" data-article-command="math" title="Формула">∑</button>
+        </div>
+        <div class="attach-article-toolbar__group">
+          <button type="button" data-article-command="bullet-list" title="Маркированный список">•≡</button>
+          <button type="button" data-article-command="ordered-list" title="Нумерованный список">1≡</button>
+          <button type="button" data-article-command="task-list" title="Список задач">☑</button>
+          <button type="button" data-article-command="table" title="Таблица">▦</button>
+          <button type="button" data-article-command="divider" title="Разделитель">—</button>
+          <button type="button" data-article-command="link" title="Ссылка">🔗</button>
+          <button type="button" data-article-command="image" title="Изображение по ссылке">▧</button>
+          <button type="button" data-article-command="location" title="Геопозиция">⌖</button>
+        </div>
+        <button class="attach-article-preview-toggle" id="attachArticlePreviewToggle" type="button">Предпросмотр</button>
+      </div>
+
+      <label class="attach-special-field attach-special-field--grow attach-article-source" id="attachArticleSourceWrap">
+        <span>Текст</span>
+        <textarea id="attachArticleBody" rows="14" maxlength="40000" spellcheck="true" placeholder="Напишите статью. Поддерживаются заголовки, ссылки, цитаты, код, списки, таблицы и спойлеры."></textarea>
+      </label>
+      <div class="attach-article-preview" id="attachArticlePreview" hidden></div>
+      <div class="attach-article-counter"><span id="attachArticleCounter">0</span> / 40000</div>
     </div>
 
     <div class="attach-special-panel" data-special-panel="location" hidden>
@@ -569,6 +627,20 @@
 
     <footer class="attach-special-footer"><small id="attachSpecialHint"></small></footer>
   </section>
+</div>
+
+<div class="article-viewer-backdrop" id="articleViewerBackdrop" hidden>
+  <article class="article-viewer" role="dialog" aria-modal="true" aria-labelledby="articleViewerTitle">
+    <header class="article-viewer__header">
+      <button id="articleViewerClose" type="button" aria-label="Закрыть"><span class="tg-native-icon tg-native-icon--close tg-native-icon--compact" aria-hidden="true"></span></button>
+      <div>
+        <strong id="articleViewerTitle">Статья</strong>
+        <small id="articleViewerSubtitle"></small>
+      </div>
+      <button id="articleViewerEdit" type="button" hidden>Изменить</button>
+    </header>
+    <div class="article-viewer__body" id="articleViewerBody"></div>
+  </article>
 </div>
 
 <div class="message-context-menu" id="messageContextMenu" hidden>
@@ -901,8 +973,10 @@
 
 {% block extra_scripts %}
 <script src="{% static 'js/attachment-menu.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/attachment-files.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/chat.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/attachment-special.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/article-editor.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/chat-controls.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/community-profile.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/community-settings.js' %}?v={{ static_version }}"></script>
