@@ -1,4 +1,29 @@
 (() => {
+  // Composer Enter handling lives in capture phase so no other chat/menu
+  // handler can swallow the key before the message form sees it.
+  document.addEventListener("keydown", (event) => {
+    const input = event.target;
+    if (!(input instanceof HTMLTextAreaElement) || input.id !== "messageInput") return;
+    if (event.isComposing || event.repeat || event.key !== "Enter" || event.shiftKey) return;
+
+    const enterToSend = document.body.dataset.enterToSend !== "false";
+    const explicitSend = event.ctrlKey || event.metaKey;
+    if (!enterToSend && !explicitSend) return;
+
+    const form = input.form || document.getElementById("messageForm");
+    const sendButton = document.getElementById("sendButton");
+    if (!form || !input.value.trim() || sendButton?.disabled) return;
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+
+    // Clicking the real submit control works with both the AJAX chat handler
+    // and the browser's native form submission if the main chat script failed.
+    if (sendButton) sendButton.click();
+    else if (typeof form.requestSubmit === "function") form.requestSubmit();
+    else form.submit();
+  }, true);
+
   const conversation = document.querySelector(".conversation--chat");
   if (!conversation) return;
 
