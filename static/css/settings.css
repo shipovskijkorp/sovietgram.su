@@ -1,72 +1,831 @@
-.preferences-form { display: block; }
-.preference-card { padding: 20px; }
-.theme-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.theme-option {
+/* Telegram Desktop 7.2.9 settings geometry, adapted to the Sovietgram palette.
+   Source reference: settings/settings.style + settings_main.cpp. */
+
+.telegram-settings-body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow: auto;
+  background: #e8ddcc;
+}
+
+.telegram-settings-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  justify-content: center;
+  color: #4d4034;
+}
+
+.telegram-settings-panel {
   position: relative;
-  min-width: 0;
+  width: min(480px, 100%);
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: #fffaf1;
+  box-shadow: 0 0 42px rgba(69, 47, 31, .12);
+}
+
+.tg-settings-topbar {
+  position: sticky;
+  z-index: 30;
+  top: 0;
+  height: 56px;
   display: grid;
-  grid-template-columns: 82px minmax(0, 1fr) auto;
+  grid-template-columns: 52px minmax(0, 1fr) 52px;
+  align-items: center;
+  border-bottom: 1px solid rgba(79, 55, 34, .09);
+  background: rgba(255, 250, 241, .97);
+  backdrop-filter: blur(13px);
+}
+
+.tg-settings-topbar__back,
+.tg-settings-topbar__menu-button {
+  width: 52px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #786653;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.tg-settings-topbar__back:hover,
+.tg-settings-topbar__menu-button:hover {
+  background: rgba(79, 55, 34, .055);
+}
+
+.tg-settings-topbar__back .tg-native-icon {
+  width: 32px;
+  height: 32px;
+  flex-basis: 32px;
+}
+
+.tg-settings-topbar__title {
+  overflow: hidden;
+  color: #44382e;
+  font-size: 14px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tg-settings-topbar__menu-button {
+  font-family: Arial, sans-serif;
+  font-size: 25px;
+  line-height: 1;
+}
+
+.tg-settings-popup {
+  position: absolute;
+  z-index: 50;
+  top: 48px;
+  right: 8px;
+  width: 224px;
+  overflow: hidden;
+  padding: 5px 0;
+  border: 1px solid rgba(79, 55, 34, .10);
+  border-radius: 8px;
+  background: #fffaf1;
+  box-shadow: 0 10px 32px rgba(46, 31, 21, .21);
+}
+
+.tg-settings-popup[hidden] {
+  display: none;
+}
+
+.tg-settings-popup a,
+.tg-settings-popup button {
+  width: 100%;
+  min-height: 40px;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
   align-items: center;
   gap: 13px;
-  padding: 12px;
-  border: 1px solid rgba(84, 58, 35, .14);
-  border-radius: 14px;
-  background: #f6eddf;
+  padding: 0 16px;
+  border: 0;
+  background: transparent;
+  color: #554536;
   cursor: pointer;
-  transition: border-color .15s ease, background .15s ease, transform .15s ease;
-}
-.theme-option:hover { transform: translateY(-1px); border-color: rgba(141, 30, 40, .28); }
-.theme-option.is-selected { border-color: rgba(141, 30, 40, .5); background: rgba(141, 30, 40, .07); box-shadow: inset 0 0 0 1px rgba(141, 30, 40, .08); }
-.theme-option > input { position: absolute; opacity: 0; pointer-events: none; }
-.theme-preview { width: 82px; height: 58px; display: grid; grid-template-columns: 24px 1fr; grid-template-rows: 18px 1fr 1fr; gap: 4px; padding: 6px; border-radius: 10px; overflow: hidden; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .08); }
-.theme-preview i { grid-row: 1 / 4; border-radius: 5px; }
-.theme-preview b { border-radius: 4px; }
-.theme-preview--light { background: #efe5d2; }
-.theme-preview--light i { background: #8d1e28; }
-.theme-preview--light b { background: #fffaf1; }
-.theme-preview--dark { background: #171412; }
-.theme-preview--dark i { background: #8f242d; }
-.theme-preview--dark b { background: #29231f; }
-.theme-option__text { min-width: 0; }
-.theme-option__text strong, .theme-option__text small { display: block; }
-.theme-option__text strong { font-size: 13px; }
-.theme-option__text small { margin-top: 4px; color: #8b7964; line-height: 1.35; font-size: 10px; }
-.theme-option__check { width: 23px; height: 23px; display: grid; place-items: center; border: 1px solid rgba(84, 58, 35, .18); border-radius: 50%; color: transparent; font-size: 12px; font-weight: 900; }
-.theme-option.is-selected .theme-option__check { border-color: var(--red); background: var(--red); color: white; }
-.preference-row { min-height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 8px 2px; cursor: pointer; }
-.preference-row__copy { min-width: 0; }
-.preference-row__copy strong, .preference-row__copy small { display: block; }
-.preference-row__copy strong { font-size: 13px; }
-.preference-row__copy small { max-width: 480px; margin-top: 5px; color: #8b7964; line-height: 1.4; font-size: 10.5px; }
-.switch-control { position: relative; flex: 0 0 auto; }
-.switch-control input { position: absolute; opacity: 0; pointer-events: none; }
-.switch-control__track { width: 46px; height: 26px; display: block; padding: 3px; border-radius: 999px; background: #cbbdac; transition: background .16s ease; }
-.switch-control__thumb { width: 20px; height: 20px; display: block; border-radius: 50%; background: #fffaf1; box-shadow: 0 2px 7px rgba(64, 44, 30, .25); transition: transform .16s ease; }
-.switch-control input:checked + .switch-control__track { background: var(--red); }
-.switch-control input:checked + .switch-control__track .switch-control__thumb { transform: translateX(20px); }
-.switch-control input:focus-visible + .switch-control__track { outline: 3px solid rgba(141, 30, 40, .16); outline-offset: 2px; }
-.preferences-actions { margin-top: 20px; }
-
-@media (max-width: 680px) {
-  .theme-picker { grid-template-columns: 1fr; }
-  .theme-option { grid-template-columns: 72px minmax(0, 1fr) auto; }
-  .theme-preview { width: 72px; }
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  text-decoration: none;
 }
 
-@media (max-width: 420px) {
-  .theme-option { grid-template-columns: 60px minmax(0, 1fr) auto; gap: 9px; padding: 10px; }
-  .theme-preview { width: 60px; height: 52px; }
-  .preference-row { align-items: flex-start; }
+.tg-settings-popup a:hover,
+.tg-settings-popup button:hover {
+  background: #f1e7d9;
 }
 
+.tg-settings-popup .tg-native-icon {
+  width: 20px;
+  height: 20px;
+  flex-basis: 20px;
+  mask-size: 20px 20px;
+  -webkit-mask-size: 20px 20px;
+  color: #8d7560;
+}
 
-.archive-settings-card__icon {
-  margin-top: 1px;
-  color: var(--red);
+.tg-settings-popup form {
+  margin: 0;
 }
-.archive-settings-card .preference-row + .preference-row {
-  border-top: 1px solid rgba(84, 58, 35, .08);
+
+.tg-settings-popup form::before {
+  content: "";
+  display: block;
+  height: 1px;
+  margin: 5px 0;
+  background: rgba(79, 55, 34, .09);
 }
-body[data-theme="dark"] .archive-settings-card .preference-row + .preference-row {
-  border-top-color: rgba(236, 218, 194, .06);
+
+.tg-settings-popup form button {
+  color: #aa3038;
+}
+
+.tg-settings-popup form button .tg-native-icon {
+  color: currentColor;
+}
+
+.tg-settings-scroll {
+  min-height: calc(100dvh - 56px);
+}
+
+.tg-settings-screen[hidden] {
+  display: none !important;
+}
+
+/* Telegram settings profile cover:
+   photo x=22/y=8, text starts at x=112, 80px userpic. */
+.tg-settings-cover {
+  position: relative;
+  height: 104px;
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.tg-settings-cover:hover {
+  background: rgba(79, 55, 34, .025);
+}
+
+.tg-settings-cover__avatar {
+  position: absolute;
+  left: 22px;
+  top: 8px;
+  width: 80px;
+  height: 80px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #a83a43;
+  color: #fff8ec;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.tg-settings-cover__copy {
+  position: absolute;
+  top: 12px;
+  right: 22px;
+  left: 112px;
+  min-width: 0;
+}
+
+.tg-settings-cover__copy strong,
+.tg-settings-cover__copy small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tg-settings-cover__copy strong {
+  color: #45392f;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 24px;
+}
+
+.tg-settings-cover__copy small {
+  margin-top: 22px;
+  color: #96816b;
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.tg-settings-divider {
+  height: 9px;
+  border-top: 1px solid rgba(79, 55, 34, .08);
+  border-bottom: 1px solid rgba(79, 55, 34, .08);
+  background: #f3eadf;
+}
+
+.tg-settings-list {
+  padding: 8px 0;
+}
+
+/* settingsButton: icon left=20, text left=60, right=22. */
+.tg-settings-row {
+  position: relative;
+  width: 100%;
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  padding: 0 22px 0 20px;
+  border: 0;
+  background: transparent;
+  color: #4e4136;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  text-decoration: none;
+}
+
+.tg-settings-row:hover {
+  background: #f0e6d9;
+}
+
+.tg-settings-row__icon {
+  width: 24px;
+  height: 24px;
+  justify-self: start;
+  color: #927964;
+}
+
+.tg-settings-row__label {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 560;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tg-settings-row__value {
+  margin-left: 14px;
+  color: #9a856f;
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.tg-settings-version {
+  margin: 0;
+  padding: 17px 22px 26px;
+  color: #9e8b77;
+  font-size: 9.5px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.tg-settings-subsection {
+  padding: 8px 0;
+}
+
+.tg-settings-subsection > h2 {
+  margin: 0;
+  padding: 8px 22px 5px;
+  color: var(--red, #8d1e28);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+/* No-icon settings rows follow settingsButtonNoIcon left=22. */
+.tg-settings-toggle-row {
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 22px;
+  cursor: pointer;
+}
+
+.tg-settings-toggle-row:hover {
+  background: rgba(79, 55, 34, .035);
+}
+
+.tg-settings-toggle-row__copy {
+  min-width: 0;
+}
+
+.tg-settings-toggle-row__copy strong {
+  display: block;
+  color: #4e4136;
+  font-size: 11.5px;
+  font-weight: 550;
+  line-height: 1.35;
+}
+
+.tg-settings-about {
+  margin: 0;
+  padding: 5px 22px 10px;
+  color: #97836e;
+  font-size: 9.5px;
+  line-height: 1.45;
+}
+
+/* Telegram-like compact switch. */
+.tg-settings-switch {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  flex: 0 0 36px;
+}
+
+.tg-settings-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tg-settings-switch__track {
+  width: 36px;
+  height: 20px;
+  display: block;
+  padding: 2px;
+  border-radius: 999px;
+  background: #c7b7a5;
+  transition: background .13s ease;
+}
+
+.tg-settings-switch__track > span {
+  width: 16px;
+  height: 16px;
+  display: block;
+  border-radius: 50%;
+  background: #fffaf1;
+  box-shadow: 0 1px 4px rgba(53, 38, 27, .23);
+  transition: transform .13s ease;
+}
+
+.tg-settings-switch input:checked + .tg-settings-switch__track {
+  background: var(--red, #8d1e28);
+}
+
+.tg-settings-switch input:checked + .tg-settings-switch__track > span {
+  transform: translateX(16px);
+}
+
+.tg-settings-switch input:focus-visible + .tg-settings-switch__track {
+  outline: 2px solid rgba(141, 30, 40, .22);
+  outline-offset: 2px;
+}
+
+.tg-settings-toggle-row.is-saving,
+.tg-settings-radio-row.is-saving,
+.tg-settings-theme.is-saving {
+  opacity: .58;
+  pointer-events: none;
+}
+
+/* Telegram theme samples are 80x92. */
+.tg-settings-theme-section {
+  padding-bottom: 13px;
+}
+
+.tg-settings-themes {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  padding: 10px 22px 7px;
+}
+
+.tg-settings-theme {
+  width: 88px;
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+
+.tg-settings-theme__preview {
+  position: relative;
+  width: 80px;
+  height: 92px;
+  display: block;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: 5px;
+  box-shadow: 0 1px 4px rgba(54, 36, 24, .11);
+}
+
+.tg-settings-theme.is-selected .tg-settings-theme__preview {
+  border-color: var(--red, #8d1e28);
+}
+
+.tg-settings-theme__preview--light {
+  background: #eee2d0;
+}
+
+.tg-settings-theme__preview--dark {
+  background: #171412;
+}
+
+.tg-settings-theme__sidebar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 23px;
+  background: rgba(80, 57, 39, .11);
+}
+
+.tg-settings-theme__preview--dark .tg-settings-theme__sidebar {
+  background: #211c18;
+}
+
+.tg-settings-theme__bubble {
+  position: absolute;
+  right: 7px;
+  height: 15px;
+  border-radius: 7px;
+}
+
+.tg-settings-theme__bubble--one {
+  top: 18px;
+  width: 38px;
+  background: #fffaf1;
+}
+
+.tg-settings-theme__bubble--two {
+  top: 40px;
+  width: 31px;
+  background: #ead6c5;
+}
+
+.tg-settings-theme__preview--dark .tg-settings-theme__bubble--one {
+  background: #302923;
+}
+
+.tg-settings-theme__preview--dark .tg-settings-theme__bubble--two {
+  background: #5a2930;
+}
+
+.tg-settings-theme__composer {
+  position: absolute;
+  right: 6px;
+  bottom: 7px;
+  width: 44px;
+  height: 10px;
+  border-radius: 5px;
+  background: rgba(79, 55, 34, .14);
+}
+
+.tg-settings-theme__preview--dark .tg-settings-theme__composer {
+  background: rgba(255, 255, 255, .09);
+}
+
+.tg-settings-theme__choice {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  color: #75614f;
+  font-size: 10px;
+}
+
+.tg-settings-theme__choice input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tg-settings-theme__choice > span {
+  width: 15px;
+  height: 15px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #aa9782;
+  border-radius: 50%;
+}
+
+.tg-settings-theme__choice > span::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.tg-settings-theme__choice input:checked + span {
+  border-color: var(--red, #8d1e28);
+}
+
+.tg-settings-theme__choice input:checked + span::after {
+  background: var(--red, #8d1e28);
+}
+
+.tg-settings-theme__choice b {
+  font-weight: 550;
+}
+
+.tg-settings-radio-row {
+  min-height: 38px;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 5px 22px;
+  color: #4e4136;
+  cursor: pointer;
+  font-size: 11.5px;
+}
+
+.tg-settings-radio-row:hover {
+  background: rgba(79, 55, 34, .035);
+}
+
+.tg-settings-radio-row input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tg-settings-radio-row__control {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #a99680;
+  border-radius: 50%;
+}
+
+.tg-settings-radio-row__control::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.tg-settings-radio-row input:checked + .tg-settings-radio-row__control {
+  border-color: var(--red, #8d1e28);
+}
+
+.tg-settings-radio-row input:checked + .tg-settings-radio-row__control::after {
+  background: var(--red, #8d1e28);
+}
+
+.tg-settings-toast {
+  position: fixed;
+  z-index: 100;
+  left: 50%;
+  bottom: 24px;
+  max-width: min(360px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  padding: 9px 14px;
+  border-radius: 8px;
+  background: rgba(49, 37, 29, .92);
+  color: #fff8ed;
+  box-shadow: 0 8px 28px rgba(0,0,0,.2);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.tg-settings-toast[hidden] {
+  display: none;
+}
+
+.tg-settings-toast.is-error {
+  background: rgba(143, 34, 43, .96);
+}
+
+/* Password subpage. */
+.tg-settings-password {
+  padding-bottom: 28px;
+}
+
+.tg-settings-password__intro {
+  margin: 0;
+  padding: 13px 22px 9px;
+  color: #97836e;
+  font-size: 9.5px;
+  line-height: 1.45;
+}
+
+.tg-settings-password-form {
+  display: grid;
+}
+
+.tg-settings-password-field {
+  display: grid;
+  gap: 5px;
+  padding: 7px 22px;
+}
+
+.tg-settings-password-field > span {
+  color: #8e7760;
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.tg-settings-password-field input {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid rgba(79, 55, 34, .18);
+  border-radius: 7px;
+  outline: 0;
+  background: #fffdf9;
+  color: #4a3c31;
+  font: inherit;
+  font-size: 11px;
+}
+
+.tg-settings-password-field input:focus {
+  border-color: rgba(141, 30, 40, .55);
+  box-shadow: 0 0 0 2px rgba(141, 30, 40, .07);
+}
+
+.tg-settings-password-error {
+  color: #ae3039;
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.tg-settings-password-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  padding: 16px 22px 0;
+}
+
+.tg-settings-password-actions a,
+.tg-settings-password-actions button {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #806c58;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.tg-settings-password-actions button {
+  color: var(--red, #8d1e28);
+}
+
+.tg-settings-password-actions a:hover,
+.tg-settings-password-actions button:hover {
+  background: rgba(79, 55, 34, .055);
+}
+
+/* Dark Sovietgram palette with the same geometry. */
+body[data-theme="dark"].telegram-settings-body {
+  background: #12100e;
+}
+
+body[data-theme="dark"] .telegram-settings-panel,
+body[data-theme="dark"] .tg-settings-topbar,
+body[data-theme="dark"] .tg-settings-popup {
+  background: #211d1a;
+  color: #ded1c3;
+}
+
+body[data-theme="dark"] .telegram-settings-panel {
+  box-shadow: 0 0 46px rgba(0, 0, 0, .32);
+}
+
+body[data-theme="dark"] .tg-settings-topbar {
+  border-bottom-color: rgba(255,255,255,.065);
+}
+
+body[data-theme="dark"] .tg-settings-topbar__title,
+body[data-theme="dark"] .tg-settings-cover__copy strong,
+body[data-theme="dark"] .tg-settings-row,
+body[data-theme="dark"] .tg-settings-toggle-row__copy strong,
+body[data-theme="dark"] .tg-settings-radio-row {
+  color: #ddd0c2;
+}
+
+body[data-theme="dark"] .tg-settings-topbar__back,
+body[data-theme="dark"] .tg-settings-topbar__menu-button {
+  color: #b7a38f;
+}
+
+body[data-theme="dark"] .tg-settings-topbar__back:hover,
+body[data-theme="dark"] .tg-settings-topbar__menu-button:hover,
+body[data-theme="dark"] .tg-settings-row:hover,
+body[data-theme="dark"] .tg-settings-popup a:hover,
+body[data-theme="dark"] .tg-settings-popup button:hover {
+  background: #2c2621;
+}
+
+body[data-theme="dark"] .tg-settings-popup {
+  border-color: rgba(255,255,255,.07);
+}
+
+body[data-theme="dark"] .tg-settings-popup a,
+body[data-theme="dark"] .tg-settings-popup button {
+  color: #d1c1b0;
+}
+
+body[data-theme="dark"] .tg-settings-popup .tg-native-icon {
+  color: #ad9984;
+}
+
+body[data-theme="dark"] .tg-settings-popup form button {
+  color: #dc7077;
+}
+
+body[data-theme="dark"] .tg-settings-popup form::before,
+body[data-theme="dark"] .tg-settings-divider {
+  border-color: rgba(255,255,255,.055);
+}
+
+body[data-theme="dark"] .tg-settings-divider {
+  background: #191613;
+}
+
+body[data-theme="dark"] .tg-settings-cover:hover,
+body[data-theme="dark"] .tg-settings-toggle-row:hover,
+body[data-theme="dark"] .tg-settings-radio-row:hover {
+  background: rgba(255,255,255,.025);
+}
+
+body[data-theme="dark"] .tg-settings-cover__copy small,
+body[data-theme="dark"] .tg-settings-row__value,
+body[data-theme="dark"] .tg-settings-about,
+body[data-theme="dark"] .tg-settings-version {
+  color: #a08d78;
+}
+
+body[data-theme="dark"] .tg-settings-row__icon {
+  color: #b09a84;
+}
+
+body[data-theme="dark"] .tg-settings-switch__track {
+  background: #655b51;
+}
+
+body[data-theme="dark"] .tg-settings-switch__track > span {
+  background: #e9ddcf;
+}
+
+body[data-theme="dark"] .tg-settings-theme__choice,
+body[data-theme="dark"] .tg-settings-password-field > span {
+  color: #b29e89;
+}
+
+body[data-theme="dark"] .tg-settings-password__intro {
+  color: #a08d78;
+}
+
+body[data-theme="dark"] .tg-settings-password-field input {
+  border-color: rgba(255,255,255,.09);
+  background: #191613;
+  color: #e0d3c5;
+}
+
+@media (max-width: 520px) {
+  .telegram-settings-panel {
+    width: 100%;
+    box-shadow: none;
+  }
+
+  .tg-settings-topbar {
+    grid-template-columns: 48px minmax(0, 1fr) 48px;
+  }
+
+  .tg-settings-topbar__back,
+  .tg-settings-topbar__menu-button {
+    width: 48px;
+  }
+
+  .tg-settings-themes {
+    gap: 12px;
+  }
+}
+
+@media (max-width: 360px) {
+  .tg-settings-row {
+    padding-right: 15px;
+  }
+
+  .tg-settings-toggle-row,
+  .tg-settings-radio-row,
+  .tg-settings-about,
+  .tg-settings-subsection > h2,
+  .tg-settings-themes {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .tg-settings-themes {
+    gap: 8px;
+  }
 }

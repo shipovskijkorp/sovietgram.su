@@ -33,5 +33,6 @@ jobs:
           node --check static/js/chat-controls.js
           node --check static/js/search.js
           node --check static/js/profile.js
+          node --check static/js/settings.js
           node --check static/js/community-profile.js
           node --check static/js/community-settings.js
