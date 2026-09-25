@@ -1,0 +1,150 @@
+<div class="community-profile-backdrop" id="communityProfileBackdrop" hidden></div>
+<aside class="community-profile" id="communityProfile"
+       data-profile-url="{% url 'messenger:community_profile' selected_chat.pk %}"
+       aria-hidden="true" hidden>
+  <header class="community-profile__topbar">
+    <button class="community-profile__topbar-button" id="communityProfileClose" type="button" aria-label="Закрыть информацию">
+      <span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span>
+    </button>
+    <strong>Информация</strong>
+    <button class="community-profile__topbar-button" id="communityProfileEdit" type="button" aria-label="Изменить" title="Изменить" hidden>
+      <span class="tg-native-icon tg-native-icon--edit" aria-hidden="true"></span>
+    </button>
+  </header>
+
+  <div class="community-profile__view" id="communityProfileView">
+    <section class="community-profile__hero">
+      <button class="community-profile__avatar-button" id="communityProfileAvatar" type="button" aria-label="Открыть аватар">
+        <img id="communityProfileAvatarImage" alt="" hidden>
+        <span id="communityProfileAvatarFallback">?</span>
+      </button>
+      <h2 id="communityProfileName"></h2>
+      <p id="communityProfileStatus"></p>
+    </section>
+
+    <section class="community-profile__quick-actions" aria-label="Действия">
+      <button id="communityProfileMute" type="button">
+        <span class="tg-native-icon tg-native-icon--mute" aria-hidden="true"></span>
+        <small id="communityProfileMuteLabel">Выключить уведомления</small>
+      </button>
+      <button id="communityProfileSearch" type="button">
+        <span class="tg-native-icon tg-native-icon--search" aria-hidden="true"></span>
+        <small>Поиск</small>
+      </button>
+      <button id="communityProfileArchive" type="button">
+        <span class="tg-native-icon tg-native-icon--archive" aria-hidden="true"></span>
+        <small id="communityProfileArchiveLabel">В архив</small>
+      </button>
+    </section>
+
+    <section class="community-profile__info-card">
+      <div class="community-profile__about" id="communityProfileDescriptionSection" hidden>
+        <small>Описание</small>
+        <p id="communityProfileDescription"></p>
+      </div>
+      <button class="community-profile__info-row community-profile__info-row--copy" id="communityProfileUsernameRow" type="button" hidden>
+        <span><small>Публичная ссылка</small><strong id="communityProfileUsername"></strong></span>
+        <span class="community-profile__row-hint">Нажмите, чтобы скопировать</span>
+      </button>
+      <div class="community-profile__info-row">
+        <span><small>Создано</small><strong id="communityProfileCreated"></strong></span>
+      </div>
+      <div class="community-profile__info-row">
+        <span><small>Ваша роль</small><strong id="communityProfileRole"></strong></span>
+      </div>
+    </section>
+
+    <nav class="community-profile__tabs" role="tablist" aria-label="Разделы информации">
+      <button class="is-active" type="button" role="tab" aria-selected="true" data-community-profile-tab="media">Медиа <b>0</b></button>
+      <button type="button" role="tab" aria-selected="false" data-community-profile-tab="files">Файлы <b>0</b></button>
+      <button type="button" role="tab" aria-selected="false" data-community-profile-tab="members">Участники <b>0</b></button>
+    </nav>
+
+    <section class="community-profile__panel" data-community-profile-panel="media">
+      <div class="community-profile-media-grid" id="communityProfileMediaGrid"></div>
+    </section>
+    <section class="community-profile__panel" data-community-profile-panel="files" hidden>
+      <div class="community-profile-file-list" id="communityProfileFileList"></div>
+    </section>
+    <section class="community-profile__panel community-profile__panel--members" data-community-profile-panel="members" hidden>
+      <div class="community-profile__members-head">
+        <strong id="communityProfileMembersHeading">Участники</strong>
+        <button id="communityProfileAddMember" type="button" hidden>
+          <span class="tg-native-icon tg-native-icon--add-account" aria-hidden="true"></span>
+          Добавить
+        </button>
+      </div>
+      <div class="community-profile-members" id="communityProfileMembersList"></div>
+    </section>
+
+    <button class="community-profile__leave" id="communityProfileLeave" type="button" hidden>
+      <span class="tg-native-icon tg-native-icon--leave" aria-hidden="true"></span>
+      <strong id="communityProfileLeaveLabel">Покинуть группу</strong>
+    </button>
+  </div>
+
+  <form class="community-profile-editor" id="communityProfileEditor" enctype="multipart/form-data" hidden>
+    <header class="community-profile-editor__header">
+      <button id="communityProfileEditorBack" type="button" aria-label="Назад">
+        <span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span>
+      </button>
+      <strong>Изменить</strong>
+      <span></span>
+    </header>
+
+    <section class="community-profile-editor__avatar-block">
+      <label class="community-profile-editor__avatar" for="communityProfileAvatarInput" title="Сменить аватар">
+        <img id="communityProfileEditorAvatarImage" alt="" hidden>
+        <span id="communityProfileEditorAvatarFallback">?</span>
+        <i><span class="tg-native-icon tg-native-icon--camera" aria-hidden="true"></span></i>
+      </label>
+      <input id="communityProfileAvatarInput" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+      <input id="communityProfileRemoveAvatar" type="hidden" value="">
+      <button class="community-profile-editor__remove-avatar" id="communityProfileAvatarRemove" type="button">Удалить фото</button>
+    </section>
+
+    <section class="community-profile-editor__fields">
+      <label>
+        <span>Название</span>
+        <input id="communityProfileTitleInput" type="text" maxlength="120" autocomplete="off">
+      </label>
+      <label>
+        <span>Описание</span>
+        <textarea id="communityProfileDescriptionInput" maxlength="500" rows="4"></textarea>
+      </label>
+
+      <fieldset class="community-profile-editor__visibility" id="communityProfileVisibility">
+        <legend>Тип канала</legend>
+        <label><input type="radio" name="community_profile_visibility" value="public"><span></span><b>Публичный</b></label>
+        <label><input type="radio" name="community_profile_visibility" value="private"><span></span><b>Частный</b></label>
+      </fieldset>
+
+      <label id="communityProfileUsernameBlock">
+        <span>Публичная ссылка</span>
+        <div class="community-profile-editor__username"><b>@</b><input id="communityProfileUsernameInput" type="text" maxlength="64" autocomplete="off"></div>
+      </label>
+    </section>
+
+    <div class="community-profile-editor__error" id="communityProfileEditorError" hidden></div>
+    <footer class="community-profile-editor__footer">
+      <button type="button" id="communityProfileEditorCancel">Отмена</button>
+      <button type="submit" id="communityProfileEditorSave">Сохранить</button>
+    </footer>
+  </form>
+</aside>
+
+<div class="community-member-picker" id="communityMemberPicker" hidden>
+  <section class="community-member-picker__dialog" role="dialog" aria-modal="true" aria-labelledby="communityMemberPickerTitle">
+    <header>
+      <strong id="communityMemberPickerTitle">Добавить участника</strong>
+      <button id="communityMemberPickerClose" type="button" aria-label="Закрыть">
+        <span class="tg-native-icon tg-native-icon--close" aria-hidden="true"></span>
+      </button>
+    </header>
+    <label class="community-member-picker__search">
+      <span class="tg-native-icon tg-native-icon--search" aria-hidden="true"></span>
+      <input id="communityMemberPickerSearch" type="search" placeholder="Поиск" autocomplete="off">
+    </label>
+    <div class="community-member-picker__results" id="communityMemberPickerResults"></div>
+  </section>
+</div>

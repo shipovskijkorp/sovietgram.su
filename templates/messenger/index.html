@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="{% static 'css/messenger.css' %}?v={{ static_version }}">
 <link rel="stylesheet" href="{% static 'css/media.css' %}?v={{ static_version }}">
 <link rel="stylesheet" href="{% static 'css/chat.css' %}?v={{ static_version }}">
+<link rel="stylesheet" href="{% static 'css/community-profile.css' %}?v={{ static_version }}">
 {% endblock %}
 
 {% block content %}
@@ -126,6 +127,18 @@
               <small id="conversationStatus">{{ selected_chat.other_status_ui }}</small>
             </span>
           </a>
+        {% elif selected_chat.type != 'private' %}
+          <button class="conversation-header__identity conversation-header__identity--community" type="button" data-community-profile-open aria-label="Открыть информацию">
+            {% if selected_chat.avatar %}
+              <img class="conversation-header__avatar" src="{{ selected_chat.avatar.url }}" alt="">
+            {% else %}
+              <span class="conversation-header__avatar conversation-header__avatar--fallback">{{ selected_chat.avatar_text_ui }}</span>
+            {% endif %}
+            <span class="conversation-header__text">
+              <strong>{{ selected_chat.display_name_ui }}</strong>
+              <small id="conversationStatus">{{ selected_chat.other_status_ui }}</small>
+            </span>
+          </button>
         {% else %}
           <span class="conversation-header__identity conversation-header__identity--saved">
             {% if selected_chat.avatar %}
@@ -145,7 +158,7 @@
             <button class="icon-button conversation-header__profile" id="chatMenuButton" type="button" title="Меню чата" aria-label="Меню чата" aria-expanded="false">⋮</button>
             <div class="chat-menu" id="chatMenu" hidden>
               <button type="button" data-open-chat-search><span class="tg-native-icon tg-native-icon--search" aria-hidden="true"></span>Поиск</button>
-              <button type="button" data-open-chat-info><span class="tg-native-icon tg-native-icon--info" aria-hidden="true"></span>Медиа и файлы</button>
+              <button type="button" {% if selected_chat.type == 'private' %}data-open-chat-info{% else %}data-community-profile-open{% endif %}><span class="tg-native-icon tg-native-icon--info" aria-hidden="true"></span>{% if selected_chat.type == 'private' %}Медиа и файлы{% else %}Информация{% endif %}</button>
               <form method="post" action="{% url 'messenger:chat_action' selected_chat.pk %}">
                 {% csrf_token %}<input type="hidden" name="action" value="pin">
                 <button type="submit"><span class="tg-native-icon tg-native-icon--pin" aria-hidden="true"></span>{% if active_membership.is_pinned %}Открепить чат{% else %}Закрепить чат{% endif %}</button>
@@ -431,6 +444,10 @@
   </section>
 </aside>
 
+{% if selected_chat.type != 'private' %}
+{% include 'messenger/_community_profile_overlay.html' %}
+{% endif %}
+
 <div class="image-viewer" id="imageViewer" hidden>
   <button id="imageViewerClose" type="button" aria-label="Закрыть"><span class="tg-native-icon tg-native-icon--close tg-native-icon--compact" aria-hidden="true"></span></button>
   <img id="imageViewerImage" src="" alt="">
@@ -630,4 +647,5 @@
 {% block extra_scripts %}
 <script src="{% static 'js/messenger.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/chat.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/community-profile.js' %}?v={{ static_version }}"></script>
 {% endblock %}

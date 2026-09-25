@@ -27,3 +27,4 @@ jobs:
         run: |
           node --check static/js/chat.js
           node --check static/js/profile.js
+          node --check static/js/community-profile.js

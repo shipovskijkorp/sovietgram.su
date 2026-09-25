@@ -665,3 +665,180 @@ class ChatFeatureTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertFalse(Message.objects.exists())
+
+
+    def test_collective_profile_overlay_and_json_permissions(self):
+        group = Chat.objects.create(
+            type=Chat.Type.GROUP,
+            title="Проектный комитет",
+            description="Обсуждаем текущие задачи.",
+        )
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.alice,
+            role=ChatParticipant.Role.OWNER,
+        )
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.bob,
+            role=ChatParticipant.Role.MEMBER,
+        )
+
+        page = self.client.get(reverse("messenger:chat", args=[group.pk]))
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, 'id="communityProfile"', html=False)
+        self.assertContains(page, "data-community-profile-open", html=False)
+
+        response = self.client.get(
+            reverse("messenger:community_profile", args=[group.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        profile = response.json()["profile"]
+        self.assertEqual(profile["title"], "Проектный комитет")
+        self.assertEqual(profile["viewer_role"], ChatParticipant.Role.OWNER)
+        self.assertTrue(profile["can_manage"])
+        self.assertTrue(profile["members_visible"])
+        self.assertEqual(profile["member_count"], 2)
+
+        self.client.force_login(self.charlie)
+        forbidden = self.client.get(
+            reverse("messenger:community_profile", args=[group.pk])
+        )
+        self.assertEqual(forbidden.status_code, 404)
+
+    def test_collective_profile_update_and_member_role_permissions(self):
+        channel = Chat.objects.create(
+            type=Chat.Type.CHANNEL,
+            title="Старый эфир",
+            username="old_air",
+            description="Старое описание",
+        )
+        ChatParticipant.objects.create(
+            chat=channel,
+            user=self.alice,
+            role=ChatParticipant.Role.OWNER,
+        )
+        ChatParticipant.objects.create(
+            chat=channel,
+            user=self.bob,
+            role=ChatParticipant.Role.MEMBER,
+        )
+
+        updated = self.client.post(
+            reverse("messenger:community_profile_update", args=[channel.pk]),
+            {
+                "title": "Новый эфир",
+                "description": "Новое описание",
+                "visibility": "public",
+                "username": "new_air",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(updated.status_code, 200)
+        channel.refresh_from_db()
+        self.assertEqual(channel.title, "Новый эфир")
+        self.assertEqual(channel.username, "new_air")
+
+        promoted = self.client.post(
+            reverse("messenger:community_member_action", args=[channel.pk]),
+            {
+                "action": "role",
+                "username": self.bob.username,
+                "role": ChatParticipant.Role.ADMIN,
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(promoted.status_code, 200)
+        self.assertEqual(
+            ChatParticipant.objects.get(chat=channel, user=self.bob).role,
+            ChatParticipant.Role.ADMIN,
+        )
+
+        self.client.force_login(self.bob)
+        denied_update = self.client.post(
+            reverse("messenger:community_profile_update", args=[channel.pk]),
+            {
+                "title": "Админское название",
+                "description": "Допустимое изменение",
+                "visibility": "public",
+                "username": "new_air",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(denied_update.status_code, 200)
+
+        denied_role = self.client.post(
+            reverse("messenger:community_member_action", args=[channel.pk]),
+            {
+                "action": "role",
+                "username": self.alice.username,
+                "role": ChatParticipant.Role.MEMBER,
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(denied_role.status_code, 403)
+
+    def test_channel_member_profile_hides_subscriber_list(self):
+        channel = Chat.objects.create(
+            type=Chat.Type.CHANNEL,
+            title="Закрытая подписка",
+            username="closed_subs",
+        )
+        ChatParticipant.objects.create(
+            chat=channel,
+            user=self.alice,
+            role=ChatParticipant.Role.OWNER,
+        )
+        ChatParticipant.objects.create(
+            chat=channel,
+            user=self.bob,
+            role=ChatParticipant.Role.MEMBER,
+        )
+
+        self.client.force_login(self.bob)
+        response = self.client.get(
+            reverse("messenger:community_profile", args=[channel.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        profile = response.json()["profile"]
+        self.assertFalse(profile["members_visible"])
+        self.assertEqual(profile["members"], [])
+        self.assertEqual(profile["member_count"], 2)
+
+    def test_collective_profile_leave_rules(self):
+        group = Chat.objects.create(
+            type=Chat.Type.GROUP,
+            title="Группа выхода",
+        )
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.alice,
+            role=ChatParticipant.Role.OWNER,
+        )
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.bob,
+            role=ChatParticipant.Role.MEMBER,
+        )
+
+        owner_leave = self.client.post(
+            reverse("messenger:community_profile_action", args=[group.pk]),
+            {"action": "leave"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(owner_leave.status_code, 403)
+        self.assertTrue(
+            ChatParticipant.objects.filter(chat=group, user=self.alice).exists()
+        )
+
+        self.client.force_login(self.bob)
+        member_leave = self.client.post(
+            reverse("messenger:community_profile_action", args=[group.pk]),
+            {"action": "leave"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(member_leave.status_code, 200)
+        self.assertTrue(member_leave.json()["left"])
+        self.assertFalse(
+            ChatParticipant.objects.filter(chat=group, user=self.bob).exists()
+        )
