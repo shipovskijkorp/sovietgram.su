@@ -112,6 +112,9 @@
   }
 
   async function openSettings() {
+    if (profileRoot.hidden && typeof window.openCommunityProfile === "function") {
+      await window.openCommunityProfile();
+    }
     panel.hidden = false;
     panel.setAttribute("aria-hidden", "false");
     setView("overview");
@@ -609,5 +612,6 @@
     closeSettings();
   }, true);
 
+  window.openCommunitySettings = openSettings;
   window.communitySettingsVisible = () => !panel.hidden;
 })();

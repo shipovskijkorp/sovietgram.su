@@ -1185,3 +1185,104 @@ class ChatFeatureTests(TestCase):
         self.assertEqual(deleted.status_code, 200)
         self.assertTrue(deleted.json()["deleted"])
         self.assertFalse(Chat.objects.filter(pk=group.pk).exists())
+
+
+    def test_global_search_covers_chats_people_communities_and_messages(self):
+        Message.objects.create(
+            chat=self.chat,
+            sender=self.bob,
+            text="Секретная телеметрия спутника",
+        )
+        public_group = Chat.objects.create(
+            type=Chat.Type.GROUP,
+            title="Спутниковый кружок",
+            username="sputnik_club",
+        )
+        ChatParticipant.objects.create(
+            chat=public_group,
+            user=self.charlie,
+            role=ChatParticipant.Role.OWNER,
+        )
+
+        people_response = self.client.get(
+            reverse("messenger:global_search"),
+            {"q": "bob"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(people_response.status_code, 200)
+        people_payload = people_response.json()
+        self.assertTrue(
+            any(item["username"] == self.bob.username for item in people_payload["people"])
+        )
+        self.assertTrue(
+            any(item["id"] == self.chat.pk for item in people_payload["chats"])
+        )
+
+        community_response = self.client.get(
+            reverse("messenger:global_search"),
+            {"q": "sputnik"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(community_response.status_code, 200)
+        self.assertTrue(
+            any(
+                item["id"] == public_group.pk
+                for item in community_response.json()["communities"]
+            )
+        )
+
+        message_response = self.client.get(
+            reverse("messenger:global_search"),
+            {"q": "телеметрия"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(message_response.status_code, 200)
+        self.assertTrue(
+            any(
+                item["preview"] == "Секретная телеметрия спутника"
+                for item in message_response.json()["messages"]
+            )
+        )
+
+    def test_chat_header_menu_and_global_search_are_available_for_collectives(self):
+        group = Chat.objects.create(type=Chat.Type.GROUP, title="Меню группы")
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.alice,
+            role=ChatParticipant.Role.OWNER,
+        )
+        response = self.client.get(reverse("messenger:chat", args=[group.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="chatMenuButton"', html=False)
+        self.assertContains(response, 'data-open-chat-search', html=False)
+        self.assertContains(response, 'data-open-community-settings', html=False)
+        self.assertContains(response, 'id="sidebarGlobalSearch"', html=False)
+        self.assertContains(response, 'data-global-search-url=', html=False)
+        self.assertNotContains(response, "js/messenger.js", html=False)
+
+    def test_member_can_leave_collective_from_chat_menu_action(self):
+        group = Chat.objects.create(type=Chat.Type.GROUP, title="Выход из меню")
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.alice,
+            role=ChatParticipant.Role.OWNER,
+        )
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.bob,
+            role=ChatParticipant.Role.MEMBER,
+        )
+
+        self.client.force_login(self.bob)
+        response = self.client.post(
+            reverse("messenger:chat_action", args=[group.pk]),
+            {"action": "leave"},
+        )
+        self.assertRedirects(
+            response,
+            reverse("messenger:home"),
+            fetch_redirect_response=False,
+        )
+        self.assertFalse(
+            ChatParticipant.objects.filter(chat=group, user=self.bob).exists()
+        )

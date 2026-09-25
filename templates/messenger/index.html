@@ -25,9 +25,11 @@
       {% endif %}
       <label class="sidebar-searchbar__field" for="chatFilter">
         <span class="tg-native-icon tg-native-icon--search sidebar-searchbar__icon" aria-hidden="true"></span>
-        <input id="chatFilter" type="search" placeholder="{% if show_archived %}Поиск в архиве{% else %}Поиск{% endif %}" autocomplete="off">
+        <input id="chatFilter" type="search" data-global-search-url="{% url 'messenger:global_search' %}" placeholder="{% if show_archived %}Поиск в архиве{% else %}Поиск{% endif %}" autocomplete="off">
       </label>
     </header>
+
+    <section class="sidebar-global-search" id="sidebarGlobalSearch" hidden aria-live="polite"></section>
 
     {% if show_archived %}
       <div class="archive-page-heading">
@@ -164,6 +166,9 @@
             <div class="chat-menu" id="chatMenu" hidden>
               <button type="button" data-open-chat-search><span class="tg-native-icon tg-native-icon--search" aria-hidden="true"></span>Поиск</button>
               <button type="button" {% if selected_chat.type == 'private' %}data-open-chat-info{% else %}data-community-profile-open{% endif %}><span class="tg-native-icon tg-native-icon--info" aria-hidden="true"></span>{% if selected_chat.type == 'private' %}Медиа и файлы{% else %}Информация{% endif %}</button>
+              {% if selected_chat.type != 'private' and active_membership.role != 'member' %}
+              <button type="button" data-open-community-settings><span class="tg-native-icon tg-native-icon--settings" aria-hidden="true"></span>Управление</button>
+              {% endif %}
               <form method="post" action="{% url 'messenger:chat_action' selected_chat.pk %}">
                 {% csrf_token %}<input type="hidden" name="action" value="pin">
                 <button type="submit"><span class="tg-native-icon tg-native-icon--pin" aria-hidden="true"></span>{% if active_membership.is_pinned %}Открепить чат{% else %}Закрепить чат{% endif %}</button>
@@ -180,10 +185,18 @@
                   <button type="submit"><span class="tg-native-icon {% if active_membership.is_archived %}tg-native-icon--unarchive{% else %}tg-native-icon--archive{% endif %}" aria-hidden="true"></span>{% if active_membership.is_archived %}Вернуть из архива{% else %}В архив{% endif %}</button>
                 </form>
               {% endif %}
+              {% if selected_chat.type == 'private' or active_membership.role != 'member' %}
               <form method="post" action="{% url 'messenger:chat_action' selected_chat.pk %}" data-confirm-form="{% if selected_chat.type == 'private' %}Очистить историю переписки?{% else %}Очистить историю чата для всех участников?{% endif %} Это действие нельзя отменить.">
                 {% csrf_token %}<input type="hidden" name="action" value="clear">
                 <button class="chat-menu__danger" type="submit"><span class="tg-native-icon tg-native-icon--clear" aria-hidden="true"></span>Очистить историю</button>
               </form>
+              {% endif %}
+              {% if selected_chat.type != 'private' and active_membership.role != 'owner' %}
+              <form method="post" action="{% url 'messenger:chat_action' selected_chat.pk %}" data-confirm-form="{% if selected_chat.type == 'channel' %}Покинуть канал?{% else %}Покинуть группу?{% endif %}">
+                {% csrf_token %}<input type="hidden" name="action" value="leave">
+                <button class="chat-menu__danger" type="submit"><span class="tg-native-icon tg-native-icon--leave" aria-hidden="true"></span>{% if selected_chat.type == 'channel' %}Покинуть канал{% else %}Покинуть группу{% endif %}</button>
+              </form>
+              {% endif %}
             </div>
           </div>
         </div>
@@ -653,7 +666,6 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/messenger.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/chat.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/community-profile.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/community-settings.js' %}?v={{ static_version }}"></script>

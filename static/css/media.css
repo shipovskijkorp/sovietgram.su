@@ -1,5 +1,26 @@
-.attachment-control { position: relative; align-self: end; }
-.composer__attach-button { border: 0; background: transparent; }
+.attachment-control {
+  position: relative;
+  align-self: end;
+  width: 42px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+}
+.composer__attach-button {
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+}
+.composer__attach-button .tg-native-icon--attach {
+  width: 24px;
+  height: 24px;
+  flex-basis: 24px;
+  mask-size: 24px 24px;
+  -webkit-mask-size: 24px 24px;
+}
 .attachment-menu {
   position: absolute;
   left: 0;

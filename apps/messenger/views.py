@@ -1090,6 +1090,24 @@ def chat_action(request, chat_id):
             else f"{reverse('messenger:home')}?archived=1"
         )
         return redirect(_safe_next(request, fallback))
+    elif action == "leave":
+        if chat.type == Chat.Type.PRIVATE:
+            messages.error(request, "Личный чат нельзя покинуть.")
+            return redirect("messenger:chat", chat_id=chat.pk)
+        if membership.role == ChatParticipant.Role.OWNER:
+            messages.error(
+                request,
+                "Владелец не может выйти, пока права владельца не переданы.",
+            )
+            return redirect("messenger:chat", chat_id=chat.pk)
+        membership.delete()
+        messages.success(
+            request,
+            "Вы покинули канал."
+            if chat.type == Chat.Type.CHANNEL
+            else "Вы покинули группу.",
+        )
+        return redirect("messenger:home")
     elif action == "clear":
         if (
             chat.type != Chat.Type.PRIVATE

@@ -1,20 +1,3 @@
-const chatFilter = document.getElementById("chatFilter");
-const chatRows = [...document.querySelectorAll("[data-chat-row]")];
-const chatFilterEmpty = document.getElementById("chatFilterEmpty");
-
-if (chatFilter) {
-  chatFilter.addEventListener("input", () => {
-    const query = chatFilter.value.trim().toLowerCase().replace(/^@/, "");
-    let visible = 0;
-    chatRows.forEach((row) => {
-      const matches = !query || (row.dataset.search || "").includes(query);
-      row.hidden = !matches;
-      if (matches) visible += 1;
-    });
-    if (chatFilterEmpty) chatFilterEmpty.hidden = visible !== 0 || chatRows.length === 0;
-  });
-}
-
 const conversation = document.querySelector(".conversation--chat");
 const form = document.getElementById("messageForm");
 const messageInput = document.getElementById("messageInput");
@@ -586,6 +569,38 @@ chatMenuButton?.addEventListener("click", (event) => {
 });
 document.addEventListener("click", (event) => {
   if (chatMenu && !chatMenu.contains(event.target) && event.target !== chatMenuButton) setChatMenu(false);
+});
+
+chatMenu?.querySelector("[data-open-community-settings]")?.addEventListener("click", async () => {
+  setChatMenu(false);
+  if (typeof window.openCommunitySettings === "function") {
+    await window.openCommunitySettings();
+    return;
+  }
+  if (typeof window.openCommunityProfile === "function") {
+    await window.openCommunityProfile();
+    document.getElementById("communityProfileSettingsOpen")?.click();
+  }
+});
+
+chatMenu?.querySelectorAll("form[data-confirm-form]").forEach((formNode) => {
+  formNode.addEventListener("submit", (event) => {
+    const text = formNode.dataset.confirmForm || "";
+    if (text && !window.confirm(text)) {
+      event.preventDefault();
+      return;
+    }
+    setChatMenu(false);
+  });
+});
+
+chatMenu?.querySelectorAll("form:not([data-confirm-form])").forEach((formNode) => {
+  formNode.addEventListener("submit", () => setChatMenu(false));
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  if (chatMenu && !chatMenu.hidden) setChatMenu(false);
 });
 
 const searchToggle = document.getElementById("chatSearchToggle");

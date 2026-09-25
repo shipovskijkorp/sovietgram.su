@@ -30,6 +30,10 @@ SOVIETGRAM_RATE_LIMITS = {
         "limit": int(os.getenv("RATE_LIMIT_SEARCH_PER_MINUTE", "60")),
         "window": 60,
     },
+    "global_search": {
+        "limit": int(os.getenv("RATE_LIMIT_GLOBAL_SEARCH_PER_MINUTE", "90")),
+        "window": 60,
+    },
     "typing": {
         "limit": int(os.getenv("RATE_LIMIT_TYPING_PER_MINUTE", "120")),
         "window": 60,
