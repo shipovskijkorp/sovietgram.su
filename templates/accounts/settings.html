@@ -14,41 +14,20 @@
   data-settings-url="{% url 'accounts:settings' %}"
   data-home-url="{% url 'messenger:home' %}"
 >
-  <div class="tg-settings-backdrop" aria-hidden="true"></div>
-
-  <section class="telegram-settings-panel" role="dialog" aria-modal="true" aria-label="Настройки Sovietgram">
+  <section class="telegram-settings-panel" aria-label="Настройки Sovietgram">
     <header class="tg-settings-topbar">
-      <button
-        class="tg-settings-topbar__back"
-        id="settingsSectionBack"
-        type="button"
-        aria-label="Назад"
-        hidden
-      >
+      <a class="tg-settings-topbar__back tg-settings-topbar__home" href="{% url 'messenger:home' %}" aria-label="Вернуться к чатам">
+        <span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span>
+      </a>
+      <button class="tg-settings-topbar__back tg-settings-topbar__section-back" id="settingsSectionBack" type="button" aria-label="Назад к настройкам" hidden>
         <span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span>
       </button>
-      <span class="tg-settings-topbar__spacer" id="settingsTopbarSpacer" aria-hidden="true"></span>
 
       <strong class="tg-settings-topbar__title" id="settingsTopbarTitle">Настройки</strong>
 
-      <div class="tg-settings-topbar__actions">
-        <button
-          class="tg-settings-topbar__icon-button tg-settings-topbar__menu-button"
-          id="settingsMenuButton"
-          type="button"
-          aria-label="Меню настроек"
-          aria-expanded="false"
-        >
-          <span class="tg-settings-more" aria-hidden="true"><i></i><i></i><i></i></span>
-        </button>
-        <a
-          class="tg-settings-topbar__icon-button tg-settings-topbar__close"
-          href="{% url 'messenger:home' %}"
-          aria-label="Закрыть настройки"
-        >
-          <span class="tg-native-icon tg-native-icon--close" aria-hidden="true"></span>
-        </a>
-      </div>
+      <button class="tg-settings-topbar__menu-button" id="settingsMenuButton" type="button" aria-label="Меню настроек" aria-expanded="false">
+        <span aria-hidden="true">⋮</span>
+      </button>
 
       <div class="tg-settings-popup" id="settingsMenu" hidden>
         <a href="{% url 'accounts:add_account' %}">
@@ -57,7 +36,7 @@
         </a>
         <a href="{% url 'messenger:home' %}?profile={{ request.user.username|urlencode }}">
           <span class="tg-native-icon tg-native-icon--edit" aria-hidden="true"></span>
-          <span>Изменить профиль</span>
+          <span>Редактировать профиль</span>
         </a>
         <form method="post" action="{% url 'accounts:logout' %}">
           {% csrf_token %}
@@ -69,13 +48,9 @@
       </div>
     </header>
 
-    <div class="tg-settings-scroll" id="settingsScroll">
+    <div class="tg-settings-scroll">
       <section class="tg-settings-screen" data-settings-screen="main" aria-labelledby="settingsTopbarTitle">
-        <a
-          class="tg-settings-cover"
-          href="{% url 'messenger:home' %}?profile={{ request.user.username|urlencode }}"
-          aria-label="Открыть свой профиль"
-        >
+        <a class="tg-settings-cover" href="{% url 'messenger:home' %}?profile={{ request.user.username|urlencode }}" aria-label="Открыть свой профиль">
           {% if request.user.avatar %}
             <img class="tg-settings-cover__avatar" src="{{ request.user.avatar.url }}" alt="">
           {% else %}
@@ -83,35 +58,38 @@
           {% endif %}
           <span class="tg-settings-cover__copy">
             <strong>{{ request.user.display_name }}</strong>
-            <small>{{ request.user.email }}</small>
             <small>@{{ request.user.username }}</small>
           </span>
         </a>
 
         <div class="tg-settings-divider" aria-hidden="true"></div>
 
-        <nav class="tg-settings-list" aria-label="Разделы настроек">
+        <div class="tg-settings-list">
           <a class="tg-settings-row" href="{% url 'messenger:home' %}?profile={{ request.user.username|urlencode }}">
-            <span class="tg-settings-section-icon tg-settings-section-icon--account" aria-hidden="true"></span>
+            <span class="tg-native-icon tg-native-icon--profile tg-settings-row__icon" aria-hidden="true"></span>
             <span class="tg-settings-row__label">Мой аккаунт</span>
           </a>
 
           <button class="tg-settings-row" type="button" data-settings-target="privacy">
-            <span class="tg-settings-section-icon tg-settings-section-icon--lock" aria-hidden="true"></span>
+            <span class="tg-native-icon tg-native-icon--lock tg-settings-row__icon" aria-hidden="true"></span>
             <span class="tg-settings-row__label">Конфиденциальность и безопасность</span>
           </button>
 
           <button class="tg-settings-row" type="button" data-settings-target="chat">
-            <span class="tg-settings-section-icon tg-settings-section-icon--chat" aria-hidden="true"></span>
+            <span class="tg-native-icon tg-native-icon--settings tg-settings-row__icon" aria-hidden="true"></span>
             <span class="tg-settings-row__label">Настройки чатов</span>
           </button>
-        </nav>
+        </div>
+
+        <div class="tg-settings-divider" aria-hidden="true"></div>
+        <p class="tg-settings-version">Sovietgram · настройки применяются сразу</p>
       </section>
 
       <section class="tg-settings-screen" data-settings-screen="privacy" aria-label="Конфиденциальность и безопасность" hidden>
         <div class="tg-settings-subsection">
           <h2>Безопасность</h2>
-          <a class="tg-settings-row tg-settings-row--plain" href="{% url 'accounts:password_change' %}">
+          <a class="tg-settings-row" href="{% url 'accounts:password_change' %}">
+            <span class="tg-native-icon tg-native-icon--lock tg-settings-row__icon" aria-hidden="true"></span>
             <span class="tg-settings-row__label">Пароль</span>
             <span class="tg-settings-row__value">Изменить</span>
           </a>
@@ -124,7 +102,6 @@
           <label class="tg-settings-toggle-row" for="id_archive_unknown_chats">
             <span class="tg-settings-toggle-row__copy">
               <strong>Архивировать и отключать уведомления</strong>
-              <small>Новые личные чаты от пользователей не из контактов не будут мешать в основном списке.</small>
             </span>
             <span class="tg-settings-switch">
               <input
@@ -136,12 +113,51 @@
               <span class="tg-settings-switch__track"><span></span></span>
             </span>
           </label>
+          <p class="tg-settings-about">Первое сообщение от пользователя не из контактов автоматически попадёт в архив, а уведомления для этого чата будут отключены.</p>
+        </div>
+
+        <div class="tg-settings-divider" aria-hidden="true"></div>
+
+        <div class="tg-settings-subsection" id="archiveSettings">
+          <h2>Архив</h2>
+
+          <label class="tg-settings-toggle-row" for="id_keep_archived_chats">
+            <span class="tg-settings-toggle-row__copy">
+              <strong>Всегда оставлять в архиве</strong>
+            </span>
+            <span class="tg-settings-switch">
+              <input
+                id="id_keep_archived_chats"
+                type="checkbox"
+                data-setting="keep_archived_chats"
+                {% if request.user.keep_archived_chats %}checked{% endif %}
+              >
+              <span class="tg-settings-switch__track"><span></span></span>
+            </span>
+          </label>
+
+          <label class="tg-settings-toggle-row" for="id_archive_in_main_menu">
+            <span class="tg-settings-toggle-row__copy">
+              <strong>Архив в главном меню</strong>
+            </span>
+            <span class="tg-settings-switch">
+              <input
+                id="id_archive_in_main_menu"
+                type="checkbox"
+                data-setting="archive_in_main_menu"
+                {% if request.user.archive_in_main_menu %}checked{% endif %}
+              >
+              <span class="tg-settings-switch__track"><span></span></span>
+            </span>
+          </label>
+
+          <p class="tg-settings-about">Если «Всегда оставлять в архиве» выключено, новое сообщение вернёт незаглушённый чат в основной список. Если «Архив в главном меню» выключен, архив показывается над списком чатов.</p>
         </div>
       </section>
 
       <section class="tg-settings-screen" data-settings-screen="chat" aria-label="Настройки чатов" hidden>
         <div class="tg-settings-subsection tg-settings-theme-section">
-          <h2>Оформление</h2>
+          <h2>Темы</h2>
 
           <div class="tg-settings-themes" role="radiogroup" aria-label="Тема оформления">
             <label class="tg-settings-theme{% if request.user.theme == 'light' %} is-selected{% endif %}" data-theme-option="light">
@@ -203,10 +219,7 @@
               {% if request.user.enter_to_send %}checked{% endif %}
             >
             <span class="tg-settings-radio-row__control"></span>
-            <span class="tg-settings-radio-row__copy">
-              <strong>Отправлять по Enter</strong>
-              <small>Shift+Enter — новая строка</small>
-            </span>
+            <span>Отправлять по Enter</span>
           </label>
 
           <label class="tg-settings-radio-row" for="sendModeCtrlEnter">
@@ -219,59 +232,16 @@
               {% if not request.user.enter_to_send %}checked{% endif %}
             >
             <span class="tg-settings-radio-row__control"></span>
-            <span class="tg-settings-radio-row__copy">
-              <strong>Отправлять по Ctrl+Enter</strong>
-              <small>Enter — новая строка</small>
-            </span>
-          </label>
-        </div>
-
-        <div class="tg-settings-divider" aria-hidden="true"></div>
-
-        <div class="tg-settings-subsection">
-          <button class="tg-settings-row" type="button" data-settings-target="archive">
-            <span class="tg-settings-section-icon tg-settings-section-icon--archive" aria-hidden="true"></span>
-            <span class="tg-settings-row__label">Настройки архива</span>
-            <span class="tg-settings-chevron" aria-hidden="true"></span>
-          </button>
-        </div>
-      </section>
-
-      <section class="tg-settings-screen" data-settings-screen="archive" id="archiveSettings" aria-label="Настройки архива" hidden>
-        <div class="tg-settings-subsection">
-          <h2>Архив</h2>
-
-          <label class="tg-settings-toggle-row" for="id_keep_archived_chats">
-            <span class="tg-settings-toggle-row__copy">
-              <strong>Всегда оставлять в архиве</strong>
-              <small>Новые сообщения не будут возвращать незаглушённые чаты в основной список.</small>
-            </span>
-            <span class="tg-settings-switch">
-              <input
-                id="id_keep_archived_chats"
-                type="checkbox"
-                data-setting="keep_archived_chats"
-                {% if request.user.keep_archived_chats %}checked{% endif %}
-              >
-              <span class="tg-settings-switch__track"><span></span></span>
-            </span>
+            <span>Отправлять по Ctrl+Enter</span>
           </label>
 
-          <label class="tg-settings-toggle-row" for="id_archive_in_main_menu">
-            <span class="tg-settings-toggle-row__copy">
-              <strong>Архив в главном меню</strong>
-              <small>Показывать Архив отдельным пунктом бокового меню вместо строки над списком чатов.</small>
-            </span>
-            <span class="tg-settings-switch">
-              <input
-                id="id_archive_in_main_menu"
-                type="checkbox"
-                data-setting="archive_in_main_menu"
-                {% if request.user.archive_in_main_menu %}checked{% endif %}
-              >
-              <span class="tg-settings-switch__track"><span></span></span>
-            </span>
-          </label>
+          <p class="tg-settings-about" id="enterModeHint">
+            {% if request.user.enter_to_send %}
+              Enter отправляет сообщение, Shift+Enter создаёт новую строку.
+            {% else %}
+              Enter создаёт новую строку, Ctrl+Enter отправляет сообщение.
+            {% endif %}
+          </p>
         </div>
       </section>
     </div>
