@@ -118,6 +118,7 @@
           data-chat-id="{{ selected_chat.pk }}"
           data-chat-url="{% url 'messenger:chat' selected_chat.pk %}"
           data-chat-action-url="{% url 'messenger:chat_action' selected_chat.pk %}"
+          data-special-send-url="{% url 'messenger:send_special_message' selected_chat.pk %}"
           data-chat-type="{{ selected_chat.type }}"
           data-chat-role="{{ active_membership.role }}"
           data-chat-saved="{{ selected_chat.is_saved_ui|yesno:'true,false' }}"
@@ -281,6 +282,7 @@
                      data-message-id="{{ message.pk }}"
                      data-message-own="{% if message.sender_id == request.user.pk %}true{% else %}false{% endif %}"
                      data-message-text="{{ message.text|escape }}"
+                     data-message-kind="{{ message.special_type|default:'' }}"
                      data-message-sender="{{ message.sender.display_name|escape }}"
                      data-message-pinned="{% if message.is_pinned_ui %}true{% else %}false{% endif %}"
                      data-edit-url="{% url 'messenger:edit_message' selected_chat.pk message.pk %}"
@@ -301,6 +303,82 @@
                 </button>
               {% endif %}
 
+              {% if message.special_type == 'poll' and message.special_ui %}
+                <section class="message-special message-poll"
+                         data-special-message
+                         data-special-type="poll"
+                         data-action-url="{{ message.special_ui.action_url }}"
+                         data-multiple="{{ message.special_ui.multiple|yesno:'true,false' }}"
+                         data-quiz="{{ message.special_ui.quiz|yesno:'true,false' }}">
+                  <strong class="message-special__title">{{ message.special_ui.question }}</strong>
+                  <small class="message-special__eyebrow">{% if message.special_ui.quiz %}Викторина{% else %}Опрос{% endif %}{% if message.special_ui.anonymous %} · анонимный{% endif %}</small>
+                  <div class="message-poll__options">
+                    {% for option in message.special_ui.options %}
+                      <button class="message-poll__option{% if option.selected %} is-selected{% endif %}{% if option.correct %} is-correct{% endif %}"
+                              type="button"
+                              data-poll-option="{{ option.index }}">
+                        <span class="message-poll__radio"></span>
+                        <span class="message-poll__label">{{ option.text }}</span>
+                        <span class="message-poll__percent">{{ option.percent }}%</span>
+                        {% if option.voter_names %}<small class="message-poll__voters">{{ option.voter_names|join:", " }}</small>{% endif %}
+                        <span class="message-poll__bar" style="--poll-percent: {{ option.percent }}%;"></span>
+                      </button>
+                    {% endfor %}
+                  </div>
+                  {% if message.special_ui.multiple %}
+                    <button class="message-poll__submit" type="button" data-poll-submit>Голосовать</button>
+                  {% endif %}
+                  <small class="message-poll__meta">{{ message.special_ui.total_voters }} голосов{% if message.special_ui.closed %} · завершён{% endif %}</small>
+                  {% if message.special_ui.can_close %}<button class="message-poll__close" type="button" data-poll-close>Завершить опрос</button>{% endif %}
+                  {% if message.special_ui.explanation %}<p class="message-poll__explanation">{{ message.special_ui.explanation }}</p>{% endif %}
+                </section>
+              {% elif message.special_type == 'todo' and message.special_ui %}
+                <section class="message-special message-todo"
+                         data-special-message
+                         data-special-type="todo"
+                         data-action-url="{{ message.special_ui.action_url }}"
+                         data-can-add="{{ message.special_ui.can_add|yesno:'true,false' }}"
+                         data-can-toggle="{{ message.special_ui.can_toggle|yesno:'true,false' }}">
+                  <strong class="message-special__title">{{ message.special_ui.title }}</strong>
+                  <small class="message-special__eyebrow">Список задач</small>
+                  <div class="message-todo__items">
+                    {% for task in message.special_ui.tasks %}
+                      <button class="message-todo__item{% if task.done %} is-done{% endif %}" type="button" data-todo-toggle="{{ task.index }}"{% if not message.special_ui.can_toggle %} disabled{% endif %}>
+                        <span class="message-todo__check">✓</span>
+                        <span>{{ task.text }}</span>
+                      </button>
+                    {% endfor %}
+                  </div>
+                  {% if message.special_ui.can_add %}
+                    <button class="message-todo__add" type="button" data-todo-add>+ Добавить задачу</button>
+                    <div class="message-todo__adder" hidden>
+                      <input type="text" maxlength="160" placeholder="Новая задача" data-todo-add-input>
+                      <button type="button" data-todo-add-submit>Добавить</button>
+                    </div>
+                  {% endif %}
+                </section>
+              {% elif message.special_type == 'article' and message.special_ui %}
+                <section class="message-special message-article" data-special-message data-special-type="article">
+                  <small class="message-special__eyebrow">Статья</small>
+                  <strong class="message-special__title">{{ message.special_ui.title }}</strong>
+                  <div class="message-article__body">{{ message.special_ui.body|linebreaksbr }}</div>
+                </section>
+              {% elif message.special_type == 'location' and message.special_ui %}
+                <a class="message-special message-location"
+                   data-special-message
+                   data-special-type="location"
+                   href="https://www.openstreetmap.org/?mlat={{ message.special_ui.latitude }}&mlon={{ message.special_ui.longitude }}#map=16/{{ message.special_ui.latitude }}/{{ message.special_ui.longitude }}"
+                   target="_blank"
+                   rel="noopener noreferrer">
+                  <span class="message-location__pin">⌖</span>
+                  <span>
+                    <small class="message-special__eyebrow">Геопозиция</small>
+                    <strong class="message-special__title">{{ message.special_ui.label }}</strong>
+                    <small class="message-location__coords">{{ message.special_ui.latitude }}, {{ message.special_ui.longitude }}</small>
+                  </span>
+                </a>
+              {% endif %}
+
               {% with attachment_count=message.attachments.all|length %}
                 {% if attachment_count %}
                   <div class="message-media{% if attachment_count > 1 %} message-media--album{% endif %}" data-count="{{ attachment_count }}">
@@ -312,10 +390,11 @@
                       {% elif attachment.kind == 'video' %}
                         <video class="message-media__video" controls preload="metadata" src="{% url 'messenger:view_attachment' attachment.pk %}"></video>
                       {% elif attachment.kind == 'audio' %}
-                        <a class="message-file-card" href="{% url 'messenger:download_attachment' attachment.pk %}">
-                          <span class="message-file-card__icon">↓</span>
-                          <span class="message-file-card__text"><strong>{{ attachment.original_name }}</strong><small>{{ attachment.size|filesizeformat }}</small></span>
-                        </a>
+                        <div class="message-audio">
+                          <span class="message-audio__icon">♪</span>
+                          <span class="message-audio__copy"><strong>{{ attachment.original_name }}</strong><small>{{ attachment.size|filesizeformat }}</small></span>
+                          <audio controls preload="metadata" src="{% url 'messenger:view_attachment' attachment.pk %}"></audio>
+                        </div>
                       {% else %}
                         <a class="message-file-card" href="{% url 'messenger:download_attachment' attachment.pk %}">
                           <span class="message-file-card__icon">↓</span>
@@ -327,7 +406,7 @@
                 {% endif %}
               {% endwith %}
 
-              {% if message.text %}<p class="message__text">{{ message.text|urlize|linebreaksbr }}</p>{% endif %}
+              {% if message.text and not message.special_type %}<p class="message__text">{{ message.text|urlize|linebreaksbr }}</p>{% endif %}
               <footer>
                 {% if message.signature_name %}<span class="message-channel-signature">{{ message.signature_name }}</span>{% endif %}
                 {% if message.edited_at %}<span class="message-edited">изм.</span>{% endif %}
@@ -349,21 +428,50 @@
           <button id="composerReplyClose" type="button" aria-label="Отменить ответ"><span class="tg-native-icon tg-native-icon--close tg-native-icon--compact" aria-hidden="true"></span></button>
         </div>
         <input id="replyToInput" type="hidden" name="reply_to" value="">
-        <div class="attachment-control" id="attachmentControl"{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_media %} hidden{% endif %}>
-          <button class="composer__attach composer__attach-button" id="attachmentButton" type="button" aria-label="Прикрепить" aria-expanded="false" aria-controls="attachmentMenu" title="Прикрепить"><span class="tg-native-icon tg-native-icon--attach" aria-hidden="true"></span></button>
+        <div class="attachment-control" id="attachmentControl"{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_media and not selected_chat.members_can_send_messages %} hidden{% endif %}>
+          <button class="composer__attach composer__attach-button" id="attachmentButton" type="button" aria-label="Прикрепить" aria-expanded="false" aria-controls="attachmentMenu" title="Прикрепить">
+            <span class="tg-native-icon tg-native-icon--attach" aria-hidden="true"></span>
+          </button>
           <div class="attachment-menu" id="attachmentMenu" role="menu" hidden>
+            {% if selected_chat.type != 'group' or active_membership.role != 'member' or selected_chat.members_can_send_media %}
             <button type="button" role="menuitem" data-attachment-mode="media">
-              <span class="attachment-menu__icon"><span class="tg-native-icon tg-native-icon--media" aria-hidden="true"></span></span>
-              <span><strong>Фото или видео</strong><small>Предпросмотр и отправка альбомом</small></span>
+              <span class="tg-native-icon tg-native-icon--attach-photo" aria-hidden="true"></span>
+              <span>Фото или видео</span>
             </button>
             <button type="button" role="menuitem" data-attachment-mode="file">
-              <span class="attachment-menu__icon"><span class="tg-native-icon tg-native-icon--file" aria-hidden="true"></span></span>
-              <span><strong>Файл</strong><small>Отправить исходник без обработки</small></span>
+              <span class="tg-native-icon tg-native-icon--attach-file" aria-hidden="true"></span>
+              <span>Файл</span>
             </button>
+            {% endif %}
+            {% if selected_chat.type != 'group' or active_membership.role != 'member' or selected_chat.members_can_send_messages %}
+            <button type="button" role="menuitem" data-attach-special="poll">
+              <span class="tg-native-icon tg-native-icon--attach-poll" aria-hidden="true"></span>
+              <span>Опрос</span>
+            </button>
+            <button type="button" role="menuitem" data-attach-special="todo">
+              <span class="tg-native-icon tg-native-icon--attach-todo" aria-hidden="true"></span>
+              <span>Список задач</span>
+            </button>
+            <button type="button" role="menuitem" data-attach-special="article">
+              <span class="tg-native-icon tg-native-icon--attach-article" aria-hidden="true"></span>
+              <span>Статья</span>
+            </button>
+            <button type="button" role="menuitem" data-attach-special="location">
+              <span class="tg-native-icon tg-native-icon--attach-location" aria-hidden="true"></span>
+              <span>Геопозиция</span>
+            </button>
+            {% endif %}
+            {% if selected_chat.type != 'group' or active_membership.role != 'member' or selected_chat.members_can_send_media %}
+            <button type="button" role="menuitem" data-attachment-mode="audio">
+              <span class="tg-native-icon tg-native-icon--attach-music" aria-hidden="true"></span>
+              <span>Музыка</span>
+            </button>
+            {% endif %}
           </div>
         </div>
         <input id="mediaAttachmentsInput" class="visually-hidden" type="file" multiple accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,video/quicktime,video/x-m4v">
         <input id="fileAttachmentsInput" class="visually-hidden" type="file" multiple>
+        <input id="audioAttachmentsInput" class="visually-hidden" type="file" multiple accept="audio/mpeg,audio/mp4,audio/aac,audio/ogg,audio/wav,audio/x-wav,audio/flac,audio/x-flac,audio/opus,.mp3,.m4a,.aac,.ogg,.oga,.wav,.flac,.opus">
         <input id="attachmentModeInput" type="hidden" name="attachment_mode" value="media">
         <div class="composer__field">
           <textarea id="messageInput" name="text" rows="1" maxlength="4096" placeholder="{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_messages %}Можно отправлять только медиа{% else %}Сообщение{% endif %}" autocomplete="off"{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_messages %} readonly{% endif %}>{{ active_membership.draft_text }}</textarea>
@@ -408,6 +516,58 @@
     <div class="media-compose-caption"><textarea id="mediaComposeCaption" rows="1" maxlength="4096" placeholder="Добавить подпись…"></textarea></div>
     <div class="media-upload-progress" id="mediaUploadProgress" hidden><span id="mediaUploadProgressBar"></span></div>
     <footer class="media-compose-footer"><small id="mediaComposeHint">Фото и видео будут отправлены как медиа.</small><button class="media-compose-send" id="mediaComposeSend" type="button">Отправить</button></footer>
+  </section>
+</div>
+
+<div class="attach-special-backdrop" id="attachSpecialBackdrop" hidden>
+  <section class="attach-special-dialog" role="dialog" aria-modal="true" aria-labelledby="attachSpecialTitle">
+    <header class="attach-special-header">
+      <button id="attachSpecialClose" type="button" aria-label="Закрыть"><span class="tg-native-icon tg-native-icon--close tg-native-icon--compact" aria-hidden="true"></span></button>
+      <strong id="attachSpecialTitle">Вложение</strong>
+      <button id="attachSpecialSend" type="button">Отправить</button>
+    </header>
+
+    <div class="attach-special-panel" data-special-panel="poll" hidden>
+      <label class="attach-special-field"><span>Вопрос</span><textarea id="attachPollQuestion" rows="2" maxlength="255" placeholder="Задайте вопрос"></textarea></label>
+      <div class="attach-special-options" id="attachPollOptions"></div>
+      <button class="attach-special-add-row" id="attachPollAddOption" type="button">+ Добавить вариант</button>
+      <div class="attach-special-settings">
+        <label><span>Анонимное голосование</span><input id="attachPollAnonymous" type="checkbox" checked></label>
+        <label><span>Несколько ответов</span><input id="attachPollMultiple" type="checkbox"></label>
+        <label><span>Режим викторины</span><input id="attachPollQuiz" type="checkbox"></label>
+      </div>
+      <label class="attach-special-field" id="attachPollExplanationRow" hidden><span>Пояснение правильного ответа</span><textarea id="attachPollExplanation" rows="2" maxlength="500" placeholder="Необязательно"></textarea></label>
+    </div>
+
+    <div class="attach-special-panel" data-special-panel="todo" hidden>
+      <label class="attach-special-field"><span>Название</span><input id="attachTodoTitle" type="text" maxlength="255" placeholder="Например, Подготовка релиза"></label>
+      <div class="attach-special-options" id="attachTodoItems"></div>
+      <button class="attach-special-add-row" id="attachTodoAddItem" type="button">+ Добавить задачу</button>
+      <div class="attach-special-settings">
+        <label><span>Разрешить другим добавлять задачи</span><input id="attachTodoAllowAdd" type="checkbox"></label>
+        <label><span>Разрешить другим отмечать выполнение</span><input id="attachTodoAllowMark" type="checkbox" checked></label>
+      </div>
+    </div>
+
+    <div class="attach-special-panel" data-special-panel="article" hidden>
+      <label class="attach-special-field"><span>Заголовок</span><input id="attachArticleTitle" type="text" maxlength="200" placeholder="Заголовок статьи"></label>
+      <label class="attach-special-field attach-special-field--grow"><span>Текст</span><textarea id="attachArticleBody" rows="10" maxlength="12000" placeholder="Текст статьи"></textarea></label>
+    </div>
+
+    <div class="attach-special-panel" data-special-panel="location" hidden>
+      <div class="attach-location-preview">
+        <span class="attach-location-preview__pin">⌖</span>
+        <span><strong>Геопозиция</strong><small id="attachLocationStatus">Укажите координаты или определите текущее местоположение.</small></span>
+      </div>
+      <button class="attach-special-location-button" id="attachLocationDetect" type="button">Определить моё местоположение</button>
+      <label class="attach-special-field"><span>Название места</span><input id="attachLocationLabel" type="text" maxlength="120" placeholder="Например, Штаб разработки"></label>
+      <div class="attach-special-coordinate-grid">
+        <label class="attach-special-field"><span>Широта</span><input id="attachLocationLatitude" type="number" min="-90" max="90" step="0.000001" placeholder="54.687157"></label>
+        <label class="attach-special-field"><span>Долгота</span><input id="attachLocationLongitude" type="number" min="-180" max="180" step="0.000001" placeholder="25.279652"></label>
+      </div>
+    </div>
+
+    <footer class="attach-special-footer"><small id="attachSpecialHint"></small></footer>
   </section>
 </div>
 
@@ -741,6 +901,7 @@
 
 {% block extra_scripts %}
 <script src="{% static 'js/chat.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/attachment-special.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/chat-controls.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/community-profile.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/community-settings.js' %}?v={{ static_version }}"></script>

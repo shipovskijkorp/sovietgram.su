@@ -126,6 +126,13 @@ class ChatParticipant(models.Model):
 
 
 class Message(models.Model):
+    class SpecialType(models.TextChoices):
+        NONE = "", "Обычное сообщение"
+        POLL = "poll", "Опрос"
+        TODO = "todo", "Список задач"
+        ARTICLE = "article", "Статья"
+        LOCATION = "location", "Геопозиция"
+
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="messages")
     sender = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -150,6 +157,14 @@ class Message(models.Model):
     forwarded_from_name = models.CharField(max_length=300, blank=True, default="")
     forwarded_from_username = models.CharField(max_length=150, blank=True, default="")
     signature_name = models.CharField(max_length=300, blank=True, default="")
+    special_type = models.CharField(
+        max_length=16,
+        choices=SpecialType.choices,
+        blank=True,
+        default=SpecialType.NONE,
+        db_index=True,
+    )
+    special_data = models.JSONField(blank=True, default=dict)
     is_deleted = models.BooleanField(default=False, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True, db_index=True)
@@ -162,6 +177,18 @@ class Message(models.Model):
     def preview(self):
         if self.is_deleted:
             return "Сообщение удалено"
+        if self.special_type == self.SpecialType.POLL:
+            question = " ".join(str(self.special_data.get("question", "")).split())
+            return f"Опрос: {question}" if question else "Опрос"
+        if self.special_type == self.SpecialType.TODO:
+            title = " ".join(str(self.special_data.get("title", "")).split())
+            return f"Список задач: {title}" if title else "Список задач"
+        if self.special_type == self.SpecialType.ARTICLE:
+            title = " ".join(str(self.special_data.get("title", "")).split())
+            return title or "Статья"
+        if self.special_type == self.SpecialType.LOCATION:
+            label = " ".join(str(self.special_data.get("label", "")).split())
+            return f"Геопозиция: {label}" if label else "Геопозиция"
         compact = " ".join(self.text.split())
         if compact:
             return compact

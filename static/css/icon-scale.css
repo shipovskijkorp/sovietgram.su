@@ -186,6 +186,34 @@
   mask-size: 40px 40px;
   -webkit-mask-size: 40px 40px;
 }
+.tg-native-icon--attach-photo {
+  mask-image: url("../icons/telegram-original/attach-menu/image.png");
+  -webkit-mask-image: url("../icons/telegram-original/attach-menu/image.png");
+}
+.tg-native-icon--attach-file {
+  mask-image: url("../icons/telegram-original/attach-menu/file.png");
+  -webkit-mask-image: url("../icons/telegram-original/attach-menu/file.png");
+}
+.tg-native-icon--attach-poll {
+  mask-image: url("../icons/telegram-original/attach-menu/poll.png");
+  -webkit-mask-image: url("../icons/telegram-original/attach-menu/poll.png");
+}
+.tg-native-icon--attach-todo {
+  mask-image: url("../icons/telegram-original/attach-menu/todo.png");
+  -webkit-mask-image: url("../icons/telegram-original/attach-menu/todo.png");
+}
+.tg-native-icon--attach-article {
+  mask-image: url("../icons/telegram-original/attach-menu/article.svg");
+  -webkit-mask-image: url("../icons/telegram-original/attach-menu/article.svg");
+}
+.tg-native-icon--attach-location {
+  mask-image: url("../icons/telegram-original/attach-menu/location.png");
+  -webkit-mask-image: url("../icons/telegram-original/attach-menu/location.png");
+}
+.tg-native-icon--attach-music {
+  mask-image: url("../icons/telegram-original/attach-menu/music.png");
+  -webkit-mask-image: url("../icons/telegram-original/attach-menu/music.png");
+}
 .tg-native-icon--send {
   mask-image: url("../icons/telegram-original/send.png");
   -webkit-mask-image: url("../icons/telegram-original/send.png");

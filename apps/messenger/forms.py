@@ -14,6 +14,23 @@ MEDIA_EXTENSIONS = {
     ".png", ".jpg", ".jpeg", ".webp",
     ".mp4", ".webm", ".mov", ".m4v",
 }
+AUDIO_EXTENSIONS = {
+    ".mp3", ".m4a", ".aac", ".ogg", ".oga", ".wav", ".flac", ".opus",
+}
+AUDIO_CONTENT_TYPES = {
+    "audio/mpeg",
+    "audio/mp3",
+    "audio/mp4",
+    "audio/x-m4a",
+    "audio/aac",
+    "audio/x-aac",
+    "audio/ogg",
+    "audio/wav",
+    "audio/x-wav",
+    "audio/flac",
+    "audio/x-flac",
+    "audio/opus",
+}
 IMAGE_FORMATS = {
     ".png": {"PNG"},
     ".jpg": {"JPEG"},
@@ -82,12 +99,17 @@ class MultipleFileField(forms.FileField):
 class MessageForm(forms.Form):
     MODE_MEDIA = "media"
     MODE_FILE = "file"
+    MODE_AUDIO = "audio"
 
     text = forms.CharField(required=False, max_length=4096)
     reply_to = forms.IntegerField(required=False, min_value=1)
     attachment_mode = forms.ChoiceField(
         required=False,
-        choices=((MODE_MEDIA, "Медиа"), (MODE_FILE, "Файл")),
+        choices=(
+            (MODE_MEDIA, "Медиа"),
+            (MODE_FILE, "Файл"),
+            (MODE_AUDIO, "Музыка"),
+        ),
         initial=MODE_MEDIA,
     )
     attachments = MultipleFileField(required=False)
@@ -124,6 +146,15 @@ class MessageForm(forms.Form):
                     )
                 if extension in IMAGE_FORMATS:
                     _validate_inline_image(uploaded, extension)
+            elif mode == self.MODE_AUDIO:
+                if extension not in AUDIO_EXTENSIONS:
+                    raise forms.ValidationError(
+                        "В разделе «Музыка» поддерживаются MP3, M4A, AAC, OGG, WAV, FLAC и OPUS."
+                    )
+                if content_type and content_type not in AUDIO_CONTENT_TYPES:
+                    raise forms.ValidationError(
+                        "Выбранный файл не распознан как аудио."
+                    )
             if uploaded.size > MAX_FILE_SIZE:
                 raise forms.ValidationError("Один файл должен быть не больше 25 МБ.")
             total_size += uploaded.size

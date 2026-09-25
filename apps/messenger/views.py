@@ -1,3 +1,5 @@
+import copy
+import json
 import re
 from datetime import timedelta
 from pathlib import Path
@@ -50,6 +52,7 @@ from .services import (
     other_user_for_chat,
     serialize_message,
     serialize_pins,
+    serialize_special_content,
     touch_chat,
 )
 
@@ -69,6 +72,104 @@ def _safe_next(request, fallback):
 
 def _wants_json(request):
     return request.headers.get("x-requested-with") == "XMLHttpRequest"
+
+
+def _form_bool(value, default=False):
+    if value is None:
+        return default
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _clean_special_payload(special_type, raw_payload):
+    if not isinstance(raw_payload, dict):
+        raise ValueError("Некорректные данные вложения.")
+
+    if special_type == Message.SpecialType.POLL:
+        question = str(raw_payload.get("question", "")).strip()[:255]
+        raw_options = raw_payload.get("options") or []
+        options = []
+        seen = set()
+        for value in raw_options:
+            text = str(value).strip()[:100]
+            key = text.casefold()
+            if not text or key in seen:
+                continue
+            seen.add(key)
+            options.append({"text": text, "voters": []})
+        if not question:
+            raise ValueError("Введите вопрос опроса.")
+        if len(options) < 2:
+            raise ValueError("В опросе должно быть хотя бы два варианта.")
+        if len(options) > 10:
+            raise ValueError("В опросе может быть не больше 10 вариантов.")
+        quiz = bool(raw_payload.get("quiz"))
+        multiple = bool(raw_payload.get("multiple")) and not quiz
+        correct_option = raw_payload.get("correct_option")
+        if quiz:
+            try:
+                correct_option = int(correct_option)
+            except (TypeError, ValueError):
+                raise ValueError("Для викторины выберите правильный ответ.")
+            if correct_option < 0 or correct_option >= len(options):
+                raise ValueError("Для викторины выберите правильный ответ.")
+        else:
+            correct_option = None
+        return {
+            "question": question,
+            "options": options,
+            "anonymous": bool(raw_payload.get("anonymous", True)),
+            "multiple": multiple,
+            "quiz": quiz,
+            "correct_option": correct_option,
+            "explanation": str(raw_payload.get("explanation", "")).strip()[:500],
+            "closed": False,
+        }, question
+
+    if special_type == Message.SpecialType.TODO:
+        title = str(raw_payload.get("title", "")).strip()[:255]
+        tasks = []
+        for value in raw_payload.get("tasks") or []:
+            text = str(value).strip()[:160]
+            if text:
+                tasks.append({"text": text, "done": False, "done_by": None})
+        if not title:
+            raise ValueError("Введите название списка задач.")
+        if not tasks:
+            raise ValueError("Добавьте хотя бы одну задачу.")
+        if len(tasks) > 30:
+            raise ValueError("В списке может быть не больше 30 задач.")
+        return {
+            "title": title,
+            "tasks": tasks,
+            "allow_others_add": bool(raw_payload.get("allow_others_add", False)),
+            "allow_others_mark": bool(raw_payload.get("allow_others_mark", True)),
+        }, title
+
+    if special_type == Message.SpecialType.ARTICLE:
+        title = str(raw_payload.get("title", "")).strip()[:200]
+        body = str(raw_payload.get("body", "")).strip()[:12000]
+        if not title:
+            raise ValueError("Введите заголовок статьи.")
+        if not body:
+            raise ValueError("Введите текст статьи.")
+        return {"title": title, "body": body}, title
+
+    if special_type == Message.SpecialType.LOCATION:
+        label = str(raw_payload.get("label", "")).strip()[:120]
+        try:
+            latitude = round(float(raw_payload.get("latitude")), 6)
+            longitude = round(float(raw_payload.get("longitude")), 6)
+        except (TypeError, ValueError):
+            raise ValueError("Укажите корректные координаты.")
+        if latitude < -90 or latitude > 90 or longitude < -180 or longitude > 180:
+            raise ValueError("Координаты находятся вне допустимого диапазона.")
+        return {
+            "label": label or "Геопозиция",
+            "latitude": latitude,
+            "longitude": longitude,
+        }, label or "Геопозиция"
+
+    raise ValueError("Неизвестный тип вложения.")
 
 
 def _chat_for_user(user, chat_id):
@@ -646,6 +747,8 @@ def chat_detail(request, chat_id):
         focus_id = 0
 
     _hide_inaccessible_reply_previews(chat, request.user, chat_messages)
+    for message in chat_messages:
+        message.special_ui = serialize_special_content(message, request.user)
 
     return render(
         request,
@@ -1096,6 +1199,7 @@ def send_message(request, chat_id):
 
     attachment_mode = form.cleaned_data.get("attachment_mode") or MessageForm.MODE_MEDIA
     send_as_file = attachment_mode == MessageForm.MODE_FILE
+    send_as_audio = attachment_mode == MessageForm.MODE_AUDIO
 
     with transaction.atomic():
         message = Message.objects.create(
@@ -1113,7 +1217,13 @@ def send_message(request, chat_id):
             MessageAttachment.objects.create(
                 message=message,
                 file=uploaded,
-                kind=MessageAttachment.Kind.FILE if send_as_file else attachment_kind(uploaded),
+                kind=(
+                    MessageAttachment.Kind.FILE
+                    if send_as_file
+                    else MessageAttachment.Kind.AUDIO
+                    if send_as_audio
+                    else attachment_kind(uploaded)
+                ),
                 original_name=Path(uploaded.name).name[:255],
                 mime_type=(getattr(uploaded, "content_type", "") or "")[:127],
                 size=uploaded.size,
@@ -1136,6 +1246,292 @@ def send_message(request, chat_id):
 
 @login_required
 @require_POST
+def send_special_message(request, chat_id):
+    chat = _chat_for_user(request.user, chat_id)
+    membership = _membership(chat, request.user)
+    special_type = request.POST.get("special_type", "").strip()
+
+    try:
+        raw_payload = json.loads(request.POST.get("payload", "{}"))
+        special_data, search_text = _clean_special_payload(
+            special_type,
+            raw_payload,
+        )
+    except (json.JSONDecodeError, ValueError) as error:
+        return JsonResponse(
+            {"ok": False, "error": str(error)},
+            status=400,
+        )
+
+    restriction = _posting_restriction(
+        chat,
+        membership,
+        text=search_text,
+        has_attachments=False,
+    )
+    if restriction:
+        response = JsonResponse(
+            {"ok": False, "error": restriction[0]},
+            status=403,
+        )
+        if restriction[1]:
+            response["Retry-After"] = str(restriction[1])
+        return response
+
+    reply_to = None
+    raw_reply = request.POST.get("reply_to", "").strip()
+    if raw_reply:
+        try:
+            reply_id = int(raw_reply)
+        except (TypeError, ValueError):
+            reply_id = 0
+        if reply_id:
+            reply_to = _visible_message_queryset(
+                chat,
+                request.user,
+            ).filter(
+                pk=reply_id,
+                is_deleted=False,
+            ).first()
+
+    with transaction.atomic():
+        message = Message.objects.create(
+            chat=chat,
+            sender=request.user,
+            text=search_text,
+            reply_to=reply_to,
+            special_type=special_type,
+            special_data=special_data,
+            signature_name=(
+                request.user.display_name
+                if chat.type == Chat.Type.CHANNEL
+                and chat.signatures_enabled
+                else ""
+            ),
+        )
+        touch_chat(chat)
+        apply_archive_rules_on_new_message(chat, message)
+        ChatParticipant.objects.filter(
+            chat=chat,
+            user=request.user,
+        ).update(
+            is_hidden=False,
+            draft_text="",
+            draft_updated_at=None,
+            last_typing_at=None,
+        )
+        mark_chat_read(chat, request.user, message)
+
+    message = _base_message_queryset(chat).get(pk=message.pk)
+    return JsonResponse(
+        {
+            "ok": True,
+            "message": _serialized_message(
+                message,
+                request.user,
+                chat,
+            ),
+        }
+    )
+
+
+@login_required
+@require_POST
+def special_message_action(request, chat_id, message_id):
+    chat = _chat_for_user(request.user, chat_id)
+    membership = _membership(chat, request.user)
+    action = request.POST.get("action", "").strip()
+
+    with transaction.atomic():
+        message = get_object_or_404(
+            Message.objects.select_for_update().filter(
+                chat=chat,
+                pk=message_id,
+                is_deleted=False,
+            )
+        )
+        if not _visible_message_queryset(
+            chat,
+            request.user,
+        ).filter(pk=message.pk).exists():
+            raise Http404
+
+        data = copy.deepcopy(message.special_data or {})
+
+        if message.special_type == Message.SpecialType.POLL:
+            if action == "close":
+                if not (
+                    message.sender_id == request.user.pk
+                    or membership.role in {
+                        ChatParticipant.Role.OWNER,
+                        ChatParticipant.Role.ADMIN,
+                    }
+                ):
+                    return JsonResponse(
+                        {
+                            "ok": False,
+                            "error": "Завершить опрос может автор или администратор.",
+                        },
+                        status=403,
+                    )
+                data["closed"] = True
+                message.special_data = data
+                message.save(update_fields=("special_data", "updated_at"))
+            elif action == "vote":
+                if data.get("closed"):
+                    return JsonResponse(
+                        {"ok": False, "error": "Опрос уже завершён."},
+                        status=400,
+                    )
+                try:
+                    chosen = json.loads(request.POST.get("options", "[]"))
+                except json.JSONDecodeError:
+                    chosen = []
+                if not isinstance(chosen, list):
+                    chosen = []
+                indexes = []
+                for value in chosen:
+                    try:
+                        index = int(value)
+                    except (TypeError, ValueError):
+                        continue
+                    if index not in indexes:
+                        indexes.append(index)
+
+                options = data.get("options") or []
+                indexes = [
+                    index
+                    for index in indexes
+                    if 0 <= index < len(options)
+                ]
+                if not indexes:
+                    return JsonResponse(
+                        {"ok": False, "error": "Выберите вариант ответа."},
+                        status=400,
+                    )
+                if data.get("quiz") or not data.get("multiple"):
+                    indexes = indexes[:1]
+
+                for option in options:
+                    cleaned = []
+                    for user_id in option.get("voters") or []:
+                        try:
+                            normalized_user_id = int(user_id)
+                        except (TypeError, ValueError):
+                            continue
+                        if normalized_user_id != request.user.pk:
+                            cleaned.append(normalized_user_id)
+                    option["voters"] = cleaned
+                for index in indexes:
+                    voters = options[index].setdefault("voters", [])
+                    voters.append(request.user.pk)
+                data["options"] = options
+                message.special_data = data
+                message.save(update_fields=("special_data", "updated_at"))
+            else:
+                return JsonResponse(
+                    {"ok": False, "error": "Неизвестное действие опроса."},
+                    status=400,
+                )
+
+        elif message.special_type == Message.SpecialType.TODO:
+            tasks = data.get("tasks") or []
+            is_author = message.sender_id == request.user.pk
+
+            if action == "toggle":
+                if not (
+                    is_author
+                    or bool(data.get("allow_others_mark", True))
+                ):
+                    return JsonResponse(
+                        {
+                            "ok": False,
+                            "error": "Автор запретил другим отмечать задачи.",
+                        },
+                        status=403,
+                    )
+                try:
+                    index = int(request.POST.get("index", "-1"))
+                except (TypeError, ValueError):
+                    index = -1
+                if index < 0 or index >= len(tasks):
+                    return JsonResponse(
+                        {"ok": False, "error": "Задача не найдена."},
+                        status=404,
+                    )
+                task = tasks[index]
+                task["done"] = not bool(task.get("done", False))
+                task["done_by"] = (
+                    request.user.pk
+                    if task["done"]
+                    else None
+                )
+            elif action == "add":
+                if not (
+                    is_author
+                    or bool(data.get("allow_others_add", False))
+                ):
+                    return JsonResponse(
+                        {
+                            "ok": False,
+                            "error": "Автор запретил добавлять новые задачи.",
+                        },
+                        status=403,
+                    )
+                text_value = request.POST.get("text", "").strip()[:160]
+                if not text_value:
+                    return JsonResponse(
+                        {"ok": False, "error": "Введите текст задачи."},
+                        status=400,
+                    )
+                if len(tasks) >= 30:
+                    return JsonResponse(
+                        {
+                            "ok": False,
+                            "error": "В списке уже максимальное число задач.",
+                        },
+                        status=400,
+                    )
+                tasks.append(
+                    {
+                        "text": text_value,
+                        "done": False,
+                        "done_by": None,
+                    }
+                )
+            else:
+                return JsonResponse(
+                    {"ok": False, "error": "Неизвестное действие списка задач."},
+                    status=400,
+                )
+
+            data["tasks"] = tasks
+            message.special_data = data
+            message.save(update_fields=("special_data", "updated_at"))
+        else:
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "error": "У этого сообщения нет интерактивных действий.",
+                },
+                status=400,
+            )
+
+    message = _base_message_queryset(chat).get(pk=message.pk)
+    return JsonResponse(
+        {
+            "ok": True,
+            "message": _serialized_message(
+                message,
+                request.user,
+                chat,
+            ),
+        }
+    )
+
+
+@login_required
+@require_POST
 def edit_message(request, chat_id, message_id):
     chat = _chat_for_user(request.user, chat_id)
     message = get_object_or_404(
@@ -1144,6 +1540,14 @@ def edit_message(request, chat_id, message_id):
         sender=request.user,
         is_deleted=False,
     )
+    if message.special_type:
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "Структурированные вложения редактируются через их собственные действия.",
+            },
+            status=400,
+        )
     form = EditMessageForm(request.POST)
     if not form.is_valid():
         return JsonResponse({"ok": False, "errors": form.errors.get_json_data()}, status=400)
@@ -1308,6 +1712,8 @@ def forward_message(request, chat_id, message_id):
             chat=target_chat,
             sender=request.user,
             text=source.text,
+            special_type=source.special_type,
+            special_data=copy.deepcopy(source.special_data or {}),
             forwarded_from=origin,
             forwarded_from_name=origin_name,
             forwarded_from_username=origin_username,
@@ -1718,6 +2124,14 @@ INLINE_MEDIA_TYPES = {
     ".webm": "video/webm",
     ".mov": "video/quicktime",
     ".m4v": "video/x-m4v",
+    ".mp3": "audio/mpeg",
+    ".m4a": "audio/mp4",
+    ".aac": "audio/aac",
+    ".ogg": "audio/ogg",
+    ".oga": "audio/ogg",
+    ".wav": "audio/wav",
+    ".flac": "audio/flac",
+    ".opus": "audio/opus",
 }
 
 
@@ -1728,6 +2142,7 @@ def view_attachment(request, attachment_id):
     if attachment.kind not in {
         MessageAttachment.Kind.IMAGE,
         MessageAttachment.Kind.VIDEO,
+        MessageAttachment.Kind.AUDIO,
     }:
         return JsonResponse({"ok": False, "error": "Вложение нельзя открыть inline."}, status=404)
 

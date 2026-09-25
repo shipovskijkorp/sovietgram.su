@@ -1,3 +1,4 @@
+import json
 import tempfile
 
 from django.core.cache import cache
@@ -1482,3 +1483,225 @@ class ChatFeatureTests(TestCase):
         self.assertContains(response, 'id="deleteMessageModal"', html=False)
         self.assertContains(response, 'id="deleteChatModal"', html=False)
         self.assertContains(response, 'id="messageSelectionBar"', html=False)
+
+
+    def test_attachment_menu_matches_telegram_builtins_without_wallet(self):
+        response = self.client.get(
+            reverse("messenger:chat", args=[self.chat.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        for label in (
+            "Фото или видео",
+            "Файл",
+            "Опрос",
+            "Список задач",
+            "Статья",
+            "Геопозиция",
+            "Музыка",
+        ):
+            self.assertContains(response, label)
+        self.assertNotContains(response, "Кошелёк")
+        self.assertContains(response, 'id="attachSpecialBackdrop"', html=False)
+        self.assertContains(response, "js/attachment-special.js", html=False)
+
+    def test_special_poll_can_be_created_and_voted(self):
+        create = self.client.post(
+            reverse("messenger:send_special_message", args=[self.chat.pk]),
+            {
+                "special_type": "poll",
+                "payload": json.dumps(
+                    {
+                        "question": "Какой вариант?",
+                        "options": ["Первый", "Второй", "Третий"],
+                        "anonymous": True,
+                        "multiple": False,
+                        "quiz": False,
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(create.status_code, 200)
+        message = Message.objects.get(
+            chat=self.chat,
+            special_type=Message.SpecialType.POLL,
+        )
+        self.assertEqual(message.special_data["question"], "Какой вариант?")
+        self.assertEqual(len(message.special_data["options"]), 3)
+
+        self.client.force_login(self.bob)
+        vote = self.client.post(
+            reverse(
+                "messenger:special_message_action",
+                args=[self.chat.pk, message.pk],
+            ),
+            {
+                "action": "vote",
+                "options": json.dumps([1]),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(vote.status_code, 200)
+        special = vote.json()["message"]["special"]
+        self.assertEqual(special["type"], "poll")
+        self.assertEqual(special["selected_indexes"], [1])
+        self.assertEqual(special["total_voters"], 1)
+        self.assertEqual(special["options"][1]["votes"], 1)
+        self.assertTrue(special["options"][1]["selected"])
+
+    def test_quiz_requires_correct_answer_and_reveals_it_after_vote(self):
+        create = self.client.post(
+            reverse("messenger:send_special_message", args=[self.chat.pk]),
+            {
+                "special_type": "poll",
+                "payload": json.dumps(
+                    {
+                        "question": "2 + 2?",
+                        "options": ["3", "4"],
+                        "quiz": True,
+                        "correct_option": 1,
+                        "explanation": "Два плюс два — четыре.",
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(create.status_code, 200)
+        message_id = create.json()["message"]["id"]
+
+        self.client.force_login(self.bob)
+        vote = self.client.post(
+            reverse(
+                "messenger:special_message_action",
+                args=[self.chat.pk, message_id],
+            ),
+            {
+                "action": "vote",
+                "options": json.dumps([0]),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(vote.status_code, 200)
+        special = vote.json()["message"]["special"]
+        self.assertTrue(special["quiz"])
+        self.assertTrue(special["options"][1]["correct"])
+        self.assertEqual(special["explanation"], "Два плюс два — четыре.")
+
+    def test_todo_list_allows_collaborative_toggle_and_add(self):
+        create = self.client.post(
+            reverse("messenger:send_special_message", args=[self.chat.pk]),
+            {
+                "special_type": "todo",
+                "payload": json.dumps(
+                    {
+                        "title": "Релиз",
+                        "tasks": ["Собрать", "Проверить"],
+                        "allow_others_add": True,
+                        "allow_others_mark": True,
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(create.status_code, 200)
+        message_id = create.json()["message"]["id"]
+
+        self.client.force_login(self.bob)
+        toggled = self.client.post(
+            reverse(
+                "messenger:special_message_action",
+                args=[self.chat.pk, message_id],
+            ),
+            {"action": "toggle", "index": "0"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(toggled.status_code, 200)
+        self.assertTrue(
+            toggled.json()["message"]["special"]["tasks"][0]["done"]
+        )
+
+        added = self.client.post(
+            reverse(
+                "messenger:special_message_action",
+                args=[self.chat.pk, message_id],
+            ),
+            {"action": "add", "text": "Опубликовать"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(added.status_code, 200)
+        self.assertEqual(
+            added.json()["message"]["special"]["tasks"][-1]["text"],
+            "Опубликовать",
+        )
+
+    def test_article_and_location_special_messages_are_serialized(self):
+        article = self.client.post(
+            reverse("messenger:send_special_message", args=[self.chat.pk]),
+            {
+                "special_type": "article",
+                "payload": json.dumps(
+                    {
+                        "title": "Отчёт",
+                        "body": "Первая строка\nВторая строка",
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(article.status_code, 200)
+        self.assertEqual(article.json()["message"]["special"]["type"], "article")
+        self.assertEqual(
+            article.json()["message"]["special"]["title"],
+            "Отчёт",
+        )
+
+        location = self.client.post(
+            reverse("messenger:send_special_message", args=[self.chat.pk]),
+            {
+                "special_type": "location",
+                "payload": json.dumps(
+                    {
+                        "label": "Точка",
+                        "latitude": 54.687157,
+                        "longitude": 25.279652,
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(location.status_code, 200)
+        special = location.json()["message"]["special"]
+        self.assertEqual(special["type"], "location")
+        self.assertEqual(special["label"], "Точка")
+        self.assertEqual(special["latitude"], 54.687157)
+        self.assertEqual(special["longitude"], 25.279652)
+
+    def test_music_attachment_is_sent_as_playable_audio(self):
+        audio = SimpleUploadedFile(
+            "track.mp3",
+            b"ID3" + (b"\0" * 64),
+            content_type="audio/mpeg",
+        )
+        response = self.client.post(
+            reverse("messenger:send_message", args=[self.chat.pk]),
+            {
+                "text": "",
+                "attachment_mode": "audio",
+                "attachments": audio,
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        attachment = MessageAttachment.objects.get(
+            message_id=response.json()["message"]["id"]
+        )
+        self.assertEqual(attachment.kind, MessageAttachment.Kind.AUDIO)
+        self.assertEqual(
+            response.json()["message"]["attachments"][0]["kind"],
+            "audio",
+        )

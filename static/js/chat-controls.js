@@ -139,7 +139,7 @@
     const deleteButton = contextMenu.querySelector('[data-message-action="delete"]');
     const pinLabel = document.getElementById("messagePinLabel");
 
-    if (editButton) editButton.hidden = !isOwn(article);
+    if (editButton) editButton.hidden = !isOwn(article) || Boolean(article.dataset.messageKind);
     if (copyButton) copyButton.hidden = !(article.dataset.messageText || "").trim();
     if (deleteButton) deleteButton.hidden = !canDeleteArticle(article);
     if (pinLabel) pinLabel.textContent = article.dataset.messagePinned === "true" ? "Открепить" : "Закрепить";

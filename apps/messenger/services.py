@@ -4,7 +4,7 @@ from django.db import transaction
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Chat, ChatParticipant, Contact, MessageAttachment, PinnedMessage
+from .models import Chat, ChatParticipant, Contact, Message, MessageAttachment, PinnedMessage
 
 
 @transaction.atomic
@@ -160,15 +160,154 @@ def delete_message_content(message):
             attachment.file.delete(save=False)
         attachment.delete()
     message.text = ""
+    message.special_type = Message.SpecialType.NONE
+    message.special_data = {}
     message.is_deleted = True
     message.edited_at = None
-    message.save(update_fields=("text", "is_deleted", "edited_at", "updated_at"))
+    message.save(
+        update_fields=(
+            "text",
+            "special_type",
+            "special_data",
+            "is_deleted",
+            "edited_at",
+            "updated_at",
+        )
+    )
 
 
 def attachment_url(attachment):
     if attachment.kind == MessageAttachment.Kind.FILE:
         return reverse("messenger:download_attachment", args=[attachment.pk])
     return reverse("messenger:view_attachment", args=[attachment.pk])
+
+
+def serialize_special_content(message, current_user):
+    data = message.special_data or {}
+    special_type = message.special_type or ""
+    if not special_type:
+        return None
+
+    if special_type == Message.SpecialType.POLL:
+        options = data.get("options") or []
+        selected_indexes = []
+        voter_ids = set()
+        for index, option in enumerate(options):
+            voters = set()
+            for value in option.get("voters") or []:
+                try:
+                    voters.add(int(value))
+                except (TypeError, ValueError):
+                    continue
+            voter_ids.update(voters)
+            if current_user.pk in voters:
+                selected_indexes.append(index)
+
+        total_voters = max(1, len(voter_ids))
+        anonymous = bool(data.get("anonymous", True))
+        voter_names = {}
+        if not anonymous and voter_ids:
+            voter_names = {
+                user.pk: user.display_name
+                for user in message.chat.participants.filter(pk__in=voter_ids)
+            }
+        quiz = bool(data.get("quiz"))
+        reveal_quiz = bool(selected_indexes) or message.sender_id == current_user.pk
+        correct_index = data.get("correct_option")
+        serialized_options = []
+        for index, option in enumerate(options):
+            voters = option.get("voters") or []
+            votes = len(voters)
+            serialized_options.append(
+                {
+                    "index": index,
+                    "text": str(option.get("text", ""))[:100],
+                    "votes": votes,
+                    "percent": round((votes / total_voters) * 100) if votes else 0,
+                    "selected": index in selected_indexes,
+                    "correct": bool(
+                        quiz
+                        and reveal_quiz
+                        and isinstance(correct_index, int)
+                        and index == correct_index
+                    ),
+                    "voter_names": (
+                        [
+                            voter_names.get(int(user_id), "Пользователь")
+                            for user_id in voters
+                            if str(user_id).isdigit()
+                        ]
+                        if not anonymous
+                        else []
+                    ),
+                }
+            )
+        return {
+            "type": "poll",
+            "question": str(data.get("question", ""))[:255],
+            "anonymous": anonymous,
+            "multiple": bool(data.get("multiple", False)) and not quiz,
+            "quiz": quiz,
+            "closed": bool(data.get("closed", False)),
+            "can_close": (
+                message.sender_id == current_user.pk
+                and not bool(data.get("closed", False))
+            ),
+            "total_voters": len(voter_ids),
+            "selected_indexes": selected_indexes,
+            "options": serialized_options,
+            "explanation": (
+                str(data.get("explanation", ""))[:500]
+                if quiz and reveal_quiz
+                else ""
+            ),
+            "action_url": reverse(
+                "messenger:special_message_action",
+                args=[message.chat_id, message.pk],
+            ),
+        }
+
+    if special_type == Message.SpecialType.TODO:
+        is_author = message.sender_id == current_user.pk
+        tasks = []
+        for index, task in enumerate(data.get("tasks") or []):
+            tasks.append(
+                {
+                    "index": index,
+                    "text": str(task.get("text", ""))[:160],
+                    "done": bool(task.get("done", False)),
+                }
+            )
+        return {
+            "type": "todo",
+            "title": str(data.get("title", ""))[:255],
+            "tasks": tasks,
+            "allow_others_add": bool(data.get("allow_others_add", False)),
+            "allow_others_mark": bool(data.get("allow_others_mark", True)),
+            "can_add": is_author or bool(data.get("allow_others_add", False)),
+            "can_toggle": is_author or bool(data.get("allow_others_mark", True)),
+            "action_url": reverse(
+                "messenger:special_message_action",
+                args=[message.chat_id, message.pk],
+            ),
+        }
+
+    if special_type == Message.SpecialType.ARTICLE:
+        return {
+            "type": "article",
+            "title": str(data.get("title", ""))[:200],
+            "body": str(data.get("body", ""))[:12000],
+        }
+
+    if special_type == Message.SpecialType.LOCATION:
+        return {
+            "type": "location",
+            "label": str(data.get("label", ""))[:120],
+            "latitude": data.get("latitude"),
+            "longitude": data.get("longitude"),
+        }
+
+    return None
 
 
 def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=None):
@@ -217,6 +356,11 @@ def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=No
             "username": message.forwarded_from_username,
         } if message.forwarded_from_name else None,
         "signature_name": message.signature_name,
+        "special": (
+            None
+            if message.is_deleted
+            else serialize_special_content(message, current_user)
+        ),
         "attachments": attachments,
         "urls": {
             "edit": reverse("messenger:edit_message", args=[message.chat_id, message.pk]),

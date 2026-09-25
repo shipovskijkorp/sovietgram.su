@@ -25,6 +25,7 @@ urlpatterns = [
     path("chat/<int:chat_id>/profile/member-candidates/", community_profiles.community_member_candidates, name="community_member_candidates"),
     path("chat/<int:chat_id>/profile/action/", community_profiles.community_profile_action, name="community_profile_action"),
     path("chat/<int:chat_id>/send/", views.send_message, name="send_message"),
+    path("chat/<int:chat_id>/send-special/", views.send_special_message, name="send_special_message"),
     path("chat/<int:chat_id>/poll/", views.poll_messages, name="poll_messages"),
     path("chat/<int:chat_id>/search/", views.search_messages, name="search_messages"),
     path("chat/<int:chat_id>/draft/", views.save_draft, name="save_draft"),
@@ -34,6 +35,7 @@ urlpatterns = [
     path("chat/<int:chat_id>/message/<int:message_id>/delete/", views.delete_message, name="delete_message"),
     path("chat/<int:chat_id>/message/<int:message_id>/forward/", views.forward_message, name="forward_message"),
     path("chat/<int:chat_id>/message/<int:message_id>/pin/", views.pin_message, name="pin_message"),
+    path("chat/<int:chat_id>/message/<int:message_id>/special/", views.special_message_action, name="special_message_action"),
     path("attachment/<int:attachment_id>/view/", views.view_attachment, name="view_attachment"),
     path("attachment/<int:attachment_id>/download/", views.download_attachment, name="download_attachment"),
 ]

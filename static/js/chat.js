@@ -178,6 +178,27 @@ function makeMedia(attachment) {
     return video;
   }
 
+  if (attachment.kind === "audio") {
+    const audio = document.createElement("div");
+    audio.className = "message-audio";
+    const icon = document.createElement("span");
+    icon.className = "message-audio__icon";
+    icon.textContent = "♪";
+    const copy = document.createElement("span");
+    copy.className = "message-audio__copy";
+    const name = document.createElement("strong");
+    name.textContent = attachment.name;
+    const size = document.createElement("small");
+    size.textContent = formatBytes(attachment.size || 0);
+    copy.append(name, size);
+    const player = document.createElement("audio");
+    player.controls = true;
+    player.preload = "metadata";
+    player.src = attachment.url;
+    audio.append(icon, copy, player);
+    return audio;
+  }
+
   return makeFileCard(attachment);
 }
 
@@ -213,6 +234,7 @@ function buildMessageArticle(message) {
   article.dataset.messageId = String(message.id);
   article.dataset.messageOwn = String(Boolean(message.is_own));
   article.dataset.messageText = message.text || "";
+  article.dataset.messageKind = message.special?.type || "";
   article.dataset.messageSender = message.sender_name || "";
   article.dataset.messagePinned = String(Boolean(message.is_pinned));
   article.dataset.editUrl = message.urls?.edit || "";
@@ -223,6 +245,11 @@ function buildMessageArticle(message) {
   if (message.forwarded) article.appendChild(makeForwardedBlock(message.forwarded));
   if (message.reply) article.appendChild(makeReplyPreview(message.reply));
 
+  if (message.special && typeof window.buildSovietgramSpecialMessage === "function") {
+    const special = window.buildSovietgramSpecialMessage(message.special);
+    if (special) article.appendChild(special);
+  }
+
   if (message.attachments?.length) {
     const media = document.createElement("div");
     const album = message.attachments.length > 1 && message.attachments.every((item) => item.kind === "image" || item.kind === "video");
@@ -232,7 +259,7 @@ function buildMessageArticle(message) {
     article.appendChild(media);
   }
 
-  if (message.text) {
+  if (message.text && !message.special) {
     const paragraph = document.createElement("p");
     paragraph.className = "message__text";
     linkifyInto(paragraph, message.text);
@@ -296,6 +323,7 @@ function applyMessageUpdate(message) {
   }
 
   article.dataset.messageText = message.text || "";
+  article.dataset.messageKind = message.special?.type || "";
   article.dataset.messagePinned = String(Boolean(message.is_pinned));
   article.classList.toggle("is-pinned", Boolean(message.is_pinned));
   if (message.urls) {
@@ -305,8 +333,17 @@ function applyMessageUpdate(message) {
     article.dataset.pinUrl = message.urls.pin || article.dataset.pinUrl;
   }
 
+  let special = article.querySelector("[data-special-message]");
+  if (message.special && typeof window.buildSovietgramSpecialMessage === "function") {
+    const replacement = window.buildSovietgramSpecialMessage(message.special);
+    if (special && replacement) special.replaceWith(replacement);
+    else if (!special && replacement) article.insertBefore(replacement, article.querySelector("footer"));
+  } else {
+    special?.remove();
+  }
+
   let paragraph = article.querySelector(".message__text");
-  if (message.text) {
+  if (message.text && !message.special) {
     if (!paragraph) {
       paragraph = document.createElement("p");
       paragraph.className = "message__text";
@@ -347,7 +384,7 @@ function openMessageMenu(article, x, y) {
   const hasText = Boolean((article.dataset.messageText || "").trim());
   const editButton = contextMenu.querySelector('[data-message-action="edit"]');
   const copyButton = contextMenu.querySelector('[data-message-action="copy"]');
-  if (editButton) editButton.hidden = !own;
+  if (editButton) editButton.hidden = !own || Boolean(article.dataset.messageKind);
   if (copyButton) copyButton.hidden = !hasText;
   if (pinLabel) pinLabel.textContent = article.dataset.messagePinned === "true" ? "Открепить" : "Закрепить";
 
@@ -799,6 +836,7 @@ const attachmentButton = document.getElementById("attachmentButton");
 const attachmentMenu = document.getElementById("attachmentMenu");
 const mediaAttachmentsInput = document.getElementById("mediaAttachmentsInput");
 const fileAttachmentsInput = document.getElementById("fileAttachmentsInput");
+const audioAttachmentsInput = document.getElementById("audioAttachmentsInput");
 const attachmentModeInput = document.getElementById("attachmentModeInput");
 const mediaComposeBackdrop = document.getElementById("mediaComposeBackdrop");
 const mediaComposeClose = document.getElementById("mediaComposeClose");
@@ -819,6 +857,7 @@ const MAX_ATTACHMENTS = 10;
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const MAX_TOTAL_SIZE = 100 * 1024 * 1024;
 const MEDIA_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp", "mp4", "webm", "mov", "m4v"]);
+const AUDIO_EXTENSIONS = new Set(["mp3", "m4a", "aac", "ogg", "oga", "wav", "flac", "opus"]);
 let selectedFiles = [];
 let selectedMode = "media";
 let previewObjectUrls = [];
@@ -841,6 +880,9 @@ function validateSelection(files, mode) {
   for (const file of files) {
     if (isGif(file)) return "GIF в Sovietgram пока отключены.";
     if (mode === "media" && !isMediaFile(file)) return "В режиме фото и видео поддерживаются PNG, JPEG, WebP, MP4, WebM и MOV.";
+    if (mode === "audio" && !(file.type.startsWith("audio/") || AUDIO_EXTENSIONS.has(fileExtension(file)))) {
+      return "В разделе «Музыка» поддерживаются MP3, M4A, AAC, OGG, WAV, FLAC и OPUS.";
+    }
     if (file.size > MAX_FILE_SIZE) return `${file.name}: файл больше 25 МБ.`;
     total += file.size;
   }
@@ -852,7 +894,36 @@ function setAttachmentMenu(open) {
   attachmentMenu.hidden = !open;
   attachmentButton.setAttribute("aria-expanded", String(open));
 }
-attachmentButton?.addEventListener("click", (event) => { event.stopPropagation(); setAttachmentMenu(attachmentMenu?.hidden ?? true); });
+attachmentButton?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  setAttachmentMenu(attachmentMenu?.hidden ?? true);
+});
+attachmentButton?.addEventListener("keydown", (event) => {
+  if (!["ArrowDown", "ArrowUp"].includes(event.key)) return;
+  event.preventDefault();
+  setAttachmentMenu(true);
+  const items = [...(attachmentMenu?.querySelectorAll("button:not([disabled])") || [])];
+  const target = event.key === "ArrowUp" ? items.at(-1) : items[0];
+  target?.focus();
+});
+attachmentMenu?.addEventListener("keydown", (event) => {
+  const items = [...attachmentMenu.querySelectorAll("button:not([disabled])")];
+  const current = items.indexOf(document.activeElement);
+  if (event.key === "Escape") {
+    event.preventDefault();
+    setAttachmentMenu(false);
+    attachmentButton?.focus();
+    return;
+  }
+  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  let next = current;
+  if (event.key === "Home") next = 0;
+  else if (event.key === "End") next = items.length - 1;
+  else if (event.key === "ArrowDown") next = current < 0 ? 0 : (current + 1) % items.length;
+  else next = current < 0 ? items.length - 1 : (current - 1 + items.length) % items.length;
+  items[next]?.focus();
+});
 document.querySelectorAll("[data-attachment-mode]").forEach((button) => button.addEventListener("click", () => {
   setAttachmentMenu(false);
   openFilePicker(button.dataset.attachmentMode || "media", false);
@@ -860,7 +931,12 @@ document.querySelectorAll("[data-attachment-mode]").forEach((button) => button.a
 document.addEventListener("click", (event) => { if (!attachmentControl?.contains(event.target)) setAttachmentMenu(false); });
 function openFilePicker(mode, append) {
   appendNextPick = append;
-  (mode === "file" ? fileAttachmentsInput : mediaAttachmentsInput)?.click();
+  const input = mode === "file"
+    ? fileAttachmentsInput
+    : mode === "audio"
+      ? audioAttachmentsInput
+      : mediaAttachmentsInput;
+  input?.click();
 }
 function pickerChanged(input, mode) {
   const files = [...(input.files || [])];
@@ -873,6 +949,7 @@ function pickerChanged(input, mode) {
 }
 mediaAttachmentsInput?.addEventListener("change", () => pickerChanged(mediaAttachmentsInput, "media"));
 fileAttachmentsInput?.addEventListener("change", () => pickerChanged(fileAttachmentsInput, "file"));
+audioAttachmentsInput?.addEventListener("change", () => pickerChanged(audioAttachmentsInput, "audio"));
 mediaComposeAdd?.addEventListener("click", () => openFilePicker(selectedMode, true));
 
 function releasePreviewUrls() {
@@ -886,6 +963,7 @@ function pluralFiles(count) {
 }
 function mediaTitle(files, mode) {
   if (mode === "file") return files.length === 1 ? "Отправить файл" : `Отправить ${files.length} файлов`;
+  if (mode === "audio") return files.length === 1 ? "Отправить музыку" : `Отправить треки: ${files.length}`;
   if (files.length > 1) return `Отправить ${files.length} медиа`;
   return files[0]?.type.startsWith("video/") ? "Отправить видео" : "Отправить фото";
 }
@@ -909,7 +987,13 @@ function renderMediaSelection() {
   const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
   if (mediaComposeTitle) mediaComposeTitle.textContent = mediaTitle(selectedFiles, selectedMode);
   if (mediaComposeSummary) mediaComposeSummary.textContent = `${pluralFiles(selectedFiles.length)} · ${formatBytes(totalSize)}`;
-  if (mediaComposeHint) mediaComposeHint.textContent = selectedMode === "file" ? "Файлы будут отправлены без обработки." : "Фото и видео будут показаны прямо в переписке.";
+  if (mediaComposeHint) {
+    mediaComposeHint.textContent = selectedMode === "file"
+      ? "Файлы будут отправлены без обработки."
+      : selectedMode === "audio"
+        ? "Аудио будет отправлено как музыка с встроенным проигрывателем."
+        : "Фото и видео будут показаны прямо в переписке.";
+  }
   if (mediaComposeGroupRow) mediaComposeGroupRow.hidden = selectedMode !== "media" || selectedFiles.length < 2;
 
   if (selectedMode === "media") {
@@ -939,7 +1023,7 @@ function renderMediaSelection() {
     list.className = "media-preview-files";
     selectedFiles.forEach((file, index) => {
       const row = document.createElement("div"); row.className = "media-preview-file";
-      const icon = document.createElement("span"); icon.className = "media-preview-file__icon"; icon.textContent = "⌑";
+      const icon = document.createElement("span"); icon.className = "media-preview-file__icon"; icon.textContent = selectedMode === "audio" ? "♪" : "⌑";
       const copy = document.createElement("span"); copy.className = "media-preview-file__text";
       const name = document.createElement("strong"); name.textContent = file.name;
       const meta = document.createElement("small"); meta.textContent = formatBytes(file.size);
@@ -1138,3 +1222,7 @@ document.addEventListener("keydown", (event) => {
   if (searchPanel && !searchPanel.hidden) { setSearchPanel(false); return; }
   closeMessageMenu(); setChatMenu(false);
 });
+
+
+window.renderSovietgramChatMessage = renderMessage;
+window.updateSovietgramChatMessage = applyMessageUpdate;
