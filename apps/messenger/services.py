@@ -79,8 +79,19 @@ def apply_archive_rules_on_new_message(chat, message):
     )
     for membership in memberships:
         if membership.user_id == sender.pk:
-            # Sending a message yourself does not pull your own chat out of archive.
+            # Reopening or sending into a locally deleted chat makes it visible
+            # again, but still does not pull the sender's own archived chat out.
+            if membership.is_hidden:
+                ChatParticipant.objects.filter(pk=membership.pk).update(
+                    is_hidden=False,
+                )
             continue
+
+        if membership.is_hidden:
+            ChatParticipant.objects.filter(pk=membership.pk).update(
+                is_hidden=False,
+            )
+            membership.is_hidden = False
 
         user = membership.user
 
@@ -143,6 +154,7 @@ def clone_attachments(source_message, target_message):
 
 def delete_message_content(message):
     PinnedMessage.objects.filter(message=message).delete()
+    message.hidden_for_users.all().delete()
     for attachment in list(message.attachments.all()):
         if attachment.file:
             attachment.file.delete(save=False)

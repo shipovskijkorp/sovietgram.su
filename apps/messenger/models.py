@@ -110,6 +110,8 @@ class ChatParticipant(models.Model):
     is_pinned = models.BooleanField(default=False)
     is_archived = models.BooleanField(default=False)
     is_muted = models.BooleanField(default=False)
+    is_hidden = models.BooleanField(default=False, db_index=True)
+    cleared_before_message_id = models.PositiveBigIntegerField(default=0)
     draft_text = models.TextField(blank=True, default="", max_length=4096)
     draft_updated_at = models.DateTimeField(null=True, blank=True)
     last_typing_at = models.DateTimeField(null=True, blank=True)
@@ -174,6 +176,31 @@ class Message(models.Model):
 
     def __str__(self):
         return self.preview[:80]
+
+
+class MessageHiddenForUser(models.Model):
+    message = models.ForeignKey(
+        Message,
+        on_delete=models.CASCADE,
+        related_name="hidden_for_users",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="hidden_chat_messages",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("message", "user"),
+                name="unique_hidden_message_for_user",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.user} hides message {self.message_id}"
 
 
 class MessageAttachment(models.Model):

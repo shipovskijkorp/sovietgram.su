@@ -29,7 +29,15 @@ from django.views.decorators.http import require_GET, require_POST
 from apps.accounts.multiaccount import account_slots
 
 from .forms import CommunityForm, EditMessageForm, MessageForm
-from .models import Chat, ChatParticipant, Contact, Message, MessageAttachment, PinnedMessage
+from .models import (
+    Chat,
+    ChatParticipant,
+    Contact,
+    Message,
+    MessageAttachment,
+    MessageHiddenForUser,
+    PinnedMessage,
+)
 from .ratelimit import rate_limit
 from .services import (
     apply_archive_rules_on_new_message,
@@ -65,7 +73,11 @@ def _wants_json(request):
 
 def _chat_for_user(user, chat_id):
     return get_object_or_404(
-        Chat.objects.filter(participants=user)
+        Chat.objects.filter(
+            participants=user,
+            memberships__user=user,
+            memberships__is_hidden=False,
+        )
         .prefetch_related("participants", "memberships__user")
         .distinct(),
         pk=chat_id,
@@ -156,27 +168,88 @@ _LINK_RE = re.compile(
 
 
 def _visible_message_queryset(chat, user):
-    queryset = _base_message_queryset(chat)
-    if chat.type != Chat.Type.PRIVATE:
-        membership = ChatParticipant.objects.get(chat=chat, user=user)
-        if (
-            not chat.history_visible_to_new_members
-            and not membership.can_see_pre_join_history
-        ):
-            queryset = queryset.filter(created_at__gte=membership.joined_at)
-    return queryset
+    membership = ChatParticipant.objects.get(chat=chat, user=user)
+    queryset = _base_message_queryset(chat).exclude(hidden_for_users__user=user)
+    if membership.cleared_before_message_id:
+        queryset = queryset.filter(id__gt=membership.cleared_before_message_id)
+    if (
+        chat.type != Chat.Type.PRIVATE
+        and not chat.history_visible_to_new_members
+        and not membership.can_see_pre_join_history
+    ):
+        queryset = queryset.filter(created_at__gte=membership.joined_at)
+    return queryset.distinct()
 
 
 def _visible_pins_queryset(chat, user):
-    queryset = PinnedMessage.objects.filter(chat=chat, message__is_deleted=False)
-    if chat.type != Chat.Type.PRIVATE:
-        membership = ChatParticipant.objects.get(chat=chat, user=user)
-        if (
-            not chat.history_visible_to_new_members
-            and not membership.can_see_pre_join_history
-        ):
-            queryset = queryset.filter(message__created_at__gte=membership.joined_at)
-    return queryset
+    membership = ChatParticipant.objects.get(chat=chat, user=user)
+    queryset = PinnedMessage.objects.filter(
+        chat=chat,
+        message__is_deleted=False,
+    ).exclude(message__hidden_for_users__user=user)
+    if membership.cleared_before_message_id:
+        queryset = queryset.filter(
+            message_id__gt=membership.cleared_before_message_id
+        )
+    if (
+        chat.type != Chat.Type.PRIVATE
+        and not chat.history_visible_to_new_members
+        and not membership.can_see_pre_join_history
+    ):
+        queryset = queryset.filter(message__created_at__gte=membership.joined_at)
+    return queryset.distinct()
+
+
+def _latest_visible_message_id(chat, user):
+    return (
+        _visible_message_queryset(chat, user)
+        .filter(is_deleted=False)
+        .order_by("-id")
+        .values_list("id", flat=True)
+        .first()
+        or 0
+    )
+
+
+def _clear_history_for_user(chat, membership):
+    latest_id = _latest_visible_message_id(chat, membership.user)
+    if latest_id:
+        membership.cleared_before_message_id = max(
+            membership.cleared_before_message_id,
+            latest_id,
+        )
+    membership.last_read_message_id = latest_id or membership.last_read_message_id
+    membership.draft_text = ""
+    membership.draft_updated_at = None
+    membership.last_typing_at = None
+    membership.save(
+        update_fields=(
+            "cleared_before_message_id",
+            "last_read_message",
+            "draft_text",
+            "draft_updated_at",
+            "last_typing_at",
+        )
+    )
+    if membership.cleared_before_message_id:
+        MessageHiddenForUser.objects.filter(
+            user=membership.user,
+            message__chat=chat,
+            message_id__lte=membership.cleared_before_message_id,
+        ).delete()
+    return latest_id
+
+
+def _can_delete_message_for_everyone(chat, membership, message):
+    if chat.type == Chat.Type.PRIVATE:
+        return True
+    return (
+        message.sender_id == membership.user_id
+        or membership.role in {
+            ChatParticipant.Role.OWNER,
+            ChatParticipant.Role.ADMIN,
+        }
+    )
 
 
 def _posting_restriction(
@@ -223,15 +296,31 @@ def _posting_restriction(
 
 
 def _hide_inaccessible_reply_previews(chat, user, messages):
-    if chat.type == Chat.Type.PRIVATE:
-        return
     membership = ChatParticipant.objects.get(chat=chat, user=user)
-    if chat.history_visible_to_new_members or membership.can_see_pre_join_history:
-        return
+    reply_ids = {
+        message.reply_to_id
+        for message in messages
+        if message.reply_to_id is not None
+    }
+    hidden_reply_ids = set(
+        MessageHiddenForUser.objects.filter(
+            user=user,
+            message_id__in=reply_ids,
+        ).values_list("message_id", flat=True)
+    )
     for message in messages:
+        reply = message.reply_to
+        if reply is None:
+            continue
         if (
-            message.reply_to is not None
-            and message.reply_to.created_at < membership.joined_at
+            reply.pk <= membership.cleared_before_message_id
+            or reply.pk in hidden_reply_ids
+            or (
+                chat.type != Chat.Type.PRIVATE
+                and not chat.history_visible_to_new_members
+                and not membership.can_see_pre_join_history
+                and reply.created_at < membership.joined_at
+            )
         ):
             message.reply_to = None
 
@@ -255,7 +344,11 @@ def _prepare_sidebar_chats(user, archived=False):
     membership = ChatParticipant.objects.filter(chat=OuterRef("pk"), user=user)
 
     chats = list(
-        Chat.objects.filter(memberships__user=user, memberships__is_archived=archived)
+        Chat.objects.filter(
+            memberships__user=user,
+            memberships__is_archived=archived,
+            memberships__is_hidden=False,
+        )
         .annotate(
             last_message_id_ui=Subquery(last_message.values("id")[:1]),
             last_message_text_ui=Subquery(last_message.values("text")[:1]),
@@ -302,33 +395,35 @@ def _prepare_sidebar_chats(user, archived=False):
     )
 
     for chat in chats:
+        membership_row = ChatParticipant.objects.get(chat=chat, user=user)
+        visible = Message.objects.filter(
+            chat=chat,
+            is_deleted=False,
+            id__gt=membership_row.cleared_before_message_id,
+        ).exclude(hidden_for_users__user=user)
         if (
             chat.type != Chat.Type.PRIVATE
             and not chat.history_visible_to_new_members
-            and chat.can_see_pre_join_history_ui is False
-            and chat.joined_at_ui
+            and not membership_row.can_see_pre_join_history
         ):
-            visible = Message.objects.filter(
-                chat=chat,
-                is_deleted=False,
-                created_at__gte=chat.joined_at_ui,
-            )
-            latest_visible = visible.order_by("-id").values(
-                "id", "text", "sender_id", "created_at"
-            ).first()
-            if latest_visible:
-                chat.last_message_id_ui = latest_visible["id"]
-                chat.last_message_text_ui = latest_visible["text"]
-                chat.last_message_sender_id_ui = latest_visible["sender_id"]
-                chat.last_message_created_at_ui = latest_visible["created_at"]
-            else:
-                chat.last_message_id_ui = None
-                chat.last_message_text_ui = ""
-                chat.last_message_sender_id_ui = None
-                chat.last_message_created_at_ui = None
-            chat.unread_count_ui = visible.exclude(sender=user).filter(
-                id__gt=chat.last_read_message_id_ui or 0
-            ).count()
+            visible = visible.filter(created_at__gte=membership_row.joined_at)
+
+        latest_visible = visible.order_by("-id").values(
+            "id", "text", "sender_id", "created_at"
+        ).first()
+        if latest_visible:
+            chat.last_message_id_ui = latest_visible["id"]
+            chat.last_message_text_ui = latest_visible["text"]
+            chat.last_message_sender_id_ui = latest_visible["sender_id"]
+            chat.last_message_created_at_ui = latest_visible["created_at"]
+        else:
+            chat.last_message_id_ui = None
+            chat.last_message_text_ui = ""
+            chat.last_message_sender_id_ui = None
+            chat.last_message_created_at_ui = None
+        chat.unread_count_ui = visible.exclude(sender=user).filter(
+            id__gt=chat.last_read_message_id_ui or 0
+        ).count()
 
         _decorate_chat_ui(chat, user)
         preview = " ".join((chat.last_message_text_ui or "").split())
@@ -347,7 +442,11 @@ def _prepare_sidebar_chats(user, archived=False):
 
 def _forward_targets(user):
     targets = list(
-        Chat.objects.filter(participants=user)
+        Chat.objects.filter(
+            participants=user,
+            memberships__user=user,
+            memberships__is_hidden=False,
+        )
         .prefetch_related("participants")
         .distinct()
         .order_by("-updated_at")[:60]
@@ -362,10 +461,14 @@ def _account_slots_with_unread(request):
     for slot in slots:
         slot_user = slot["user"]
         unread = 0
-        memberships = ChatParticipant.objects.filter(user=slot_user).values(
+        memberships = ChatParticipant.objects.filter(
+            user=slot_user,
+            is_hidden=False,
+        ).values(
             "chat_id",
             "last_read_message_id",
             "joined_at",
+            "cleared_before_message_id",
             "chat__type",
             "can_see_pre_join_history",
             "chat__history_visible_to_new_members",
@@ -374,8 +477,11 @@ def _account_slots_with_unread(request):
             message_query = Message.objects.filter(
                 chat_id=membership["chat_id"],
                 is_deleted=False,
-                id__gt=membership["last_read_message_id"] or 0,
-            )
+                id__gt=max(
+                    membership["last_read_message_id"] or 0,
+                    membership["cleared_before_message_id"] or 0,
+                ),
+            ).exclude(hidden_for_users__user=slot_user)
             if (
                 membership["chat__type"] != Chat.Type.PRIVATE
                 and not membership["chat__history_visible_to_new_members"]
@@ -670,6 +776,9 @@ def join_public_chat(request, username):
 def start_chat(request, username):
     target = get_object_or_404(User, username__iexact=username, is_active=True)
     chat = get_or_create_direct_chat(request.user, target)
+    ChatParticipant.objects.filter(chat=chat, user=request.user).update(
+        is_hidden=False,
+    )
     return redirect("messenger:chat", chat_id=chat.pk)
 
 
@@ -693,7 +802,10 @@ def global_search(request):
 
     normalized = query.lower().lstrip("@")
     memberships = list(
-        ChatParticipant.objects.filter(user=request.user)
+        ChatParticipant.objects.filter(
+            user=request.user,
+            is_hidden=False,
+        )
         .select_related("chat")
         .order_by("-is_pinned", "-chat__updated_at")[:120]
     )
@@ -1009,6 +1121,7 @@ def send_message(request, chat_id):
         touch_chat(chat)
         apply_archive_rules_on_new_message(chat, message)
         ChatParticipant.objects.filter(chat=chat, user=request.user).update(
+            is_hidden=False,
             draft_text="",
             draft_updated_at=None,
             last_typing_at=None,
@@ -1065,16 +1178,92 @@ def edit_message(request, chat_id, message_id):
 @require_POST
 def delete_message(request, chat_id, message_id):
     chat = _chat_for_user(request.user, chat_id)
+    membership = _membership(chat, request.user)
     message = get_object_or_404(
         _visible_message_queryset(chat, request.user),
         pk=message_id,
-        sender=request.user,
         is_deleted=False,
     )
+    scope = request.POST.get("scope", "me").strip().lower()
+
+    if scope == "everyone":
+        if not _can_delete_message_for_everyone(chat, membership, message):
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "error": "У вас нет права удалить это сообщение для всех.",
+                },
+                status=403,
+            )
+        with transaction.atomic():
+            delete_message_content(message)
+            MessageHiddenForUser.objects.filter(message=message).delete()
+        message = _base_message_queryset(chat).get(pk=message.pk)
+        return JsonResponse(
+            {
+                "ok": True,
+                "scope": "everyone",
+                "message_id": message.pk,
+                "message": _serialized_message(message, request.user, chat),
+            }
+        )
+
+    if chat.type != Chat.Type.PRIVATE and not _can_delete_message_for_everyone(
+        chat,
+        membership,
+        message,
+    ):
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "В группах и каналах можно удалять только свои сообщения.",
+            },
+            status=403,
+        )
+
+    if chat.type == Chat.Type.PRIVATE:
+        if chat.direct_key == f"self:{request.user.pk}":
+            with transaction.atomic():
+                delete_message_content(message)
+                MessageHiddenForUser.objects.filter(message=message).delete()
+            message = _base_message_queryset(chat).get(pk=message.pk)
+            return JsonResponse(
+                {
+                    "ok": True,
+                    "scope": "everyone",
+                    "message_id": message.pk,
+                    "message": _serialized_message(
+                        message,
+                        request.user,
+                        chat,
+                    ),
+                }
+            )
+
+        MessageHiddenForUser.objects.get_or_create(
+            message=message,
+            user=request.user,
+        )
+        return JsonResponse(
+            {
+                "ok": True,
+                "scope": "me",
+                "message_id": message.pk,
+            }
+        )
+
     with transaction.atomic():
         delete_message_content(message)
+        MessageHiddenForUser.objects.filter(message=message).delete()
     message = _base_message_queryset(chat).get(pk=message.pk)
-    return JsonResponse({"ok": True, "message": _serialized_message(message, request.user, chat)})
+    return JsonResponse(
+        {
+            "ok": True,
+            "scope": "everyone",
+            "message_id": message.pk,
+            "message": _serialized_message(message, request.user, chat),
+        }
+    )
 
 
 @login_required
@@ -1245,6 +1434,23 @@ def chat_action(request, chat_id):
     chat = _chat_for_user(request.user, chat_id)
     membership = _membership(chat, request.user)
     action = request.POST.get("action", "")
+    wants_json = _wants_json(request)
+
+    def action_response(message, redirect_url=None, **extra):
+        if wants_json:
+            payload = {
+                "ok": True,
+                "message": message,
+                **extra,
+            }
+            if redirect_url:
+                payload["redirect_url"] = redirect_url
+            return JsonResponse(payload)
+        if message:
+            messages.success(request, message)
+        return redirect(
+            redirect_url or reverse("messenger:chat", args=[chat.pk])
+        )
 
     if action == "pin":
         membership.is_pinned = not membership.is_pinned
@@ -1271,47 +1477,181 @@ def chat_action(request, chat_id):
         return redirect(_safe_next(request, fallback))
     elif action == "leave":
         if chat.type == Chat.Type.PRIVATE:
+            if wants_json:
+                return JsonResponse(
+                    {"ok": False, "error": "Личный чат нельзя покинуть."},
+                    status=400,
+                )
             messages.error(request, "Личный чат нельзя покинуть.")
             return redirect("messenger:chat", chat_id=chat.pk)
         if membership.role == ChatParticipant.Role.OWNER:
+            if wants_json:
+                return JsonResponse(
+                    {
+                        "ok": False,
+                        "error": "Владелец не может выйти, пока права владельца не переданы.",
+                    },
+                    status=403,
+                )
             messages.error(
                 request,
                 "Владелец не может выйти, пока права владельца не переданы.",
             )
             return redirect("messenger:chat", chat_id=chat.pk)
         membership.delete()
-        messages.success(
-            request,
+        return action_response(
             "Вы покинули канал."
             if chat.type == Chat.Type.CHANNEL
             else "Вы покинули группу.",
+            reverse("messenger:home"),
+            left=True,
         )
-        return redirect("messenger:home")
     elif action == "clear":
-        if (
-            chat.type != Chat.Type.PRIVATE
-            and membership.role not in {
-                ChatParticipant.Role.OWNER,
-                ChatParticipant.Role.ADMIN,
-            }
-        ):
-            messages.error(request, "Очищать историю здесь могут только администраторы.")
-            return redirect("messenger:chat", chat_id=chat.pk)
-        with transaction.atomic():
-            for message in _base_message_queryset(chat).filter(is_deleted=False):
-                delete_message_content(message)
-            PinnedMessage.objects.filter(chat=chat).delete()
-            ChatParticipant.objects.filter(chat=chat).update(
-                last_read_message=None,
-                draft_text="",
-                draft_updated_at=None,
-                last_typing_at=None,
+        scope = request.POST.get("scope", "me").strip().lower()
+        is_saved = (
+            chat.type == Chat.Type.PRIVATE
+            and chat.direct_key == f"self:{request.user.pk}"
+        )
+        if is_saved:
+            with transaction.atomic():
+                for message in _base_message_queryset(chat).filter(
+                    is_deleted=False
+                ):
+                    delete_message_content(message)
+                MessageHiddenForUser.objects.filter(message__chat=chat).delete()
+                latest_id = (
+                    chat.messages.order_by("-id")
+                    .values_list("id", flat=True)
+                    .first()
+                    or 0
+                )
+                ChatParticipant.objects.filter(chat=chat).update(
+                    cleared_before_message_id=latest_id,
+                    last_read_message=None,
+                    draft_text="",
+                    draft_updated_at=None,
+                    last_typing_at=None,
+                )
+                PinnedMessage.objects.filter(chat=chat).delete()
+            return action_response(
+                "Избранное очищено.",
+                cleared=True,
+                scope="everyone",
             )
-        messages.success(
-            request,
-            "История чата очищена для всех."
-            if chat.type != Chat.Type.PRIVATE
-            else "История переписки очищена.",
+
+        if scope == "everyone" and chat.type == Chat.Type.PRIVATE:
+            with transaction.atomic():
+                for message in _base_message_queryset(chat).filter(is_deleted=False):
+                    delete_message_content(message)
+                MessageHiddenForUser.objects.filter(message__chat=chat).delete()
+                latest_id = (
+                    chat.messages.order_by("-id")
+                    .values_list("id", flat=True)
+                    .first()
+                    or 0
+                )
+                ChatParticipant.objects.filter(chat=chat).update(
+                    cleared_before_message_id=latest_id,
+                    last_read_message=None,
+                    draft_text="",
+                    draft_updated_at=None,
+                    last_typing_at=None,
+                )
+                PinnedMessage.objects.filter(chat=chat).delete()
+            return action_response(
+                "История переписки удалена у обоих.",
+                cleared=True,
+                scope="everyone",
+            )
+
+        _clear_history_for_user(chat, membership)
+        return action_response(
+            "История очищена у вас.",
+            cleared=True,
+            scope="me",
+        )
+    elif action == "delete_chat":
+        scope = request.POST.get("scope", "me").strip().lower()
+        if chat.type == Chat.Type.PRIVATE:
+            is_saved = chat.direct_key == f"self:{request.user.pk}"
+            if is_saved:
+                _clear_history_for_user(chat, membership)
+                return action_response(
+                    "Избранное очищено.",
+                    reverse("messenger:chat", args=[chat.pk]),
+                    deleted=False,
+                    scope="me",
+                )
+
+            if scope == "everyone":
+                with transaction.atomic():
+                    for message in _base_message_queryset(chat).filter(is_deleted=False):
+                        delete_message_content(message)
+                    MessageHiddenForUser.objects.filter(message__chat=chat).delete()
+                    latest_id = (
+                        chat.messages.order_by("-id")
+                        .values_list("id", flat=True)
+                        .first()
+                        or 0
+                    )
+                    ChatParticipant.objects.filter(chat=chat).update(
+                        is_hidden=True,
+                        cleared_before_message_id=latest_id,
+                        is_pinned=False,
+                        is_archived=False,
+                        draft_text="",
+                        draft_updated_at=None,
+                        last_typing_at=None,
+                        last_read_message=None,
+                    )
+                    PinnedMessage.objects.filter(chat=chat).delete()
+                return action_response(
+                    "Чат удалён у обоих.",
+                    reverse("messenger:home"),
+                    deleted=True,
+                    scope="everyone",
+                )
+
+            with transaction.atomic():
+                _clear_history_for_user(chat, membership)
+                membership.is_hidden = True
+                membership.is_pinned = False
+                membership.is_archived = False
+                membership.save(
+                    update_fields=("is_hidden", "is_pinned", "is_archived")
+                )
+            return action_response(
+                "Чат удалён у вас.",
+                reverse("messenger:home"),
+                deleted=True,
+                scope="me",
+            )
+
+        if membership.role == ChatParticipant.Role.OWNER:
+            label = "Канал удалён." if chat.type == Chat.Type.CHANNEL else "Группа удалена."
+            with transaction.atomic():
+                for message in _base_message_queryset(chat).filter(
+                    is_deleted=False
+                ):
+                    delete_message_content(message)
+                if chat.avatar:
+                    chat.avatar.delete(save=False)
+                chat.delete()
+            return action_response(
+                label,
+                reverse("messenger:home"),
+                deleted=True,
+                scope="everyone",
+            )
+
+        membership.delete()
+        return action_response(
+            "Вы покинули канал."
+            if chat.type == Chat.Type.CHANNEL
+            else "Вы покинули группу.",
+            reverse("messenger:home"),
+            deleted=True,
+            left=True,
         )
     else:
         messages.error(request, "Неизвестное действие с чатом.")
@@ -1350,14 +1690,22 @@ def _attachment_for_user(user, attachment_id):
         message__is_deleted=False,
     )
     chat = attachment.message.chat
-    if chat.type != Chat.Type.PRIVATE:
-        membership = ChatParticipant.objects.get(chat=chat, user=user)
-        if (
-            not chat.history_visible_to_new_members
-            and not membership.can_see_pre_join_history
-            and attachment.message.created_at < membership.joined_at
-        ):
-            raise Http404
+    membership = ChatParticipant.objects.get(chat=chat, user=user)
+    if (
+        attachment.message_id <= membership.cleared_before_message_id
+        or MessageHiddenForUser.objects.filter(
+            message_id=attachment.message_id,
+            user=user,
+        ).exists()
+    ):
+        raise Http404
+    if (
+        chat.type != Chat.Type.PRIVATE
+        and not chat.history_visible_to_new_members
+        and not membership.can_see_pre_join_history
+        and attachment.message.created_at < membership.joined_at
+    ):
+        raise Http404
     return attachment
 
 

@@ -479,3 +479,266 @@ body[data-theme="dark"] .message__text a { color: #e37880; }
 .message-context-menu {
   z-index: 160;
 }
+
+
+/* Telegram-like destructive actions and message selection */
+.chat-menu__separator {
+  height: 1px;
+  margin: 5px 4px;
+  background: rgba(79,55,34,.1);
+}
+.chat-menu__select-icon,
+.message-context-menu__select-icon {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid currentColor;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.message-selection-bar {
+  position: absolute;
+  z-index: 72;
+  top: 66px;
+  left: 0;
+  right: 0;
+  min-height: 50px;
+  display: grid;
+  grid-template-columns: 40px minmax(0,1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(79,55,34,.12);
+  background: rgba(255,250,241,.98);
+  box-shadow: 0 7px 20px rgba(55,38,25,.09);
+  backdrop-filter: blur(14px);
+}
+.message-selection-bar[hidden] { display: none; }
+.message-selection-bar__close {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #7a6753;
+  cursor: pointer;
+}
+.message-selection-bar__close:hover { background: #f0e5d6; }
+.message-selection-bar > strong {
+  font-size: 12px;
+  color: #4f4135;
+}
+.message-selection-bar__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.message-selection-bar__actions button {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #705d48;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 750;
+}
+.message-selection-bar__actions button:hover:not(:disabled) { background: #f0e5d6; }
+.message-selection-bar__actions button.is-danger { color: #ad2b35; }
+.message-selection-bar__actions button:disabled { opacity: .42; cursor: default; }
+.message-selection-bar__actions .tg-native-icon { width: 18px; height: 18px; }
+
+.conversation.is-message-selection .pinned-message-bar,
+.conversation.is-message-selection .chat-search-panel {
+  pointer-events: none;
+  opacity: .35;
+}
+.conversation.is-message-selection .message-stage {
+  padding-top: 50px;
+}
+.conversation.is-message-selection .message {
+  cursor: pointer;
+  transition: box-shadow .12s ease, transform .12s ease, background .12s ease;
+}
+.conversation.is-message-selection .message::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 2px solid rgba(111,91,71,.45);
+  border-radius: 50%;
+  background: rgba(255,250,241,.84);
+  box-shadow: 0 2px 8px rgba(45,31,21,.08);
+}
+.conversation.is-message-selection .message--incoming::after { right: -30px; }
+.conversation.is-message-selection .message--outgoing::after { left: -30px; }
+.conversation.is-message-selection .message.is-selected {
+  box-shadow: 0 0 0 3px rgba(141,30,40,.17), 0 5px 18px rgba(76,50,31,.06);
+}
+.conversation.is-message-selection .message.is-selected::after {
+  content: "✓";
+  border-color: var(--red);
+  background: var(--red);
+  color: white;
+  font-size: 11px;
+  font-weight: 900;
+}
+.conversation.is-message-selection .message-action-trigger { opacity: 0 !important; pointer-events: none; }
+
+.telegram-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 220;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(31,22,16,.38);
+  backdrop-filter: blur(3px);
+}
+.telegram-confirm-backdrop[hidden] { display: none; }
+.telegram-confirm {
+  width: min(390px, calc(100vw - 28px));
+  padding: 22px 22px 14px;
+  border: 1px solid rgba(79,55,34,.13);
+  border-radius: 16px;
+  background: #fffaf1;
+  color: #4f4135;
+  box-shadow: 0 24px 70px rgba(38,26,18,.28);
+}
+.telegram-confirm__icon {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 13px;
+  border-radius: 50%;
+  background: rgba(173,43,53,.1);
+  color: #ad2b35;
+}
+.telegram-confirm__icon .tg-native-icon { width: 22px; height: 22px; }
+.telegram-confirm h3 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.28;
+}
+.telegram-confirm > p {
+  margin: 9px 0 14px;
+  color: #806d58;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.telegram-confirm__check {
+  min-height: 46px;
+  display: grid;
+  grid-template-columns: 24px minmax(0,1fr);
+  align-items: center;
+  gap: 9px;
+  margin: 3px -7px 10px;
+  padding: 5px 7px;
+  border-radius: 9px;
+  cursor: pointer;
+}
+.telegram-confirm__check:hover { background: #f4eadc; }
+.telegram-confirm__check[hidden] { display: none; }
+.telegram-confirm__check input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.telegram-confirm__check > span {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 2px solid #a18e79;
+  border-radius: 5px;
+  color: transparent;
+  transition: .12s ease;
+}
+.telegram-confirm__check > span i {
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 900;
+}
+.telegram-confirm__check input:checked + span {
+  border-color: var(--red);
+  background: var(--red);
+  color: white;
+}
+.telegram-confirm__check b {
+  font-size: 11px;
+  font-weight: 650;
+}
+.telegram-confirm footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 5px;
+}
+.telegram-confirm footer button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 10.5px;
+  font-weight: 800;
+}
+.telegram-confirm__cancel { color: #806c57; }
+.telegram-confirm__cancel:hover { background: #f0e5d6; }
+.telegram-confirm__danger { color: #b02732; }
+.telegram-confirm__danger:hover { background: rgba(176,39,50,.08); }
+.telegram-confirm footer button:disabled { opacity: .45; cursor: wait; }
+
+body[data-theme="dark"] .chat-menu__separator {
+  background: rgba(255,255,255,.07);
+}
+body[data-theme="dark"] .message-selection-bar,
+body[data-theme="dark"] .telegram-confirm {
+  border-color: rgba(255,255,255,.07);
+  background: #211d1a;
+  color: #ded1c2;
+}
+body[data-theme="dark"] .message-selection-bar > strong { color: #ded1c2; }
+body[data-theme="dark"] .message-selection-bar__close,
+body[data-theme="dark"] .message-selection-bar__actions button,
+body[data-theme="dark"] .telegram-confirm__cancel { color: #b7a590; }
+body[data-theme="dark"] .message-selection-bar__close:hover,
+body[data-theme="dark"] .message-selection-bar__actions button:hover:not(:disabled),
+body[data-theme="dark"] .telegram-confirm__check:hover,
+body[data-theme="dark"] .telegram-confirm__cancel:hover {
+  background: #2b2520;
+}
+body[data-theme="dark"] .telegram-confirm > p { color: #a99783; }
+body[data-theme="dark"] .telegram-confirm__check > span { border-color: #857563; }
+
+@media (max-width: 620px) {
+  .message-selection-bar {
+    top: 62px;
+    grid-template-columns: 36px minmax(0,1fr) auto;
+  }
+  .message-selection-bar__actions button {
+    width: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+  .message-selection-bar__actions button {
+    font-size: 0;
+  }
+  .message-selection-bar__actions .tg-native-icon { margin: 0; }
+  .conversation.is-message-selection .message--incoming::after { right: -23px; }
+  .conversation.is-message-selection .message--outgoing::after { left: -23px; }
+}

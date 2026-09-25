@@ -15,6 +15,7 @@ from .models import (
     Contact,
     Message,
     MessageAttachment,
+    MessageHiddenForUser,
     PinnedMessage,
 )
 from .services import get_or_create_direct_chat
@@ -324,25 +325,53 @@ class ChatFeatureTests(TestCase):
         )
         self.assertEqual(response.status_code, 404)
 
-    def test_other_participant_cannot_delete_message(self):
-        message = Message.objects.create(chat=self.chat, sender=self.alice, text="Не трогать")
+    def test_private_message_can_be_deleted_only_for_current_user(self):
+        message = Message.objects.create(
+            chat=self.chat,
+            sender=self.alice,
+            text="Локальное удаление",
+        )
         self.client.force_login(self.bob)
         response = self.client.post(
             reverse("messenger:delete_message", args=[self.chat.pk, message.pk]),
-            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
-        )
-        self.assertEqual(response.status_code, 404)
-        message.refresh_from_db()
-        self.assertFalse(message.is_deleted)
-        self.assertEqual(message.text, "Не трогать")
-
-    def test_sender_can_delete_own_message(self):
-        message = Message.objects.create(chat=self.chat, sender=self.alice, text="Удалить")
-        response = self.client.post(
-            reverse("messenger:delete_message", args=[self.chat.pk, message.pk]),
+            {"scope": "me"},
             HTTP_X_REQUESTED_WITH="XMLHttpRequest",
         )
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["scope"], "me")
+        message.refresh_from_db()
+        self.assertFalse(message.is_deleted)
+        self.assertTrue(
+            MessageHiddenForUser.objects.filter(
+                message=message,
+                user=self.bob,
+            ).exists()
+        )
+
+        bob_page = self.client.get(
+            reverse("messenger:chat", args=[self.chat.pk])
+        )
+        self.assertNotContains(bob_page, "Локальное удаление")
+
+        self.client.force_login(self.alice)
+        alice_page = self.client.get(
+            reverse("messenger:chat", args=[self.chat.pk])
+        )
+        self.assertContains(alice_page, "Локальное удаление")
+
+    def test_private_message_can_be_deleted_for_everyone(self):
+        message = Message.objects.create(
+            chat=self.chat,
+            sender=self.bob,
+            text="Удаление у обоих",
+        )
+        response = self.client.post(
+            reverse("messenger:delete_message", args=[self.chat.pk, message.pk]),
+            {"scope": "everyone"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["scope"], "everyone")
         message.refresh_from_db()
         self.assertTrue(message.is_deleted)
         self.assertEqual(message.text, "")
@@ -1147,6 +1176,7 @@ class ChatFeatureTests(TestCase):
         group.refresh_from_db()
         self.assertEqual(group.username, "open_group")
 
+        self.client.force_login(self.bob)
         search = self.client.get(
             reverse("messenger:contacts"),
             {"q": "open_group"},
@@ -1287,3 +1317,168 @@ class ChatFeatureTests(TestCase):
         self.assertFalse(
             ChatParticipant.objects.filter(chat=group, user=self.bob).exists()
         )
+
+
+    def test_private_chat_clear_for_me_preserves_peer_history(self):
+        old_message = Message.objects.create(
+            chat=self.chat,
+            sender=self.bob,
+            text="История для одного",
+        )
+        response = self.client.post(
+            reverse("messenger:chat_action", args=[self.chat.pk]),
+            {"action": "clear", "scope": "me"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        membership = ChatParticipant.objects.get(
+            chat=self.chat,
+            user=self.alice,
+        )
+        self.assertGreaterEqual(
+            membership.cleared_before_message_id,
+            old_message.pk,
+        )
+        alice_page = self.client.get(
+            reverse("messenger:chat", args=[self.chat.pk])
+        )
+        self.assertNotContains(alice_page, "История для одного")
+
+        self.client.force_login(self.bob)
+        bob_page = self.client.get(
+            reverse("messenger:chat", args=[self.chat.pk])
+        )
+        self.assertContains(bob_page, "История для одного")
+
+    def test_private_chat_delete_for_me_hides_chat_until_new_message(self):
+        Message.objects.create(
+            chat=self.chat,
+            sender=self.bob,
+            text="Перед удалением",
+        )
+        response = self.client.post(
+            reverse("messenger:chat_action", args=[self.chat.pk]),
+            {"action": "delete_chat", "scope": "me"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        membership = ChatParticipant.objects.get(
+            chat=self.chat,
+            user=self.alice,
+        )
+        self.assertTrue(membership.is_hidden)
+
+        home = self.client.get(reverse("messenger:home"))
+        self.assertNotContains(
+            home,
+            reverse("messenger:chat", args=[self.chat.pk]),
+        )
+
+        self.client.force_login(self.bob)
+        sent = self.client.post(
+            reverse("messenger:send_message", args=[self.chat.pk]),
+            {"text": "Возвращаем чат"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(sent.status_code, 200)
+
+        membership.refresh_from_db()
+        self.assertFalse(membership.is_hidden)
+
+        self.client.force_login(self.alice)
+        reopened = self.client.get(
+            reverse("messenger:chat", args=[self.chat.pk])
+        )
+        self.assertContains(reopened, "Возвращаем чат")
+        self.assertNotContains(reopened, "Перед удалением")
+
+    def test_private_chat_delete_for_everyone_hides_both_sides(self):
+        message = Message.objects.create(
+            chat=self.chat,
+            sender=self.bob,
+            text="Удалить чат у обоих",
+        )
+        response = self.client.post(
+            reverse("messenger:chat_action", args=[self.chat.pk]),
+            {"action": "delete_chat", "scope": "everyone"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        message.refresh_from_db()
+        self.assertTrue(message.is_deleted)
+        self.assertEqual(
+            ChatParticipant.objects.filter(
+                chat=self.chat,
+                is_hidden=True,
+            ).count(),
+            2,
+        )
+
+    def test_group_admin_can_delete_any_message_for_everyone(self):
+        group = Chat.objects.create(
+            type=Chat.Type.GROUP,
+            title="Админское удаление",
+        )
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.alice,
+            role=ChatParticipant.Role.ADMIN,
+        )
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.bob,
+            role=ChatParticipant.Role.MEMBER,
+        )
+        message = Message.objects.create(
+            chat=group,
+            sender=self.bob,
+            text="Сообщение участника",
+        )
+        response = self.client.post(
+            reverse("messenger:delete_message", args=[group.pk, message.pk]),
+            {"scope": "everyone"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        message.refresh_from_db()
+        self.assertTrue(message.is_deleted)
+
+    def test_group_member_cannot_delete_someone_elses_message(self):
+        group = Chat.objects.create(
+            type=Chat.Type.GROUP,
+            title="Обычный участник",
+        )
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.alice,
+            role=ChatParticipant.Role.MEMBER,
+        )
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.bob,
+            role=ChatParticipant.Role.MEMBER,
+        )
+        message = Message.objects.create(
+            chat=group,
+            sender=self.bob,
+            text="Чужое групповое сообщение",
+        )
+        response = self.client.post(
+            reverse("messenger:delete_message", args=[group.pk, message.pk]),
+            {"scope": "everyone"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 403)
+        message.refresh_from_db()
+        self.assertFalse(message.is_deleted)
+
+    def test_chat_menu_contains_telegram_style_selection_and_delete_actions(self):
+        response = self.client.get(
+            reverse("messenger:chat", args=[self.chat.pk])
+        )
+        self.assertContains(response, "data-select-messages", html=False)
+        self.assertContains(response, "data-clear-chat-history", html=False)
+        self.assertContains(response, "data-delete-chat", html=False)
+        self.assertContains(response, 'id="deleteMessageModal"', html=False)
+        self.assertContains(response, 'id="deleteChatModal"', html=False)
+        self.assertContains(response, 'id="messageSelectionBar"', html=False)

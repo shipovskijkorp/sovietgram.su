@@ -106,8 +106,8 @@ class MultiAccountTests(TestCase):
             },
         )
         response = self.client.get(reverse("messenger:home"))
-        self.assertContains(response, 'class="profile-account-avatar"', html=False)
-        self.assertContains(response, 'width="36" height="36"', html=False)
+        self.assertContains(response, 'class="profile-account-item__avatar"', html=False)
+        self.assertContains(response, "profile-account-item--current", html=False)
 
     def test_sidebar_lists_saved_accounts(self):
         self.client.post(
@@ -118,6 +118,7 @@ class MultiAccountTests(TestCase):
             },
         )
         response = self.client.get(reverse("messenger:home"))
-        self.assertContains(response, "@first")
-        self.assertContains(response, "@second")
+        self.assertContains(response, "profile-account-item--current", html=False)
+        self.assertContains(response, ">first</strong>", html=False)
+        self.assertContains(response, ">second</strong>", html=False)
         self.assertContains(response, "Добавить аккаунт")
