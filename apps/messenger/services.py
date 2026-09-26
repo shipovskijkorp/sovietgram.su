@@ -4,7 +4,15 @@ from django.db import transaction
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Chat, ChatParticipant, Contact, Message, MessageAttachment, PinnedMessage
+from .models import (
+    Chat,
+    ChatParticipant,
+    Contact,
+    Message,
+    MessageAttachment,
+    PinnedMessage,
+    VoiceMessagePlayback,
+)
 
 
 @transaction.atomic
@@ -151,6 +159,8 @@ def clone_attachments(source_message, target_message):
                 original_name=attachment.original_name,
                 mime_type=attachment.mime_type,
                 size=attachment.size,
+                duration_ms=attachment.duration_ms,
+                waveform=list(attachment.waveform or []),
             )
             clone.file.save(
                 Path(attachment.original_name).name or "file",
@@ -355,6 +365,20 @@ def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=No
 
     attachments = []
     if not message.is_deleted:
+        attachment_items = list(message.attachments.all())
+        listened_ids = set()
+        voice_ids = [
+            attachment.pk
+            for attachment in attachment_items
+            if attachment.kind == MessageAttachment.Kind.VOICE
+        ]
+        if voice_ids:
+            listened_ids = set(
+                VoiceMessagePlayback.objects.filter(
+                    user=current_user,
+                    attachment_id__in=voice_ids,
+                ).values_list("attachment_id", flat=True)
+            )
         attachments = [
             {
                 "id": attachment.pk,
@@ -362,8 +386,21 @@ def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=No
                 "name": attachment.original_name,
                 "url": attachment_url(attachment),
                 "size": attachment.size,
+                "mime_type": attachment.mime_type,
+                "duration_ms": int(attachment.duration_ms or 0),
+                "waveform": list(attachment.waveform or []),
+                "listened": (
+                    True
+                    if message.sender_id == current_user.pk
+                    else attachment.pk in listened_ids
+                ),
+                "mark_played_url": (
+                    reverse("messenger:mark_voice_played", args=[attachment.pk])
+                    if attachment.kind == MessageAttachment.Kind.VOICE
+                    else ""
+                ),
             }
-            for attachment in message.attachments.all()
+            for attachment in attachment_items
         ]
 
     is_own = message.sender_id == current_user.pk

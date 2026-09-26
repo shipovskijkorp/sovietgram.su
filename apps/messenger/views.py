@@ -20,7 +20,13 @@ from django.db.models import (
     Value,
 )
 from django.db.models.functions import Coalesce
-from django.http import FileResponse, Http404, HttpResponseForbidden, JsonResponse
+from django.http import (
+    FileResponse,
+    Http404,
+    HttpResponseForbidden,
+    JsonResponse,
+    StreamingHttpResponse,
+)
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -50,6 +56,7 @@ from .models import (
     MessageAttachment,
     MessageHiddenForUser,
     PinnedMessage,
+    VoiceMessagePlayback,
 )
 from .ratelimit import rate_limit
 from .services import (
@@ -568,7 +575,21 @@ def _prepare_sidebar_chats(user, archived=False):
 
         _decorate_chat_ui(chat, user)
         preview = " ".join((chat.last_message_text_ui or "").split())
-        chat.last_message_preview_ui = preview or "Медиа"
+        if preview:
+            chat.last_message_preview_ui = preview
+        elif chat.last_message_id_ui:
+            last_kind = MessageAttachment.objects.filter(
+                message_id=chat.last_message_id_ui,
+            ).values_list("kind", flat=True).first()
+            chat.last_message_preview_ui = {
+                MessageAttachment.Kind.VOICE: "Голосовое сообщение",
+                MessageAttachment.Kind.AUDIO: "Аудио",
+                MessageAttachment.Kind.IMAGE: "Фото",
+                MessageAttachment.Kind.VIDEO: "Видео",
+                MessageAttachment.Kind.FILE: "Файл",
+            }.get(last_kind, "Медиа")
+        else:
+            chat.last_message_preview_ui = ""
 
     chats.sort(
         key=lambda chat: (
@@ -714,6 +735,14 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
         message.is_pinned_ui = message.pk in pinned_ids
         message.is_read_ui = message.sender_id == user.pk and message.pk <= other_last_read_id
 
+    voice_listened_attachment_ids = set(
+        VoiceMessagePlayback.objects.filter(
+            user=user,
+            attachment__message__chat=selected_chat,
+            attachment__kind=MessageAttachment.Kind.VOICE,
+        ).values_list("attachment_id", flat=True)
+    )
+
     shared_items = []
     attachments = MessageAttachment.objects.filter(
         message__in=_visible_message_queryset(selected_chat, user).filter(is_deleted=False)
@@ -739,15 +768,33 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
             )
         )
     )
+    can_record_voice = can_post and not (
+        selected_chat.type == Chat.Type.GROUP
+        and membership.role == ChatParticipant.Role.MEMBER
+        and not selected_chat.members_can_send_media
+    )
+    if (
+        can_record_voice
+        and selected_chat.type == Chat.Type.PRIVATE
+        and selected_chat.direct_key != f"self:{user.pk}"
+    ):
+        recipient = other_user_for_chat(selected_chat, user)
+        can_record_voice = (
+            not is_blocked_between(user, recipient)
+            and privacy_allows(recipient, user, "messages")
+            and privacy_allows(recipient, user, "voice_messages")
+        )
 
     context.update(
         {
             "active_membership": membership,
             "can_post": can_post,
+            "can_record_voice": can_record_voice,
             "other_last_read_id": other_last_read_id,
             "pinned_records": pins,
             "pinned_message_ids": pinned_ids,
             "shared_attachments": shared_items,
+            "voice_listened_attachment_ids": voice_listened_attachment_ids,
             "search_url": reverse("messenger:search_messages", args=[selected_chat.pk]),
             "draft_url": reverse("messenger:save_draft", args=[selected_chat.pk]),
             "typing_url": reverse("messenger:typing", args=[selected_chat.pk]),
@@ -1295,11 +1342,11 @@ def send_message(request, chat_id):
 
         attachment_mode = form.cleaned_data.get("attachment_mode") or MessageForm.MODE_MEDIA
         if (
-            attachment_mode == MessageForm.MODE_AUDIO
+            attachment_mode == MessageForm.MODE_VOICE
             and form.cleaned_data["attachments"]
             and not privacy_allows(recipient, request.user, "voice_messages")
         ):
-            error = "Пользователь ограничил входящие голосовые и аудиосообщения."
+            error = "Пользователь ограничил входящие голосовые сообщения."
             if wants_json:
                 return JsonResponse({"ok": False, "error": error}, status=403)
             messages.error(request, error)
@@ -1338,6 +1385,7 @@ def send_message(request, chat_id):
     attachment_mode = form.cleaned_data.get("attachment_mode") or MessageForm.MODE_MEDIA
     send_as_file = attachment_mode == MessageForm.MODE_FILE
     send_as_audio = attachment_mode == MessageForm.MODE_AUDIO
+    send_as_voice = attachment_mode == MessageForm.MODE_VOICE
 
     with transaction.atomic():
         message = Message.objects.create(
@@ -1358,6 +1406,8 @@ def send_message(request, chat_id):
                 kind=(
                     MessageAttachment.Kind.FILE
                     if send_as_file
+                    else MessageAttachment.Kind.VOICE
+                    if send_as_voice
                     else MessageAttachment.Kind.AUDIO
                     if send_as_audio
                     else attachment_kind(uploaded)
@@ -1365,6 +1415,16 @@ def send_message(request, chat_id):
                 original_name=Path(uploaded.name).name[:255],
                 mime_type=(getattr(uploaded, "content_type", "") or "")[:127],
                 size=uploaded.size,
+                duration_ms=(
+                    int(form.cleaned_data.get("voice_duration_ms") or 0)
+                    if send_as_voice
+                    else 0
+                ),
+                waveform=(
+                    list(form.cleaned_data.get("voice_waveform") or [])
+                    if send_as_voice
+                    else []
+                ),
             )
         touch_chat(chat)
         apply_archive_rules_on_new_message(chat, message)
@@ -1898,6 +1958,19 @@ def forward_message(request, chat_id, message_id):
                 {"ok": False, "error": "Пользователь ограничил входящие личные сообщения."},
                 status=403,
             )
+        if (
+            source.attachments.filter(
+                kind=MessageAttachment.Kind.VOICE
+            ).exists()
+            and not privacy_allows(recipient, request.user, "voice_messages")
+        ):
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "error": "Пользователь ограничил входящие голосовые сообщения.",
+                },
+                status=403,
+            )
 
     restriction = _posting_restriction(
         target_chat,
@@ -2346,6 +2419,73 @@ INLINE_MEDIA_TYPES = {
 }
 
 
+def _range_file_chunks(field_file, start, length, chunk_size=64 * 1024):
+    field_file.open("rb")
+    stream = field_file.file
+    stream.seek(start)
+    remaining = length
+    try:
+        while remaining > 0:
+            chunk = stream.read(min(chunk_size, remaining))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+            yield chunk
+    finally:
+        field_file.close()
+
+
+def _inline_file_response(request, attachment, content_type):
+    total_size = int(attachment.size or attachment.file.size or 0)
+    range_header = (request.headers.get("Range") or "").strip()
+
+    if range_header.startswith("bytes=") and "," not in range_header and total_size > 0:
+        raw = range_header[6:]
+        start_text, separator, end_text = raw.partition("-")
+        if separator:
+            try:
+                if start_text:
+                    start = int(start_text)
+                    end = int(end_text) if end_text else total_size - 1
+                elif end_text:
+                    suffix = max(0, int(end_text))
+                    start = max(0, total_size - suffix)
+                    end = total_size - 1
+                else:
+                    raise ValueError
+                end = min(end, total_size - 1)
+                if start < 0 or start >= total_size or end < start:
+                    raise ValueError
+            except ValueError:
+                response = StreamingHttpResponse(status=416)
+                response["Content-Range"] = f"bytes */{total_size}"
+                response["Accept-Ranges"] = "bytes"
+                return response
+
+            length = end - start + 1
+            response = StreamingHttpResponse(
+                _range_file_chunks(attachment.file, start, length),
+                status=206,
+                content_type=content_type,
+            )
+            response["Content-Length"] = str(length)
+            response["Content-Range"] = f"bytes {start}-{end}/{total_size}"
+            response["Accept-Ranges"] = "bytes"
+            return response
+
+    attachment.file.open("rb")
+    response = FileResponse(
+        attachment.file,
+        as_attachment=False,
+        filename=Path(attachment.original_name).name or "media",
+        content_type=content_type,
+    )
+    response["Accept-Ranges"] = "bytes"
+    if total_size > 0:
+        response["Content-Length"] = str(total_size)
+    return response
+
+
 @login_required
 @require_GET
 def view_attachment(request, attachment_id):
@@ -2354,21 +2494,54 @@ def view_attachment(request, attachment_id):
         MessageAttachment.Kind.IMAGE,
         MessageAttachment.Kind.VIDEO,
         MessageAttachment.Kind.AUDIO,
+        MessageAttachment.Kind.VOICE,
     }:
         return JsonResponse({"ok": False, "error": "Вложение нельзя открыть inline."}, status=404)
 
     extension = Path(attachment.original_name).suffix.lower()
-    content_type = INLINE_MEDIA_TYPES.get(extension)
+    if attachment.kind == MessageAttachment.Kind.VOICE:
+        stored_type = (attachment.mime_type or "").split(";", 1)[0].strip().lower()
+        if stored_type == "video/webm":
+            stored_type = "audio/webm"
+        content_type = (
+            stored_type
+            if stored_type in {
+                "audio/webm",
+                "audio/ogg",
+                "audio/opus",
+                "audio/mp4",
+            }
+            else {
+                ".webm": "audio/webm",
+                ".ogg": "audio/ogg",
+                ".oga": "audio/ogg",
+                ".opus": "audio/opus",
+                ".m4a": "audio/mp4",
+            }.get(extension)
+        )
+    else:
+        content_type = INLINE_MEDIA_TYPES.get(extension)
     if content_type is None:
         return JsonResponse({"ok": False, "error": "Неподдерживаемый тип медиа."}, status=404)
 
-    attachment.file.open("rb")
-    return FileResponse(
-        attachment.file,
-        as_attachment=False,
-        filename=Path(attachment.original_name).name or "media",
-        content_type=content_type,
+    return _inline_file_response(request, attachment, content_type)
+
+
+@login_required
+@require_POST
+def mark_voice_played(request, attachment_id):
+    attachment = _attachment_for_user(request.user, attachment_id)
+    if attachment.kind != MessageAttachment.Kind.VOICE:
+        return JsonResponse(
+            {"ok": False, "error": "Это вложение не является голосовым сообщением."},
+            status=400,
+        )
+
+    VoiceMessagePlayback.objects.get_or_create(
+        attachment=attachment,
+        user=request.user,
     )
+    return JsonResponse({"ok": True, "listened": True})
 
 
 @login_required

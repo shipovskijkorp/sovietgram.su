@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from django import forms
@@ -17,6 +18,7 @@ MEDIA_EXTENSIONS = {
 AUDIO_EXTENSIONS = {
     ".mp3", ".m4a", ".aac", ".ogg", ".oga", ".wav", ".flac", ".opus",
 }
+VOICE_EXTENSIONS = {".webm", ".ogg", ".oga", ".opus", ".m4a"}
 AUDIO_CONTENT_TYPES = {
     "audio/mpeg",
     "audio/mp3",
@@ -31,6 +33,16 @@ AUDIO_CONTENT_TYPES = {
     "audio/x-flac",
     "audio/opus",
 }
+VOICE_CONTENT_TYPES = {
+    "audio/webm",
+    "audio/ogg",
+    "audio/opus",
+    "audio/mp4",
+    "video/webm",
+    "application/octet-stream",
+}
+MAX_VOICE_DURATION_MS = 100 * 60 * 1000
+MAX_VOICE_WAVEFORM_SAMPLES = 96
 IMAGE_FORMATS = {
     ".png": {"PNG"},
     ".jpg": {"JPEG"},
@@ -100,6 +112,7 @@ class MessageForm(forms.Form):
     MODE_MEDIA = "media"
     MODE_FILE = "file"
     MODE_AUDIO = "audio"
+    MODE_VOICE = "voice"
 
     text = forms.CharField(required=False, max_length=4096)
     reply_to = forms.IntegerField(required=False, min_value=1)
@@ -109,10 +122,17 @@ class MessageForm(forms.Form):
             (MODE_MEDIA, "Медиа"),
             (MODE_FILE, "Файл"),
             (MODE_AUDIO, "Музыка"),
+            (MODE_VOICE, "Голосовое сообщение"),
         ),
         initial=MODE_MEDIA,
     )
     attachments = MultipleFileField(required=False)
+    voice_duration_ms = forms.IntegerField(
+        required=False,
+        min_value=0,
+        max_value=MAX_VOICE_DURATION_MS,
+    )
+    voice_waveform = forms.CharField(required=False, max_length=4096)
 
     def clean_text(self):
         return self.cleaned_data.get("text", "").strip()
@@ -151,9 +171,19 @@ class MessageForm(forms.Form):
                     raise forms.ValidationError(
                         "В разделе «Музыка» поддерживаются MP3, M4A, AAC, OGG, WAV, FLAC и OPUS."
                     )
-                if content_type and content_type not in AUDIO_CONTENT_TYPES:
+                if content_type and content_type.split(";", 1)[0] not in AUDIO_CONTENT_TYPES:
                     raise forms.ValidationError(
                         "Выбранный файл не распознан как аудио."
+                    )
+            elif mode == self.MODE_VOICE:
+                normalized_type = content_type.split(";", 1)[0]
+                if extension not in VOICE_EXTENSIONS:
+                    raise forms.ValidationError(
+                        "Голосовое сообщение должно быть записано в WebM/Opus, OGG/Opus или M4A."
+                    )
+                if normalized_type and normalized_type not in VOICE_CONTENT_TYPES:
+                    raise forms.ValidationError(
+                        "Файл не распознан как голосовое сообщение."
                     )
             if uploaded.size > MAX_FILE_SIZE:
                 raise forms.ValidationError("Один файл должен быть не больше 25 МБ.")
@@ -165,10 +195,43 @@ class MessageForm(forms.Form):
             )
         return files
 
+    def clean_voice_waveform(self):
+        raw = (self.cleaned_data.get("voice_waveform") or "").strip()
+        if not raw:
+            return []
+        try:
+            values = json.loads(raw)
+        except (TypeError, json.JSONDecodeError):
+            raise forms.ValidationError("Некорректная форма волны голосового сообщения.")
+        if not isinstance(values, list):
+            raise forms.ValidationError("Некорректная форма волны голосового сообщения.")
+
+        cleaned = []
+        for value in values[:MAX_VOICE_WAVEFORM_SAMPLES]:
+            try:
+                number = int(round(float(value)))
+            except (TypeError, ValueError):
+                continue
+            cleaned.append(max(0, min(100, number)))
+        return cleaned
+
     def clean(self):
         cleaned = super().clean()
-        if not cleaned.get("text") and not cleaned.get("attachments"):
+        mode = cleaned.get("attachment_mode") or self.MODE_MEDIA
+        attachments = cleaned.get("attachments") or []
+
+        if mode == self.MODE_VOICE:
+            if len(attachments) != 1:
+                raise forms.ValidationError(
+                    "Одно голосовое сообщение должно содержать ровно одну запись."
+                )
+            duration = int(cleaned.get("voice_duration_ms") or 0)
+            if duration < 200:
+                raise forms.ValidationError("Голосовое сообщение слишком короткое.")
+            cleaned["text"] = ""
+        elif not cleaned.get("text") and not attachments:
             raise forms.ValidationError("Введите сообщение или прикрепите файл.")
+
         return cleaned
 
 

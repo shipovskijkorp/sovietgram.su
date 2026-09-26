@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="{% static 'css/messenger.css' %}?v={{ static_version }}">
 <link rel="stylesheet" href="{% static 'css/media.css' %}?v={{ static_version }}">
 <link rel="stylesheet" href="{% static 'css/chat.css' %}?v={{ static_version }}">
+<link rel="stylesheet" href="{% static 'css/voice-messages.css' %}?v={{ static_version }}">
 <link rel="stylesheet" href="{% static 'css/community-profile.css' %}?v={{ static_version }}">
 <link rel="stylesheet" href="{% static 'css/settings.css' %}?v={{ static_version }}">
 {% endblock %}
@@ -127,7 +128,8 @@
           data-chat-peer-name="{% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}{{ selected_chat.other_user.display_name|escape }}{% else %}{{ selected_chat.display_name_ui|escape }}{% endif %}"
           data-channel-signatures="{{ selected_chat.signatures_enabled|yesno:'true,false' }}"
           data-can-send-text="{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_messages %}false{% else %}true{% endif %}"
-          data-can-send-media="{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_media %}false{% else %}true{% endif %}">
+          data-can-send-media="{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_media %}false{% else %}true{% endif %}"
+          data-can-record-voice="{{ can_record_voice|yesno:'true,false' }}">
       <header class="conversation-header">
         <a class="icon-button mobile-back" href="{% if show_archived %}{% url 'messenger:home' %}?archived=1{% else %}{% url 'messenger:home' %}{% endif %}" aria-label="Назад"><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span></a>
         {% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}
@@ -398,6 +400,29 @@
                         </a>
                       {% elif attachment.kind == 'video' %}
                         <video class="message-media__video" controls preload="metadata" src="{% url 'messenger:view_attachment' attachment.pk %}"></video>
+                      {% elif attachment.kind == 'voice' %}
+                        <div class="voice-message"
+                             data-voice-player
+                             data-src="{% url 'messenger:view_attachment' attachment.pk %}"
+                             data-mark-played-url="{% url 'messenger:mark_voice_played' attachment.pk %}"
+                             data-duration-ms="{{ attachment.duration_ms }}"
+                             data-waveform="{{ attachment.waveform|join:',' }}"
+                             data-own="{% if message.sender_id == request.user.pk %}true{% else %}false{% endif %}"
+                             data-listened="{% if message.sender_id == request.user.pk or attachment.pk in voice_listened_attachment_ids %}true{% else %}false{% endif %}">
+                          <button class="voice-message__play" type="button" data-voice-play aria-label="Воспроизвести голосовое сообщение">
+                            <span class="voice-message__play-glyph" aria-hidden="true"></span>
+                          </button>
+                          <div class="voice-message__body">
+                            <div class="voice-message__waveform" data-voice-waveform role="slider" tabindex="0" aria-label="Позиция воспроизведения" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+                            <div class="voice-message__time">
+                              <span data-voice-current>0:00</span>
+                              <span class="voice-message__duration" data-voice-duration>0:00</span>
+                              <span class="voice-message__unread" data-voice-unread{% if message.sender_id == request.user.pk or attachment.pk in voice_listened_attachment_ids %} hidden{% endif %} aria-label="Не прослушано"></span>
+                            </div>
+                          </div>
+                          <button class="voice-message__speed" type="button" data-voice-settings aria-label="Настройки воспроизведения">1×</button>
+                          <audio data-voice-audio preload="metadata" src="{% url 'messenger:view_attachment' attachment.pk %}"></audio>
+                        </div>
                       {% elif attachment.kind == 'audio' %}
                         <div class="message-audio">
                           <span class="message-audio__icon">♪</span>
@@ -437,6 +462,21 @@
           <button id="composerReplyClose" type="button" aria-label="Отменить ответ"><span class="tg-native-icon tg-native-icon--close tg-native-icon--compact" aria-hidden="true"></span></button>
         </div>
         <input id="replyToInput" type="hidden" name="reply_to" value="">
+        <div class="voice-recording-bar" id="voiceRecordingBar" hidden>
+          <button class="voice-recording-bar__delete" id="voiceRecordDelete" type="button" aria-label="Удалить запись" title="Удалить запись">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8v10m4-10v10m4-10v10M5 5h14M9 5V3h6v2m3 0-1 16H7L6 5"/></svg>
+          </button>
+          <span class="voice-recording-bar__dot" aria-hidden="true"></span>
+          <time class="voice-recording-bar__timer" id="voiceRecordTimer">0:00.0</time>
+          <canvas class="voice-recording-bar__waveform" id="voiceRecordWaveform" aria-hidden="true"></canvas>
+          <span class="voice-recording-bar__hint" id="voiceRecordHint">Сдвиньте влево для отмены</span>
+          <span class="voice-recording-bar__lock" id="voiceRecordLock" aria-hidden="true">
+            <span>⌃</span><b>🔒</b>
+          </span>
+          <button class="voice-recording-bar__send" id="voiceRecordSend" type="button" aria-label="Отправить голосовое сообщение" title="Отправить">
+            <span class="tg-native-icon tg-native-icon--send" aria-hidden="true"></span>
+          </button>
+        </div>
         <div class="attachment-control" id="attachmentControl"{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_media and not selected_chat.members_can_send_messages %} hidden{% endif %}>
           <button class="composer__attach composer__attach-button" id="attachmentButton" type="button" aria-label="Прикрепить" aria-expanded="false" aria-controls="attachmentMenu" title="Прикрепить">
             <span class="tg-native-icon tg-native-icon--attach" aria-hidden="true"></span>
@@ -485,7 +525,15 @@
         <div class="composer__field">
           <textarea id="messageInput" name="text" rows="1" maxlength="4096" placeholder="{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_messages %}Можно отправлять только медиа{% else %}Сообщение{% endif %}" autocomplete="off"{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_messages %} readonly{% endif %}>{{ active_membership.draft_text }}</textarea>
         </div>
-        <button class="send-button" id="sendButton" type="submit" aria-label="Отправить"><span class="tg-native-icon tg-native-icon--send" aria-hidden="true"></span></button>
+        <button class="send-button" id="sendButton" type="submit" aria-label="Отправить"{% if can_record_voice and not active_membership.draft_text %} hidden{% endif %}><span class="tg-native-icon tg-native-icon--send" aria-hidden="true"></span></button>
+        {% if can_record_voice %}
+        <button class="voice-record-button" id="voiceRecordButton" type="button" aria-label="Записать голосовое сообщение" title="Удерживайте для записи"{% if active_membership.draft_text %} hidden{% endif %}>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="9" y="3" width="6" height="11" rx="3"></rect>
+            <path d="M6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v4M9 21h6"></path>
+          </svg>
+        </button>
+        {% endif %}
       </form>
       {% else %}
       <div class="channel-readonly"><span>☭</span><strong>Только чтение</strong><small>{% if selected_chat.type == 'channel' %}Публиковать здесь могут владелец и администраторы канала.{% else %}Администраторы запретили обычным участникам отправлять сообщения и медиа.{% endif %}</small></div>
@@ -977,6 +1025,7 @@
 <script src="{% static 'js/attachment-menu.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/attachment-files.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/chat.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/voice-messages.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/attachment-special.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/article-editor.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/chat-controls.js' %}?v={{ static_version }}"></script>

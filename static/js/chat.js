@@ -162,6 +162,7 @@ function messagePreview(article) {
   if (text) return text.replace(/\s+/g, " ").slice(0, 150);
   const fileName = article?.querySelector(".message-file-card strong")?.textContent?.trim();
   if (fileName) return fileName;
+  if (article?.querySelector("[data-voice-player]")) return "Голосовое сообщение";
   if (article?.querySelector(".message-media")) return "Медиа";
   return "Сообщение";
 }
@@ -219,7 +220,79 @@ function makeFileCard(attachment) {
   return link;
 }
 
-function makeMedia(attachment) {
+function makeVoiceMessage(attachment, isOwn = false) {
+  const root = document.createElement("div");
+  root.className = "voice-message";
+  root.dataset.voicePlayer = "";
+  root.dataset.src = attachment.url || "";
+  root.dataset.markPlayedUrl = attachment.mark_played_url || "";
+  root.dataset.durationMs = String(Number(attachment.duration_ms) || 0);
+  root.dataset.waveform = Array.isArray(attachment.waveform)
+    ? attachment.waveform.join(",")
+    : "";
+  root.dataset.own = isOwn ? "true" : "false";
+  root.dataset.listened = attachment.listened ? "true" : "false";
+
+  const play = document.createElement("button");
+  play.type = "button";
+  play.className = "voice-message__play";
+  play.dataset.voicePlay = "";
+  play.setAttribute("aria-label", "Воспроизвести голосовое сообщение");
+  const glyph = document.createElement("span");
+  glyph.className = "voice-message__play-glyph";
+  glyph.setAttribute("aria-hidden", "true");
+  play.appendChild(glyph);
+
+  const body = document.createElement("div");
+  body.className = "voice-message__body";
+  const waveform = document.createElement("div");
+  waveform.className = "voice-message__waveform";
+  waveform.dataset.voiceWaveform = "";
+  waveform.tabIndex = 0;
+  waveform.setAttribute("role", "slider");
+  waveform.setAttribute("aria-label", "Позиция воспроизведения");
+  waveform.setAttribute("aria-valuemin", "0");
+  waveform.setAttribute("aria-valuemax", "100");
+  waveform.setAttribute("aria-valuenow", "0");
+
+  const meta = document.createElement("div");
+  meta.className = "voice-message__time";
+  const current = document.createElement("span");
+  current.dataset.voiceCurrent = "";
+  current.textContent = "0:00";
+  const duration = document.createElement("span");
+  duration.className = "voice-message__duration";
+  duration.dataset.voiceDuration = "";
+  duration.textContent = "0:00";
+  const unread = document.createElement("span");
+  unread.className = "voice-message__unread";
+  unread.dataset.voiceUnread = "";
+  unread.setAttribute("aria-label", "Не прослушано");
+  unread.hidden = Boolean(attachment.listened);
+  meta.append(current, duration, unread);
+  body.append(waveform, meta);
+
+  const speed = document.createElement("button");
+  speed.type = "button";
+  speed.className = "voice-message__speed";
+  speed.dataset.voiceSettings = "";
+  speed.setAttribute("aria-label", "Настройки воспроизведения");
+  speed.textContent = "1×";
+
+  const audio = document.createElement("audio");
+  audio.dataset.voiceAudio = "";
+  audio.preload = "metadata";
+  audio.src = attachment.url || "";
+
+  root.append(play, body, speed, audio);
+  return root;
+}
+
+function makeMedia(attachment, isOwn = false) {
+  if (attachment.kind === "voice") {
+    return makeVoiceMessage(attachment, isOwn);
+  }
+
   if (attachment.kind === "image") {
     const link = document.createElement("a");
     link.className = "message-media__item";
@@ -323,7 +396,7 @@ function buildMessageArticle(message) {
     const album = message.attachments.length > 1 && message.attachments.every((item) => item.kind === "image" || item.kind === "video");
     media.className = `message-media${album ? " message-media--album" : ""}`;
     media.dataset.count = String(message.attachments.length);
-    message.attachments.forEach((attachment) => media.appendChild(makeMedia(attachment)));
+    message.attachments.forEach((attachment) => media.appendChild(makeMedia(attachment, message.is_own)));
     article.appendChild(media);
   }
 
@@ -1265,3 +1338,20 @@ document.addEventListener("keydown", (event) => {
 
 window.renderSovietgramChatMessage = renderMessage;
 window.updateSovietgramChatMessage = applyMessageUpdate;
+window.SovietgramChat = {
+  acceptSentMessage(message) {
+    if (!message) return;
+    renderMessage(message);
+    newestMessageId = Math.max(newestMessageId, Number(message.id) || 0);
+    if (messageInput) {
+      messageInput.value = "";
+      autoSizeInput();
+    }
+    clearReplyState();
+    clearDraftState();
+    focusMessageInput();
+    scrollToBottom(true);
+  },
+  focusComposer: focusMessageInput,
+  resizeComposer: autoSizeInput,
+};

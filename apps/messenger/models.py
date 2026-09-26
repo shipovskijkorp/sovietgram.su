@@ -209,6 +209,7 @@ class Message(models.Model):
             MessageAttachment.Kind.IMAGE: "Фото",
             MessageAttachment.Kind.VIDEO: "Видео",
             MessageAttachment.Kind.AUDIO: "Аудио",
+            MessageAttachment.Kind.VOICE: "Голосовое сообщение",
         }.get(attachment.kind, "Файл")
 
     def __str__(self):
@@ -245,6 +246,7 @@ class MessageAttachment(models.Model):
         IMAGE = "image", "Изображение"
         VIDEO = "video", "Видео"
         AUDIO = "audio", "Аудио"
+        VOICE = "voice", "Голосовое сообщение"
         FILE = "file", "Файл"
 
     message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name="attachments")
@@ -253,10 +255,38 @@ class MessageAttachment(models.Model):
     original_name = models.CharField(max_length=255)
     mime_type = models.CharField(max_length=127, blank=True)
     size = models.PositiveBigIntegerField(default=0)
+    duration_ms = models.PositiveIntegerField(default=0)
+    waveform = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return self.original_name
+
+
+class VoiceMessagePlayback(models.Model):
+    attachment = models.ForeignKey(
+        MessageAttachment,
+        on_delete=models.CASCADE,
+        related_name="voice_playbacks",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="voice_message_playbacks",
+    )
+    played_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("attachment", "user"),
+                name="unique_voice_playback_per_user",
+            ),
+        ]
+        ordering = ("-played_at", "-id")
+
+    def __str__(self):
+        return f"{self.user} played voice attachment {self.attachment_id}"
 
 
 class PinnedMessage(models.Model):
