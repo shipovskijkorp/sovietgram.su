@@ -1,27 +1,13 @@
 /* Telegram-style voice recording and playback for Sovietgram. */
 
-.voice-record-button {
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: #786550;
-  cursor: pointer;
+.composer-action-button {
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
 }
 
-.voice-record-button:hover {
-  background: #f0e5d5;
-  color: var(--red);
-}
-
-.voice-record-button svg {
+.composer-action-button__voice {
+  display: none;
   width: 24px;
   height: 24px;
   overflow: visible;
@@ -32,11 +18,32 @@
   stroke-linejoin: round;
 }
 
-.voice-record-button svg rect {
+.composer-action-button__voice rect {
   stroke: none;
 }
 
-.voice-record-button.is-arming {
+.composer-action-button.is-voice-mode {
+  background: transparent;
+  color: #786550;
+  box-shadow: none;
+  transform: none;
+}
+
+.composer-action-button.is-voice-mode:hover {
+  background: #f0e5d5;
+  color: var(--red);
+  transform: none;
+}
+
+.composer-action-button.is-voice-mode .composer-action-button__send {
+  display: none;
+}
+
+.composer-action-button.is-voice-mode .composer-action-button__voice {
+  display: block;
+}
+
+.composer-action-button.is-arming {
   color: var(--red);
   animation: voice-mic-pulse .85s ease-in-out infinite alternate;
 }
@@ -499,11 +506,13 @@
 }
 
 /* Dark palette. */
-body[data-theme="dark"] .voice-record-button {
+body[data-theme="dark"] .composer-action-button.is-voice-mode {
+  background: transparent;
   color: #af9c87;
+  box-shadow: none;
 }
 
-body[data-theme="dark"] .voice-record-button:hover {
+body[data-theme="dark"] .composer-action-button.is-voice-mode:hover {
   background: #2c2621;
   color: #e56d76;
 }
@@ -604,7 +613,7 @@ body[data-theme="dark"] .voice-player-settings__toggle > span small {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .voice-record-button.is-arming,
+  .composer-action-button.is-arming,
   .voice-recording-bar__dot {
     animation: none;
   }

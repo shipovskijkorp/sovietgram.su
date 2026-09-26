@@ -138,10 +138,14 @@ class VoiceMessageTests(TestCase):
         self.assertEqual(response["Content-Length"], "5")
         self.assertEqual(b"".join(response.streaming_content), payload[2:7])
 
-    def test_voice_recorder_and_custom_player_assets_are_in_chat(self):
+    def test_voice_recorder_uses_single_composer_action_button(self):
         response = self.client.get(reverse("messenger:chat", args=[self.chat.pk]))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'id="voiceRecordButton"', html=False)
+        body = response.content.decode("utf-8")
+        self.assertEqual(body.count('id="sendButton"'), 1)
+        self.assertNotIn('id="voiceRecordButton"', body)
+        self.assertContains(response, 'data-composer-action="voice"', html=False)
+        self.assertContains(response, 'class="composer-action-button__voice"', html=False)
         self.assertContains(response, 'id="voiceRecordingBar"', html=False)
         self.assertContains(response, "voice-messages.css", html=False)
         self.assertContains(response, "voice-messages.js", html=False)

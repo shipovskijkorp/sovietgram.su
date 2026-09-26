@@ -2,8 +2,8 @@
   const conversation = document.querySelector(".conversation--chat");
   const form = document.getElementById("messageForm");
   const messageInput = document.getElementById("messageInput");
-  const normalSendButton = document.getElementById("sendButton");
-  const recordButton = document.getElementById("voiceRecordButton");
+  const composerActionButton = document.getElementById("sendButton");
+  const recordButton = composerActionButton;
   const recordBar = document.getElementById("voiceRecordingBar");
   const recordDelete = document.getElementById("voiceRecordDelete");
   const recordSend = document.getElementById("voiceRecordSend");
@@ -512,13 +512,28 @@
     if (event.key === "Escape" && settingsPopup && !settingsPopup.hidden) closeSettings();
   });
 
+  function isVoiceMode() {
+    return composerActionButton?.dataset.composerAction === "voice";
+  }
+
   function syncComposerActions() {
-    if (!form || !recordButton || !normalSendButton) return;
+    if (!form || !composerActionButton) return;
     if (recordSession) return;
+
     const hasText = Boolean(messageInput?.value.trim());
-    const canRecord = conversation?.dataset.canRecordVoice !== "false";
-    recordButton.hidden = hasText || !canRecord;
-    normalSendButton.hidden = !hasText && canRecord;
+    const canRecord = (
+      composerActionButton.dataset.canRecordVoice === "true"
+      && conversation?.dataset.canRecordVoice !== "false"
+    );
+    const voiceMode = canRecord && !hasText;
+
+    composerActionButton.dataset.composerAction = voiceMode ? "voice" : "send";
+    composerActionButton.classList.toggle("is-voice-mode", voiceMode);
+    composerActionButton.setAttribute(
+      "aria-label",
+      voiceMode ? "Записать голосовое сообщение" : "Отправить",
+    );
+    composerActionButton.title = voiceMode ? "Удерживайте для записи" : "Отправить";
   }
 
   messageInput?.addEventListener("input", syncComposerActions);
@@ -747,7 +762,13 @@
   }
 
   async function startRecording(pointerEvent) {
-    if (!form || !recordButton || recordSession || messageInput?.value.trim()) return;
+    if (
+      !form
+      || !recordButton
+      || !isVoiceMode()
+      || recordSession
+      || messageInput?.value.trim()
+    ) return;
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
       notify("Этот браузер не поддерживает запись голосовых сообщений.");
       return;
@@ -858,6 +879,7 @@
   }
 
   recordButton?.addEventListener("pointerdown", (event) => {
+    if (!isVoiceMode()) return;
     if (event.button !== 0 && event.pointerType === "mouse") return;
     event.preventDefault();
     try {
@@ -866,6 +888,13 @@
       // Pointer capture is best effort.
     }
     startRecording(event);
+  });
+
+  recordButton?.addEventListener("click", (event) => {
+    // The composer has one physical action button. In voice mode its pointer
+    // gesture belongs to the recorder and must not submit the text form.
+    if (!isVoiceMode()) return;
+    event.preventDefault();
   });
 
   recordButton?.addEventListener("pointermove", (event) => {

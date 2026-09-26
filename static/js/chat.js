@@ -959,6 +959,7 @@ async function sendTextMessage() {
     renderMessage(payload.message);
     newestMessageId = Math.max(newestMessageId, Number(payload.message.id) || 0);
     messageInput.value = "";
+    messageInput.dispatchEvent(new Event("input", { bubbles: true }));
     autoSizeInput();
     clearReplyState();
     clearDraftState();

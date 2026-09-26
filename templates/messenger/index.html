@@ -525,15 +525,19 @@
         <div class="composer__field">
           <textarea id="messageInput" name="text" rows="1" maxlength="4096" placeholder="{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_messages %}Можно отправлять только медиа{% else %}Сообщение{% endif %}" autocomplete="off"{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_messages %} readonly{% endif %}>{{ active_membership.draft_text }}</textarea>
         </div>
-        <button class="send-button" id="sendButton" type="submit" aria-label="Отправить"{% if can_record_voice and not active_membership.draft_text %} hidden{% endif %}><span class="tg-native-icon tg-native-icon--send" aria-hidden="true"></span></button>
-        {% if can_record_voice %}
-        <button class="voice-record-button" id="voiceRecordButton" type="button" aria-label="Записать голосовое сообщение" title="Удерживайте для записи"{% if active_membership.draft_text %} hidden{% endif %}>
-          <svg viewBox="0 0 24 24" aria-hidden="true">
+        <button class="send-button composer-action-button{% if can_record_voice and not active_membership.draft_text %} is-voice-mode{% endif %}"
+                id="sendButton"
+                type="submit"
+                data-can-record-voice="{{ can_record_voice|yesno:'true,false' }}"
+                data-composer-action="{% if can_record_voice and not active_membership.draft_text %}voice{% else %}send{% endif %}"
+                aria-label="{% if can_record_voice and not active_membership.draft_text %}Записать голосовое сообщение{% else %}Отправить{% endif %}"
+                title="{% if can_record_voice and not active_membership.draft_text %}Удерживайте для записи{% else %}Отправить{% endif %}">
+          <span class="composer-action-button__send tg-native-icon tg-native-icon--send" aria-hidden="true"></span>
+          <svg class="composer-action-button__voice" viewBox="0 0 24 24" aria-hidden="true">
             <rect x="9" y="3" width="6" height="11" rx="3"></rect>
             <path d="M6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v4M9 21h6"></path>
           </svg>
         </button>
-        {% endif %}
       </form>
       {% else %}
       <div class="channel-readonly"><span>☭</span><strong>Только чтение</strong><small>{% if selected_chat.type == 'channel' %}Публиковать здесь могут владелец и администраторы канала.{% else %}Администраторы запретили обычным участникам отправлять сообщения и медиа.{% endif %}</small></div>
