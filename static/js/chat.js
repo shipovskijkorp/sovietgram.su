@@ -447,8 +447,42 @@ function renderMessage(message) {
     return;
   }
   const follow = nearBottom();
-  messageFlow.appendChild(buildMessageArticle(message));
+  const article = buildMessageArticle(message);
+  messageFlow.appendChild(article);
+  window.SovietgramVoice?.hydrate?.(article);
   if (follow) requestAnimationFrame(() => scrollToBottom(true));
+}
+
+function syncMessageAttachments(article, message) {
+  if (!article) return;
+
+  const current = article.querySelector(".message-media");
+  const attachments = Array.isArray(message.attachments) ? message.attachments : [];
+
+  if (!attachments.length) {
+    current?.remove();
+    return;
+  }
+
+  const media = document.createElement("div");
+  const album = (
+    attachments.length > 1
+    && attachments.every((item) => item.kind === "image" || item.kind === "video")
+  );
+  media.className = `message-media${album ? " message-media--album" : ""}`;
+  media.dataset.count = String(attachments.length);
+  attachments.forEach((attachment) => {
+    media.appendChild(makeMedia(attachment, message.is_own));
+  });
+
+  if (current) {
+    current.replaceWith(media);
+  } else {
+    const before = article.querySelector(".message__text") || article.querySelector("footer");
+    article.insertBefore(media, before);
+  }
+
+  window.SovietgramVoice?.hydrate?.(media);
 }
 
 function applyMessageUpdate(message) {
@@ -482,6 +516,8 @@ function applyMessageUpdate(message) {
   } else {
     special?.remove();
   }
+
+  syncMessageAttachments(article, message);
 
   let paragraph = article.querySelector(".message__text");
   if (message.text && !message.special) {
@@ -1341,18 +1377,37 @@ window.renderSovietgramChatMessage = renderMessage;
 window.updateSovietgramChatMessage = applyMessageUpdate;
 window.SovietgramChat = {
   acceptSentMessage(message) {
-    if (!message) return;
+    if (!message) return false;
+
     renderMessage(message);
+
+    // A message may have been inserted by polling a fraction earlier than the
+    // upload response. In that case renderMessage() routes through the update
+    // path, which must also synchronize attachments such as voice players.
+    const article = document.querySelector(`[data-message-id="${message.id}"]`);
+    if (!article) {
+      // Do not advance the high-water mark when the DOM insert failed. The
+      // next poll then remains able to recover the just-sent message.
+      window.setTimeout(pollMessages, 0);
+      return false;
+    }
+
+    applyMessageUpdate(message);
+    window.SovietgramVoice?.hydrate?.(article);
     newestMessageId = Math.max(newestMessageId, Number(message.id) || 0);
+
     if (messageInput) {
       messageInput.value = "";
+      messageInput.dispatchEvent(new Event("input", { bubbles: true }));
       autoSizeInput();
     }
     clearReplyState();
     clearDraftState();
     focusMessageInput();
-    scrollToBottom(true);
+    requestAnimationFrame(() => scrollToBottom(true));
+    return true;
   },
+  syncNow: pollMessages,
   focusComposer: focusMessageInput,
   resizeComposer: autoSizeInput,
 };

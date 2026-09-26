@@ -726,9 +726,13 @@
       const message = await uploadVoice(blob, mime, durationMs, waveform);
       if (replyInput) replyInput.value = "";
       if (composerReply) composerReply.hidden = true;
-      window.SovietgramChat?.acceptSentMessage?.(message);
-      if (!window.SovietgramChat?.acceptSentMessage && typeof window.renderSovietgramChatMessage === "function") {
+      const inserted = window.SovietgramChat?.acceptSentMessage?.(message);
+      if (inserted === false) {
+        window.setTimeout(() => window.SovietgramChat?.syncNow?.(), 50);
+      } else if (!window.SovietgramChat?.acceptSentMessage && typeof window.renderSovietgramChatMessage === "function") {
         window.renderSovietgramChatMessage(message);
+        const article = document.querySelector(`[data-message-id="${message.id}"]`);
+        if (article) hydrateTree(article);
       }
     } catch (error) {
       notify(error.message || "Не удалось отправить голосовое сообщение.");
