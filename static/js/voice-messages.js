@@ -360,6 +360,162 @@
     node.querySelectorAll?.("[data-voice-player]").forEach(hydratePlayer);
   }
 
+  function buildVoicePlayerFallback(attachment, isOwn) {
+    const root = document.createElement("div");
+    root.className = "voice-message";
+    root.dataset.voicePlayer = "";
+    root.dataset.src = attachment.url || "";
+    root.dataset.markPlayedUrl = attachment.mark_played_url || "";
+    root.dataset.durationMs = String(Number(attachment.duration_ms) || 0);
+    root.dataset.waveform = Array.isArray(attachment.waveform)
+      ? attachment.waveform.join(",")
+      : "";
+    root.dataset.own = isOwn ? "true" : "false";
+    root.dataset.listened = attachment.listened ? "true" : "false";
+
+    const play = document.createElement("button");
+    play.type = "button";
+    play.className = "voice-message__play";
+    play.dataset.voicePlay = "";
+    play.setAttribute("aria-label", "Воспроизвести голосовое сообщение");
+    const glyph = document.createElement("span");
+    glyph.className = "voice-message__play-glyph";
+    glyph.setAttribute("aria-hidden", "true");
+    play.appendChild(glyph);
+
+    const body = document.createElement("div");
+    body.className = "voice-message__body";
+    const waveform = document.createElement("div");
+    waveform.className = "voice-message__waveform";
+    waveform.dataset.voiceWaveform = "";
+    waveform.tabIndex = 0;
+    waveform.setAttribute("role", "slider");
+    waveform.setAttribute("aria-label", "Позиция воспроизведения");
+    waveform.setAttribute("aria-valuemin", "0");
+    waveform.setAttribute("aria-valuemax", "100");
+    waveform.setAttribute("aria-valuenow", "0");
+
+    const meta = document.createElement("div");
+    meta.className = "voice-message__time";
+    const current = document.createElement("span");
+    current.dataset.voiceCurrent = "";
+    current.textContent = "0:00";
+    const duration = document.createElement("span");
+    duration.className = "voice-message__duration";
+    duration.dataset.voiceDuration = "";
+    duration.textContent = "0:00";
+    const unread = document.createElement("span");
+    unread.className = "voice-message__unread";
+    unread.dataset.voiceUnread = "";
+    unread.setAttribute("aria-label", "Не прослушано");
+    unread.hidden = Boolean(attachment.listened || isOwn);
+    meta.append(current, duration, unread);
+    body.append(waveform, meta);
+
+    const speed = document.createElement("button");
+    speed.type = "button";
+    speed.className = "voice-message__speed";
+    speed.dataset.voiceSettings = "";
+    speed.setAttribute("aria-label", "Настройки воспроизведения");
+    speed.textContent = speedLabel(voiceSpeed);
+
+    const audio = document.createElement("audio");
+    audio.dataset.voiceAudio = "";
+    audio.preload = "metadata";
+    audio.src = attachment.url || "";
+
+    root.append(play, body, speed, audio);
+    return root;
+  }
+
+  function insertVoiceMessageFallback(message) {
+    const flow = document.getElementById("messageFlow");
+    if (!flow || !message?.id) return false;
+
+    const selector = `[data-message-id="${message.id}"]`;
+    const existing = document.querySelector(selector);
+    if (existing) {
+      hydrateTree(existing);
+      return true;
+    }
+
+    const attachment = (message.attachments || []).find((item) => item.kind === "voice");
+    if (!attachment) return false;
+
+    const article = document.createElement("article");
+    article.id = `message-${message.id}`;
+    article.className = `message ${message.is_own ? "message--outgoing" : "message--incoming"}`;
+    article.dataset.messageId = String(message.id);
+    article.dataset.messageOwn = String(Boolean(message.is_own));
+    article.dataset.messageText = message.text || "";
+    article.dataset.messageKind = message.special?.type || "";
+    article.dataset.messageSender = message.sender_name || "";
+    article.dataset.messagePinned = String(Boolean(message.is_pinned));
+    article.dataset.editUrl = message.urls?.edit || "";
+    article.dataset.deleteUrl = message.urls?.delete || "";
+    article.dataset.forwardUrl = message.urls?.forward || "";
+    article.dataset.pinUrl = message.urls?.pin || "";
+
+    const media = document.createElement("div");
+    media.className = "message-media";
+    media.dataset.count = "1";
+    media.appendChild(buildVoicePlayerFallback(attachment, Boolean(message.is_own)));
+    article.appendChild(media);
+
+    const footer = document.createElement("footer");
+    const time = document.createElement("time");
+    time.textContent = message.time || "";
+    footer.appendChild(time);
+    if (message.is_own) {
+      const check = document.createElement("span");
+      check.className = "message-check";
+      check.textContent = message.is_read ? "✓✓" : "✓";
+      footer.appendChild(check);
+    }
+    article.appendChild(footer);
+
+    const actions = document.createElement("button");
+    actions.className = "message-action-trigger";
+    actions.type = "button";
+    actions.setAttribute("aria-label", "Действия с сообщением");
+    actions.textContent = "⋮";
+    article.appendChild(actions);
+
+    flow.appendChild(article);
+    hydrateTree(article);
+    requestAnimationFrame(() => {
+      const stage = document.getElementById("messageStage");
+      if (stage) stage.scrollTop = stage.scrollHeight;
+    });
+    return true;
+  }
+
+  function publishSentVoice(message) {
+    if (!message) return false;
+
+    try {
+      document.dispatchEvent(new CustomEvent("sovietgram:message-sent", {
+        detail: { message },
+      }));
+    } catch (_error) {
+      // A direct fallback below still renders the message.
+    }
+
+    let article = document.querySelector(`[data-message-id="${message.id}"]`);
+    if (!article && typeof window.renderSovietgramChatMessage === "function") {
+      try {
+        window.renderSovietgramChatMessage(message);
+      } catch (_error) {
+        // The dedicated fallback does not depend on chat.js completing.
+      }
+      article = document.querySelector(`[data-message-id="${message.id}"]`);
+    }
+
+    if (!article) return insertVoiceMessageFallback(message);
+    hydrateTree(article);
+    return true;
+  }
+
   const observer = new MutationObserver((records) => {
     records.forEach((record) => {
       record.addedNodes.forEach((node) => {
@@ -726,13 +882,9 @@
       const message = await uploadVoice(blob, mime, durationMs, waveform);
       if (replyInput) replyInput.value = "";
       if (composerReply) composerReply.hidden = true;
-      const inserted = window.SovietgramChat?.acceptSentMessage?.(message);
-      if (inserted === false) {
+      const inserted = publishSentVoice(message);
+      if (!inserted) {
         window.setTimeout(() => window.SovietgramChat?.syncNow?.(), 50);
-      } else if (!window.SovietgramChat?.acceptSentMessage && typeof window.renderSovietgramChatMessage === "function") {
-        window.renderSovietgramChatMessage(message);
-        const article = document.querySelector(`[data-message-id="${message.id}"]`);
-        if (article) hydrateTree(article);
       }
     } catch (error) {
       notify(error.message || "Не удалось отправить голосовое сообщение.");

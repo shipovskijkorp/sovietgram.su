@@ -545,6 +545,21 @@ function applyMessageUpdate(message) {
   if (check && message.is_own) check.textContent = message.is_read ? "✓✓" : "✓";
 }
 
+// Export the renderer immediately after it is defined. Voice/media uploads must
+// not depend on the rest of this large file reaching its final lines.
+window.renderSovietgramChatMessage = renderMessage;
+window.updateSovietgramChatMessage = applyMessageUpdate;
+document.addEventListener("sovietgram:message-sent", (event) => {
+  const message = event.detail?.message;
+  if (!message) return;
+  renderMessage(message);
+  const article = document.querySelector(`[data-message-id="${message.id}"]`);
+  if (article) {
+    window.SovietgramVoice?.hydrate?.(article);
+    requestAnimationFrame(() => scrollToBottom(true));
+  }
+});
+
 const contextMenu = document.getElementById("messageContextMenu");
 const pinLabel = document.getElementById("messagePinLabel");
 let contextArticle = null;
