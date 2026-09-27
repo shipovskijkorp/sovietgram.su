@@ -602,6 +602,52 @@ def _prepare_sidebar_chats(user, archived=False):
     return chats
 
 
+def _posting_capabilities(chat, membership, user):
+    can_text = True
+    can_media = True
+    can_voice = True
+    reason = ""
+
+    if membership.role not in {
+        ChatParticipant.Role.OWNER,
+        ChatParticipant.Role.ADMIN,
+    }:
+        if chat.type == Chat.Type.CHANNEL:
+            can_text = can_media = can_voice = False
+            reason = "Публиковать в канале могут только администраторы."
+        elif chat.type == Chat.Type.GROUP:
+            can_text = bool(chat.members_can_send_messages)
+            can_media = bool(chat.members_can_send_media)
+            can_voice = can_media
+            if not can_text and not can_media:
+                reason = "Администраторы запретили отправлять сообщения и медиа."
+
+    if (
+        chat.type == Chat.Type.PRIVATE
+        and chat.direct_key != f"self:{user.pk}"
+    ):
+        recipient = other_user_for_chat(chat, user)
+        if is_blocked_between(user, recipient):
+            can_text = can_media = can_voice = False
+            reason = "Диалог недоступен из-за блокировки."
+        elif not privacy_allows(recipient, user, "messages"):
+            can_text = can_media = can_voice = False
+            reason = "Пользователь ограничил входящие личные сообщения."
+        else:
+            can_voice = can_voice and privacy_allows(
+                recipient,
+                user,
+                "voice_messages",
+            )
+
+    return {
+        "text": can_text,
+        "media": can_media,
+        "voice": can_voice,
+        "reason": reason,
+    }
+
+
 def _forward_targets(user):
     targets = list(
         Chat.objects.filter(
@@ -609,13 +655,21 @@ def _forward_targets(user):
             memberships__user=user,
             memberships__is_hidden=False,
         )
-        .prefetch_related("participants")
+        .prefetch_related("participants", "memberships__user")
         .distinct()
         .order_by("-updated_at")[:60]
     )
+    visible = []
     for chat in targets:
         _decorate_chat_ui(chat, user)
-    return targets
+        membership = _membership(chat, user)
+        capabilities = _posting_capabilities(chat, membership, user)
+        chat.can_forward_text_ui = capabilities["text"]
+        chat.can_forward_media_ui = capabilities["media"]
+        chat.can_forward_voice_ui = capabilities["voice"]
+        if capabilities["text"] or capabilities["media"]:
+            visible.append(chat)
+    return visible
 
 
 def _account_slots_with_unread(request):
@@ -751,45 +805,21 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
         attachment.ui_url = attachment_url(attachment)
         shared_items.append(attachment)
 
-    can_post = not (
-        (
-            selected_chat.type == Chat.Type.CHANNEL
-            and membership.role not in {
-                ChatParticipant.Role.OWNER,
-                ChatParticipant.Role.ADMIN,
-            }
-        )
-        or (
-            selected_chat.type == Chat.Type.GROUP
-            and membership.role == ChatParticipant.Role.MEMBER
-            and not (
-                selected_chat.members_can_send_messages
-                or selected_chat.members_can_send_media
-            )
-        )
-    )
-    can_record_voice = can_post and not (
-        selected_chat.type == Chat.Type.GROUP
-        and membership.role == ChatParticipant.Role.MEMBER
-        and not selected_chat.members_can_send_media
-    )
-    if (
-        can_record_voice
-        and selected_chat.type == Chat.Type.PRIVATE
-        and selected_chat.direct_key != f"self:{user.pk}"
-    ):
-        recipient = other_user_for_chat(selected_chat, user)
-        can_record_voice = (
-            not is_blocked_between(user, recipient)
-            and privacy_allows(recipient, user, "messages")
-            and privacy_allows(recipient, user, "voice_messages")
-        )
+    capabilities = _posting_capabilities(selected_chat, membership, user)
+    can_send_text = capabilities["text"]
+    can_send_media = capabilities["media"]
+    can_record_voice = capabilities["media"] and capabilities["voice"]
+    can_post = can_send_text or can_send_media
 
     context.update(
         {
             "active_membership": membership,
             "can_post": can_post,
+            "can_send_text": can_send_text,
+            "can_send_media": can_send_media,
             "can_record_voice": can_record_voice,
+            "post_restriction_ui": capabilities["reason"],
+            "composer_draft_text": membership.draft_text if can_send_text else "",
             "other_last_read_id": other_last_read_id,
             "pinned_records": pins,
             "pinned_message_ids": pinned_ids,
@@ -2368,7 +2398,25 @@ def save_draft(request, chat_id):
 @rate_limit("typing")
 def typing(request, chat_id):
     chat = _chat_for_user(request.user, chat_id)
-    ChatParticipant.objects.filter(chat=chat, user=request.user).update(last_typing_at=timezone.now())
+    membership = _membership(chat, request.user)
+    capabilities = _posting_capabilities(chat, membership, request.user)
+    if not capabilities["text"]:
+        ChatParticipant.objects.filter(
+            chat=chat,
+            user=request.user,
+        ).update(last_typing_at=None)
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": capabilities["reason"] or "Отправка текста здесь недоступна.",
+            },
+            status=403,
+        )
+
+    ChatParticipant.objects.filter(
+        chat=chat,
+        user=request.user,
+    ).update(last_typing_at=timezone.now())
     return JsonResponse({"ok": True})
 
 
@@ -2598,12 +2646,20 @@ def poll_messages(request, chat_id):
 
     if chat.type == Chat.Type.PRIVATE:
         other_membership = _other_membership(chat, request.user)
-        other_typing = bool(
+        other_user = other_user_for_chat(chat, request.user)
+        other_can_type = bool(
             other_membership
+            and _posting_capabilities(
+                chat,
+                other_membership,
+                other_user,
+            )["text"]
+        )
+        other_typing = bool(
+            other_can_type
             and other_membership.last_typing_at
             and other_membership.last_typing_at >= now - timedelta(seconds=5)
         )
-        other_user = other_user_for_chat(chat, request.user)
         other_status = (
             "Личное облако"
             if chat.direct_key == f"self:{request.user.pk}"

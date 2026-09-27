@@ -1,4 +1,44 @@
 const AUTH_THEME_KEY = "sovietgram.theme";
+const CLIENT_TIMEZONE_COOKIE = "sovietgram_timezone";
+const TIMEZONE_RELOAD_KEY = "sovietgram.timezone-reload";
+
+function readCookie(name) {
+  const prefix = `${name}=`;
+  const item = document.cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(prefix));
+  if (!item) return "";
+  try {
+    return decodeURIComponent(item.slice(prefix.length));
+  } catch (_error) {
+    return item.slice(prefix.length);
+  }
+}
+
+function syncClientTimezone() {
+  let detected = "";
+  try {
+    detected = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  } catch (_error) {
+    return;
+  }
+  if (!detected || readCookie(CLIENT_TIMEZONE_COOKIE) === detected) return;
+
+  const secure = window.location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${CLIENT_TIMEZONE_COOKIE}=${encodeURIComponent(detected)}; Path=/; Max-Age=31536000; SameSite=Lax${secure}`;
+
+  try {
+    if (sessionStorage.getItem(TIMEZONE_RELOAD_KEY) !== detected) {
+      sessionStorage.setItem(TIMEZONE_RELOAD_KEY, detected);
+      window.location.reload();
+    }
+  } catch (_error) {
+    // Cookie still applies to the next navigation if sessionStorage is blocked.
+  }
+}
+
+syncClientTimezone();
 
 function applyClientTheme(theme, persist = true) {
   const next = theme === "dark" ? "dark" : "light";

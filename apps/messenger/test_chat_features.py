@@ -6,9 +6,11 @@ from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 from PIL import Image
 
-from apps.accounts.models import User
+from apps.accounts.models import User, UserBlock
+from apps.accounts.privacy import set_privacy_rule
 
 from .models import (
     Chat,
@@ -586,6 +588,119 @@ class ChatFeatureTests(TestCase):
         by_file = self.client.get(url, {"q": "report"}).json()["results"]
         self.assertEqual(by_text[0]["id"], text_message.pk)
         self.assertEqual(by_file[0]["id"], file_message.pk)
+
+    def test_private_composer_is_read_only_when_peer_rejects_messages(self):
+        set_privacy_rule(self.bob, "messages", "nobody")
+
+        response = self.client.get(reverse("messenger:chat", args=[self.chat.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'id="messageForm"', html=False)
+        self.assertContains(response, "Пользователь ограничил входящие личные сообщения.")
+
+    def test_typing_respects_private_message_privacy(self):
+        set_privacy_rule(self.bob, "messages", "nobody")
+
+        response = self.client.post(
+            reverse("messenger:typing", args=[self.chat.pk]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        membership = ChatParticipant.objects.get(chat=self.chat, user=self.alice)
+        self.assertIsNone(membership.last_typing_at)
+
+    def test_poll_hides_typing_from_blocked_peer(self):
+        peer_membership = ChatParticipant.objects.get(chat=self.chat, user=self.bob)
+        peer_membership.last_typing_at = timezone.now()
+        peer_membership.save(update_fields=["last_typing_at"])
+        UserBlock.objects.create(blocker=self.alice, blocked=self.bob)
+
+        response = self.client.get(
+            reverse("messenger:poll_messages", args=[self.chat.pk]),
+            {"after": 0},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["other_typing"])
+
+    def test_forward_targets_exclude_read_only_channel_and_expose_group_capabilities(self):
+        channel = Chat.objects.create(
+            type=Chat.Type.CHANNEL,
+            title="Readonly channel",
+            username="readonly_channel",
+        )
+        ChatParticipant.objects.create(
+            chat=channel,
+            user=self.bob,
+            role=ChatParticipant.Role.OWNER,
+        )
+        ChatParticipant.objects.create(
+            chat=channel,
+            user=self.alice,
+            role=ChatParticipant.Role.MEMBER,
+        )
+
+        group = Chat.objects.create(
+            type=Chat.Type.GROUP,
+            title="Media only",
+            members_can_send_messages=False,
+            members_can_send_media=True,
+        )
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.bob,
+            role=ChatParticipant.Role.OWNER,
+        )
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.alice,
+            role=ChatParticipant.Role.MEMBER,
+        )
+
+        response = self.client.get(reverse("messenger:chat", args=[self.chat.pk]))
+        body = response.content.decode("utf-8")
+        self.assertNotIn(f'data-forward-target="{channel.pk}"', body)
+        self.assertIn(f'data-forward-target="{group.pk}"', body)
+        self.assertIn('data-forward-can-text="false"', body)
+        self.assertIn('data-forward-can-media="true"', body)
+
+    def test_forwarded_identity_has_profile_link_only_when_allowed(self):
+        source = Message.objects.create(
+            chat=self.chat,
+            sender=self.bob,
+            text="Источник",
+        )
+        target = get_or_create_direct_chat(self.alice, self.charlie)
+
+        allowed = self.client.post(
+            reverse("messenger:forward_message", args=[self.chat.pk, source.pk]),
+            {"target_chat_id": target.pk},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(allowed.status_code, 200)
+        forwarded = allowed.json()["message"]["forwarded"]
+        self.assertEqual(forwarded["username"], self.bob.username)
+        self.assertEqual(
+            forwarded["profile_url"],
+            reverse("accounts:public_profile", args=[self.bob.username]),
+        )
+
+        set_privacy_rule(self.bob, "forwards", "nobody")
+        source2 = Message.objects.create(
+            chat=self.chat,
+            sender=self.bob,
+            text="Скрытый источник",
+        )
+        hidden = self.client.post(
+            reverse("messenger:forward_message", args=[self.chat.pk, source2.pk]),
+            {"target_chat_id": target.pk},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(hidden.status_code, 200)
+        forwarded_hidden = hidden.json()["message"]["forwarded"]
+        self.assertEqual(forwarded_hidden["username"], "")
+        self.assertEqual(forwarded_hidden["profile_url"], "")
 
     @override_settings(
         SOVIETGRAM_RATE_LIMITS={
@@ -1254,7 +1369,18 @@ class ChatFeatureTests(TestCase):
         self.assertTrue(invite.is_active)
 
         self.client.force_login(self.charlie)
-        joined = self.client.get(
+        preview = self.client.get(
+            reverse("messenger:join_invite", args=[invite.token])
+        )
+        self.assertEqual(preview.status_code, 200)
+        self.assertContains(preview, "Группа по ссылке")
+        self.assertFalse(
+            ChatParticipant.objects.filter(chat=group, user=self.charlie).exists()
+        )
+        invite.refresh_from_db()
+        self.assertEqual(invite.usage_count, 0)
+
+        joined = self.client.post(
             reverse("messenger:join_invite", args=[invite.token])
         )
         self.assertRedirects(

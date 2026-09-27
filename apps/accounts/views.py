@@ -151,6 +151,10 @@ class SovietgramPasswordChangeView(LoginRequiredMixin, PasswordChangeView):
     def form_valid(self, form):
         user = form.save()
         update_session_auth_hash(self.request, user)
+        # Password changes rotate the Django auth hash. Refresh the saved
+        # multi-account slot in the same request so switching away and back
+        # never invalidates the freshly changed account.
+        remember_current_account(self.request)
         if self.request.headers.get("x-requested-with") == "XMLHttpRequest":
             return JsonResponse({"ok": True})
         messages.success(self.request, "Пароль изменён.")

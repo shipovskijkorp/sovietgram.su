@@ -124,6 +124,43 @@ class MultiAccountTests(TestCase):
         self.assertContains(response, "Добавить аккаунт")
 
 
+    def test_password_change_refreshes_multiaccount_session_hash(self):
+        self.client.post(
+            reverse("accounts:add_account"),
+            {
+                "username": self.second.username,
+                "password": self.password,
+            },
+        )
+        self.client.post(
+            reverse("accounts:switch_account", args=[self.first.pk])
+        )
+
+        changed_password = "Sovietgram-test-1946"
+        changed = self.client.post(
+            reverse("accounts:password_change"),
+            {
+                "old_password": self.password,
+                "new_password1": changed_password,
+                "new_password2": changed_password,
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(changed.status_code, 200)
+        self.assertTrue(changed.json()["ok"])
+
+        switched_away = self.client.post(
+            reverse("accounts:switch_account", args=[self.second.pk])
+        )
+        self.assertRedirects(switched_away, reverse("messenger:home"))
+        self.assertEqual(int(self.client.session[SESSION_KEY]), self.second.pk)
+
+        switched_back = self.client.post(
+            reverse("accounts:switch_account", args=[self.first.pk])
+        )
+        self.assertRedirects(switched_back, reverse("messenger:home"))
+        self.assertEqual(int(self.client.session[SESSION_KEY]), self.first.pk)
+
     def test_add_account_can_register_new_account(self):
         response = self.client.post(
             reverse("accounts:add_account"),

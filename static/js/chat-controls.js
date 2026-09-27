@@ -260,15 +260,42 @@
     editArticle = null;
   }
 
+  function forwardRequirements(articles) {
+    const list = (articles || []).filter(Boolean);
+    return {
+      text: list.some((article) => (
+        Boolean((article.dataset.messageText || "").trim())
+        || Boolean(article.dataset.messageKind)
+      )),
+      media: list.some((article) => Boolean(article.querySelector(".message-media"))),
+      voice: list.some((article) => Boolean(article.querySelector("[data-voice-player]"))),
+    };
+  }
+
+  function targetSupportsForward(target, requirements) {
+    if (!target || target.dataset.forwardTarget === "saved") return true;
+    if (requirements.text && target.dataset.forwardCanText === "false") return false;
+    if (requirements.media && target.dataset.forwardCanMedia === "false") return false;
+    if (requirements.voice && target.dataset.forwardCanVoice === "false") return false;
+    return true;
+  }
+
+  function syncForwardTargets() {
+    const requirements = forwardRequirements(forwardArticles);
+    const query = forwardSearch?.value.trim().toLowerCase() || "";
+    document.querySelectorAll("[data-forward-target]").forEach((target) => {
+      const matchesSearch = !query || (target.dataset.forwardSearch || "").includes(query);
+      target.hidden = !matchesSearch || !targetSupportsForward(target, requirements);
+    });
+  }
+
   function openForwardModal(articles) {
     if (!forwardModal || !articles?.length) return;
     forwardArticles = articles.filter(Boolean);
     forwardModal.hidden = false;
     if (forwardSearch) {
       forwardSearch.value = "";
-      document.querySelectorAll("[data-forward-target]").forEach((target) => {
-        target.hidden = false;
-      });
+      syncForwardTargets();
       window.setTimeout(() => forwardSearch.focus(), 0);
     }
   }
@@ -809,13 +836,7 @@
 
   searchInput?.addEventListener("input", scheduleSearch);
 
-  forwardSearch?.addEventListener("input", () => {
-    if (!forwardArticles.length) return;
-    const query = forwardSearch.value.trim().toLowerCase();
-    document.querySelectorAll("[data-forward-target]").forEach((target) => {
-      target.hidden = Boolean(query) && !(target.dataset.forwardSearch || "").includes(query);
-    });
-  });
+  forwardSearch?.addEventListener("input", syncForwardTargets);
 
   editText?.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter" && editArticle) {

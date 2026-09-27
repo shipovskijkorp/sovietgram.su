@@ -127,8 +127,8 @@
           data-chat-title="{{ selected_chat.display_name_ui|escape }}"
           data-chat-peer-name="{% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}{{ selected_chat.other_user.display_name|escape }}{% else %}{{ selected_chat.display_name_ui|escape }}{% endif %}"
           data-channel-signatures="{{ selected_chat.signatures_enabled|yesno:'true,false' }}"
-          data-can-send-text="{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_messages %}false{% else %}true{% endif %}"
-          data-can-send-media="{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_media %}false{% else %}true{% endif %}"
+          data-can-send-text="{{ can_send_text|yesno:'true,false' }}"
+          data-can-send-media="{{ can_send_media|yesno:'true,false' }}"
           data-can-record-voice="{{ can_record_voice|yesno:'true,false' }}">
       <header class="conversation-header">
         <a class="icon-button mobile-back" href="{% if show_archived %}{% url 'messenger:home' %}?archived=1{% else %}{% url 'messenger:home' %}{% endif %}" aria-label="Назад"><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span></a>
@@ -295,7 +295,13 @@
               {% if message.forwarded_from_name %}
                 <div class="message-forwarded">
                   <span>Переслано от</span>
-                  <strong>{{ message.forwarded_from_name }}{% if message.forwarded_from_username %} · @{{ message.forwarded_from_username }}{% endif %}</strong>
+                  {% if message.forwarded_from_username %}
+                    <a href="{% url 'accounts:public_profile' message.forwarded_from_username %}" data-user-profile>
+                      <strong>{{ message.forwarded_from_name }} · @{{ message.forwarded_from_username }}</strong>
+                    </a>
+                  {% else %}
+                    <strong>{{ message.forwarded_from_name }}</strong>
+                  {% endif %}
                 </div>
               {% endif %}
 
@@ -477,12 +483,12 @@
             <span class="tg-native-icon tg-native-icon--send" aria-hidden="true"></span>
           </button>
         </div>
-        <div class="attachment-control" id="attachmentControl"{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_media and not selected_chat.members_can_send_messages %} hidden{% endif %}>
+        <div class="attachment-control" id="attachmentControl"{% if not can_send_media and not can_send_text %} hidden{% endif %}>
           <button class="composer__attach composer__attach-button" id="attachmentButton" type="button" aria-label="Прикрепить" aria-expanded="false" aria-controls="attachmentMenu" title="Прикрепить">
             <span class="tg-native-icon tg-native-icon--attach" aria-hidden="true"></span>
           </button>
           <div class="attachment-menu" id="attachmentMenu" role="menu" hidden>
-            {% if selected_chat.type != 'group' or active_membership.role != 'member' or selected_chat.members_can_send_media %}
+            {% if can_send_media %}
             <button type="button" role="menuitem" data-attachment-mode="media">
               <span class="tg-native-icon tg-native-icon--attach-photo" aria-hidden="true"></span>
               <span>Фото или видео</span>
@@ -492,7 +498,7 @@
               <span>Файл</span>
             </button>
             {% endif %}
-            {% if selected_chat.type != 'group' or active_membership.role != 'member' or selected_chat.members_can_send_messages %}
+            {% if can_send_text %}
             <button type="button" role="menuitem" data-attach-special="poll">
               <span class="tg-native-icon tg-native-icon--attach-poll" aria-hidden="true"></span>
               <span>Опрос</span>
@@ -510,7 +516,7 @@
               <span>Геопозиция</span>
             </button>
             {% endif %}
-            {% if selected_chat.type != 'group' or active_membership.role != 'member' or selected_chat.members_can_send_media %}
+            {% if can_send_media %}
             <button type="button" role="menuitem" data-attachment-mode="audio">
               <span class="tg-native-icon tg-native-icon--attach-music" aria-hidden="true"></span>
               <span>Музыка</span>
@@ -523,15 +529,15 @@
         <input id="audioAttachmentsInput" class="visually-hidden" type="file" name="attachments" multiple accept="audio/mpeg,audio/mp4,audio/aac,audio/ogg,audio/wav,audio/x-wav,audio/flac,audio/x-flac,audio/opus,.mp3,.m4a,.aac,.ogg,.oga,.wav,.flac,.opus">
         <input id="attachmentModeInput" type="hidden" name="attachment_mode" value="media">
         <div class="composer__field">
-          <textarea id="messageInput" name="text" rows="1" maxlength="4096" placeholder="{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_messages %}Можно отправлять только медиа{% else %}Сообщение{% endif %}" autocomplete="off"{% if selected_chat.type == 'group' and active_membership.role == 'member' and not selected_chat.members_can_send_messages %} readonly{% endif %}>{{ active_membership.draft_text }}</textarea>
+          <textarea id="messageInput" name="text" rows="1" maxlength="4096" placeholder="{% if not can_send_text and can_send_media %}Можно отправлять только медиа{% else %}Сообщение{% endif %}" autocomplete="off"{% if not can_send_text %} readonly{% endif %}>{{ composer_draft_text }}</textarea>
         </div>
-        <button class="send-button composer-action-button{% if can_record_voice and not active_membership.draft_text %} is-voice-mode{% endif %}"
+        <button class="send-button composer-action-button{% if can_record_voice and not composer_draft_text %} is-voice-mode{% endif %}"
                 id="sendButton"
                 type="submit"
                 data-can-record-voice="{{ can_record_voice|yesno:'true,false' }}"
-                data-composer-action="{% if can_record_voice and not active_membership.draft_text %}voice{% else %}send{% endif %}"
-                aria-label="{% if can_record_voice and not active_membership.draft_text %}Записать голосовое сообщение{% else %}Отправить{% endif %}"
-                title="{% if can_record_voice and not active_membership.draft_text %}Удерживайте для записи{% else %}Отправить{% endif %}">
+                data-composer-action="{% if can_record_voice and not composer_draft_text %}voice{% else %}send{% endif %}"
+                aria-label="{% if can_record_voice and not composer_draft_text %}Записать голосовое сообщение{% else %}Отправить{% endif %}"
+                title="{% if can_record_voice and not composer_draft_text %}Удерживайте для записи{% else %}Отправить{% endif %}">
           <span class="composer-action-button__send tg-native-icon tg-native-icon--send" aria-hidden="true"></span>
           <svg class="composer-action-button__voice" viewBox="0 0 24 24" aria-hidden="true">
             <rect x="9" y="3" width="6" height="11" rx="3"></rect>
@@ -540,7 +546,7 @@
         </button>
       </form>
       {% else %}
-      <div class="channel-readonly"><span>☭</span><strong>Только чтение</strong><small>{% if selected_chat.type == 'channel' %}Публиковать здесь могут владелец и администраторы канала.{% else %}Администраторы запретили обычным участникам отправлять сообщения и медиа.{% endif %}</small></div>
+      <div class="channel-readonly"><span>☭</span><strong>Только чтение</strong><small>{% if post_restriction_ui %}{{ post_restriction_ui }}{% elif selected_chat.type == 'channel' %}Публиковать здесь могут владелец и администраторы канала.{% else %}Отправка сообщений в этот чат недоступна.{% endif %}</small></div>
       {% endif %}
 
       <div class="chat-drop-overlay" id="chatDropOverlay" hidden aria-hidden="true">
@@ -777,7 +783,13 @@
       </button>
       {% for target in forward_targets %}
         {% if not target.is_saved_ui %}
-          <button class="forward-target" type="button" data-forward-target="{{ target.pk }}" data-forward-search="{{ target.search_text_ui }}">
+          <button class="forward-target"
+                  type="button"
+                  data-forward-target="{{ target.pk }}"
+                  data-forward-search="{{ target.search_text_ui }}"
+                  data-forward-can-text="{{ target.can_forward_text_ui|yesno:'true,false' }}"
+                  data-forward-can-media="{{ target.can_forward_media_ui|yesno:'true,false' }}"
+                  data-forward-can-voice="{{ target.can_forward_voice_ui|yesno:'true,false' }}">
             {% if target.type == 'private' and target.other_user_avatar_url_ui %}<img class="forward-target__avatar" src="{{ target.other_user_avatar_url_ui }}" alt="">{% else %}<span class="forward-target__avatar forward-target__avatar--fallback">{{ target.avatar_text_ui }}</span>{% endif %}
             <span><strong>{{ target.display_name_ui }}</strong><small>{% if target.username_ui %}@{{ target.username_ui }}{% else %}{{ target.status_ui }}{% endif %}</small></span>
           </button>

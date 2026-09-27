@@ -8,7 +8,7 @@ from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Q
 from django.http import JsonResponse
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
@@ -632,8 +632,32 @@ def community_invite_action(request, chat_id):
 
 
 @login_required
-@require_GET
+@require_http_methods(["GET", "POST"])
 def join_invite(request, token):
+    if request.method == "GET":
+        invite = (
+            ChatInviteLink.objects.select_related("chat")
+            .filter(token=token)
+            .first()
+        )
+        if invite is None or not invite.is_active:
+            messages.error(request, "Ссылка-приглашение недействительна или устарела.")
+            return redirect("messenger:home")
+
+        chat = invite.chat
+        if ChatParticipant.objects.filter(chat=chat, user=request.user).exists():
+            return redirect("messenger:chat", chat_id=chat.pk)
+
+        return render(
+            request,
+            "messenger/join_invite.html",
+            {
+                "invite": invite,
+                "chat": chat,
+                "member_count": chat.memberships.count(),
+            },
+        )
+
     with transaction.atomic():
         invite = (
             ChatInviteLink.objects.select_for_update()

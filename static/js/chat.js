@@ -363,7 +363,16 @@ function makeForwardedBlock(forwarded) {
   label.textContent = "Переслано от";
   const name = document.createElement("strong");
   name.textContent = forwarded.username ? `${forwarded.name} · @${forwarded.username}` : forwarded.name;
-  block.append(label, name);
+
+  if (forwarded.username && forwarded.profile_url) {
+    const link = document.createElement("a");
+    link.href = forwarded.profile_url;
+    link.dataset.userProfile = "";
+    link.appendChild(name);
+    block.append(label, link);
+  } else {
+    block.append(label, name);
+  }
   return block;
 }
 
@@ -672,14 +681,44 @@ const forwardModal = document.getElementById("forwardMessageModal");
 const forwardSearch = document.getElementById("forwardTargetSearch");
 const forwardTargets = [...document.querySelectorAll("[data-forward-target]")];
 let forwardArticle = null;
+let forwardRequirements = { text: false, media: false, voice: false };
+
+function getForwardRequirements(articles) {
+  const list = (Array.isArray(articles) ? articles : [articles]).filter(Boolean);
+  return {
+    text: list.some((article) => (
+      Boolean((article.dataset.messageText || "").trim())
+      || Boolean(article.dataset.messageKind)
+    )),
+    media: list.some((article) => Boolean(article.querySelector(".message-media"))),
+    voice: list.some((article) => Boolean(article.querySelector("[data-voice-player]"))),
+  };
+}
+
+function targetSupportsForward(target, requirements) {
+  if (!target || target.dataset.forwardTarget === "saved") return true;
+  if (requirements.text && target.dataset.forwardCanText === "false") return false;
+  if (requirements.media && target.dataset.forwardCanMedia === "false") return false;
+  if (requirements.voice && target.dataset.forwardCanVoice === "false") return false;
+  return true;
+}
+
+function syncForwardTargets() {
+  const query = forwardSearch?.value.trim().toLowerCase() || "";
+  forwardTargets.forEach((target) => {
+    const matchesSearch = !query || (target.dataset.forwardSearch || "").includes(query);
+    target.hidden = !matchesSearch || !targetSupportsForward(target, forwardRequirements);
+  });
+}
 
 function openForwardModal(article) {
   if (!forwardModal || !article) return;
   forwardArticle = article;
+  forwardRequirements = getForwardRequirements(article);
   forwardModal.hidden = false;
   if (forwardSearch) {
     forwardSearch.value = "";
-    forwardTargets.forEach((target) => { target.hidden = false; });
+    syncForwardTargets();
     window.setTimeout(() => forwardSearch.focus(), 0);
   }
 }
@@ -687,16 +726,12 @@ function openForwardModal(article) {
 function closeForwardModal() {
   if (forwardModal) forwardModal.hidden = true;
   forwardArticle = null;
+  forwardRequirements = { text: false, media: false, voice: false };
 }
 
 document.querySelectorAll("[data-close-forward]").forEach((button) => button.addEventListener("click", closeForwardModal));
 forwardModal?.addEventListener("click", (event) => { if (event.target === forwardModal) closeForwardModal(); });
-forwardSearch?.addEventListener("input", () => {
-  const query = forwardSearch.value.trim().toLowerCase();
-  forwardTargets.forEach((target) => {
-    target.hidden = Boolean(query) && !(target.dataset.forwardSearch || "").includes(query);
-  });
-});
+forwardSearch?.addEventListener("input", syncForwardTargets);
 forwardTargets.forEach((target) => {
   target.addEventListener("click", async () => {
     if (!forwardArticle?.dataset.forwardUrl) return;

@@ -175,6 +175,30 @@ class PrivacySettingsTests(TestCase):
         self.assertEqual(purge_expired_messages(), 1)
         self.assertFalse(Message.objects.filter(pk=message.pk).exists())
 
+    def test_unimplemented_calls_rule_is_not_exposed_as_working_setting(self):
+        self.client.force_login(self.alice)
+
+        state = self.client.get(
+            reverse("accounts:settings"),
+            {"action": "privacy_state"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(state.status_code, 200)
+        self.assertNotIn("calls", state.json()["rules"])
+
+        update = self.client.post(
+            reverse("accounts:settings"),
+            {
+                "action": "privacy_rule",
+                "key": "calls",
+                "option": "nobody",
+                "always": "[]",
+                "never": "[]",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(update.status_code, 400)
+
     def test_inactivity_and_auto_delete_settings_are_saved(self):
         self.client.force_login(self.alice)
         inactivity = self.client.post(

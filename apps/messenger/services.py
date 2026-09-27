@@ -422,6 +422,14 @@ def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=No
         "forwarded": {
             "name": message.forwarded_from_name,
             "username": message.forwarded_from_username,
+            "profile_url": (
+                reverse(
+                    "accounts:public_profile",
+                    args=[message.forwarded_from_username],
+                )
+                if message.forwarded_from_username
+                else ""
+            ),
         } if message.forwarded_from_name else None,
         "signature_name": message.signature_name,
         "special": (

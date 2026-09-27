@@ -37,6 +37,10 @@ PRIVACY_RULES = {
         "title": "Звонки",
         "question": "Кто может мне звонить?",
         "default": "everyone",
+        # Calls are not implemented yet. Keep the rule schema for forward
+        # compatibility, but do not expose a setting that cannot affect
+        # anything in the current product.
+        "available": False,
     },
     "voice_messages": {
         "title": "Голосовые сообщения",
@@ -116,8 +120,8 @@ def get_privacy_rule(user, key):
 
 
 def set_privacy_rule(user, key, option, always=None, never=None):
-    if key not in PRIVACY_RULES:
-        raise ValueError("Неизвестная настройка конфиденциальности.")
+    if key not in PRIVACY_RULES or not PRIVACY_RULES[key].get("available", True):
+        raise ValueError("Эта настройка конфиденциальности сейчас недоступна.")
     if option not in PRIVACY_OPTION_LABELS:
         raise ValueError("Неизвестный вариант конфиденциальности.")
 
@@ -196,6 +200,8 @@ def privacy_rule_payload(user):
     ids = set()
     raw_rules = {}
     for key, meta in PRIVACY_RULES.items():
+        if not meta.get("available", True):
+            continue
         rule = get_privacy_rule(user, key)
         raw_rules[key] = rule
         ids.update(rule["always"])
@@ -209,6 +215,8 @@ def privacy_rule_payload(user):
 
     payload = {}
     for key, meta in PRIVACY_RULES.items():
+        if not meta.get("available", True):
+            continue
         rule = raw_rules[key]
 
         def person_payload(pk):
