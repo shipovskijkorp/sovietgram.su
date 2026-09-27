@@ -70,6 +70,8 @@
   let activeExceptionKind = "";
   let privacySearchTimer = 0;
   let blockSearchTimer = 0;
+  let privacySearchController = null;
+  let blockSearchController = null;
 
   const privacyQuestion = document.getElementById("privacyRuleQuestion");
   const privacyAlwaysCount = document.getElementById("privacyAlwaysCount");
@@ -95,17 +97,38 @@
     return new URL(window.location.href);
   }
 
+  function applySettingsContextToUrl(url, screen) {
+    url.searchParams.delete("privacy");
+    url.searchParams.delete("exception");
+    if (
+      (screen === "privacy-rule" || screen === "privacy-exceptions")
+      && privacyRules[activePrivacyKey]
+    ) {
+      url.searchParams.set("privacy", activePrivacyKey);
+    }
+    if (
+      screen === "privacy-exceptions"
+      && (activeExceptionKind === "always" || activeExceptionKind === "never")
+    ) {
+      url.searchParams.set("exception", activeExceptionKind);
+    }
+  }
+
   function setUrlScreen(screen, mode = "push") {
+    const normalized = normalizeScreen(screen);
     const url = currentUrl();
-    url.searchParams.set("settings", normalizeScreen(screen));
+    url.searchParams.set("settings", normalized);
+    applySettingsContextToUrl(url, normalized);
     url.hash = "";
     const method = mode === "replace" ? "replaceState" : "pushState";
-    window.history[method]({ settingsScreen: screen }, "", url);
+    window.history[method]({ settingsScreen: normalized }, "", url);
   }
 
   function clearUrlScreen(mode = "push") {
     const url = currentUrl();
     url.searchParams.delete("settings");
+    url.searchParams.delete("privacy");
+    url.searchParams.delete("exception");
     if (url.hash === "#archiveSettings" || url.hash === "#newChatsSettings") url.hash = "";
     const method = mode === "replace" ? "replaceState" : "pushState";
     window.history[method]({}, "", url);
@@ -172,6 +195,14 @@
 
   function renderScreen(value) {
     const next = normalizeScreen(value);
+    if (next !== "privacy-exceptions") {
+      privacySearchController?.abort();
+      privacySearchController = null;
+    }
+    if (next !== "blocked") {
+      blockSearchController?.abort();
+      blockSearchController = null;
+    }
     currentScreen = next;
     screens.forEach((screen) => {
       screen.hidden = screen.dataset.settingsScreen !== next;
@@ -204,6 +235,58 @@
     document.body.classList.remove("settings-open");
     if (options.history === "replace") clearUrlScreen("replace");
     if (options.history === "push") clearUrlScreen("push");
+  }
+
+  function openSettingsFromUrl() {
+    const url = currentUrl();
+    const hashScreen = hashAliases[url.hash.replace(/^#/, "")] || "";
+    const requested = url.searchParams.get("settings") || hashScreen;
+    if (!requested) {
+      closeSettings();
+      return;
+    }
+
+    let next = normalizeScreen(requested);
+    if (next === "privacy-rule" || next === "privacy-exceptions") {
+      const key = url.searchParams.get("privacy") || "";
+      if (!privacyRules[key]) {
+        activePrivacyKey = "";
+        activeExceptionKind = "";
+        openSettings("privacy", { history: "replace" });
+        return;
+      }
+      activePrivacyKey = key;
+    }
+
+    if (next === "privacy-exceptions") {
+      const kind = url.searchParams.get("exception") || "";
+      if (kind !== "always" && kind !== "never") {
+        activeExceptionKind = "";
+        openSettings("privacy-rule", { history: "replace" });
+        updatePrivacyEditor();
+        return;
+      }
+      activeExceptionKind = kind;
+    }
+
+    openSettings(next, {
+      history: hashScreen && !url.searchParams.get("settings") ? "replace" : undefined,
+    });
+
+    if (next === "privacy-rule" || next === "privacy-exceptions") {
+      updatePrivacyEditor();
+    }
+    if (next === "privacy-exceptions") {
+      if (privacyExceptionTitle) {
+        privacyExceptionTitle.textContent = activeExceptionKind === "always"
+          ? "Всегда разрешать"
+          : "Никогда не разрешать";
+      }
+      if (privacyExceptionSearch) privacyExceptionSearch.value = "";
+      privacyExceptionResults?.replaceChildren();
+      if (privacyExceptionEmpty) privacyExceptionEmpty.hidden = false;
+      renderExceptionSelected();
+    }
   }
 
   function previewTheme(theme) {
@@ -398,19 +481,33 @@
     };
   }
 
-  async function searchPeople(query) {
+  async function searchPeople(query, signal) {
     if (!searchEndpoint || !query.trim()) return [];
     const url = new URL(searchEndpoint, window.location.origin);
     url.searchParams.set("q", query.trim());
-    const response = await fetch(url, { credentials: "same-origin" });
+    const response = await fetch(url, {
+      credentials: "same-origin",
+      signal,
+    });
     if (!response.ok) return [];
     const payload = await response.json().catch(() => ({}));
     return (payload.people || []).map(personFromSearch);
   }
 
-  async function renderExceptionSearch(query) {
+  async function renderExceptionSearch(query, signal) {
     if (!privacyExceptionResults) return;
-    const people = await searchPeople(query);
+    let people;
+    try {
+      people = await searchPeople(query, signal);
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      throw error;
+    }
+    if (
+      signal?.aborted
+      || privacyExceptionSearch?.value.trim() !== query.trim()
+      || currentScreen !== "privacy-exceptions"
+    ) return;
     privacyExceptionResults.replaceChildren();
     const selectedIds = new Set(exceptionSelected().map((item) => item.id));
     const otherKind = activeExceptionKind === "always" ? "never" : "always";
@@ -471,9 +568,20 @@
     if (count) count.textContent = blockedUsers.length ? String(blockedUsers.length) : "Нет";
   }
 
-  async function renderBlockedSearch(query) {
+  async function renderBlockedSearch(query, signal) {
     if (!blockedSearchResults) return;
-    const people = await searchPeople(query);
+    let people;
+    try {
+      people = await searchPeople(query, signal);
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      throw error;
+    }
+    if (
+      signal?.aborted
+      || blockedUserSearch?.value.trim() !== query.trim()
+      || currentScreen !== "blocked"
+    ) return;
     const blockedIds = new Set(blockedUsers.map((item) => item.id));
     blockedSearchResults.replaceChildren();
     people.forEach((person) => {
@@ -601,8 +709,8 @@
     control.addEventListener("click", () => {
       activePrivacyKey = control.dataset.privacyOpen || "";
       if (!privacyRules[activePrivacyKey]) return;
-      updatePrivacyEditor();
       renderScreen("privacy-rule");
+      updatePrivacyEditor();
       setUrlScreen("privacy-rule", "push");
     });
   });
@@ -621,23 +729,33 @@
 
   privacyExceptionSearch?.addEventListener("input", () => {
     window.clearTimeout(privacySearchTimer);
+    privacySearchController?.abort();
+    privacySearchController = null;
     const query = privacyExceptionSearch.value;
     if (!query.trim()) {
       privacyExceptionResults?.replaceChildren();
       if (privacyExceptionEmpty) privacyExceptionEmpty.hidden = false;
       return;
     }
-    privacySearchTimer = window.setTimeout(() => renderExceptionSearch(query), 220);
+    privacySearchTimer = window.setTimeout(() => {
+      privacySearchController = new AbortController();
+      renderExceptionSearch(query, privacySearchController.signal).catch(() => {});
+    }, 220);
   });
 
   blockedUserSearch?.addEventListener("input", () => {
     window.clearTimeout(blockSearchTimer);
+    blockSearchController?.abort();
+    blockSearchController = null;
     const query = blockedUserSearch.value;
     if (!query.trim()) {
       blockedSearchResults?.replaceChildren();
       return;
     }
-    blockSearchTimer = window.setTimeout(() => renderBlockedSearch(query), 220);
+    blockSearchTimer = window.setTimeout(() => {
+      blockSearchController = new AbortController();
+      renderBlockedSearch(query, blockSearchController.signal).catch(() => {});
+    }, 220);
   });
 
   terminateOtherSessions?.addEventListener("click", async () => {
@@ -682,12 +800,7 @@
 
   passwordForm?.addEventListener("submit", submitPassword);
 
-  window.addEventListener("popstate", () => {
-    const url = currentUrl();
-    const requested = url.searchParams.get("settings");
-    if (requested) openSettings(requested);
-    else closeSettings();
-  });
+  window.addEventListener("popstate", openSettingsFromUrl);
 
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape" || root.hidden) return;
@@ -717,5 +830,5 @@
 
   const url = currentUrl();
   const requested = root.dataset.autoOpen || url.searchParams.get("settings");
-  if (requested) openSettings(requested);
+  if (requested) openSettingsFromUrl();
 })();

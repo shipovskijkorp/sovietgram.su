@@ -14,6 +14,7 @@ from django.db.models import (
     Count,
     F,
     OuterRef,
+    Prefetch,
     Q,
     Subquery,
     TextField,
@@ -213,6 +214,11 @@ def _chat_for_user(user, chat_id):
 
 
 def _membership(chat, user):
+    viewer_memberships = getattr(chat, "_viewer_memberships", None)
+    if viewer_memberships is not None:
+        for membership in viewer_memberships:
+            if membership.user_id == user.pk:
+                return membership
     for membership in chat.memberships.all():
         if membership.user_id == user.pk:
             return membership
@@ -294,7 +300,9 @@ def _decorate_chat_ui(chat, user):
         chat.username_ui = chat.username or ""
         chat.avatar_text_ui = "К" if chat.type == Chat.Type.CHANNEL else "Г"
         chat.search_text_ui = f"{chat.display_name_ui} {chat.username_ui}".lower()
-        members_count = chat.memberships.count()
+        members_count = getattr(chat, "member_count_ui", None)
+        if members_count is None:
+            members_count = chat.memberships.count()
         if chat.type == Chat.Type.CHANNEL:
             chat.status_ui = f"канал · {members_count} подписчик(ов)"
         else:
@@ -488,8 +496,46 @@ def _serialize_visible_pins(chat, user):
 
 
 def _prepare_sidebar_chats(user, archived=False):
-    last_message = Message.objects.filter(chat=OuterRef("pk"), is_deleted=False).order_by("-id")
     membership = ChatParticipant.objects.filter(chat=OuterRef("pk"), user=user)
+    member_count = (
+        ChatParticipant.objects.filter(chat=OuterRef("pk"))
+        .values("chat_id")
+        .annotate(total=Count("id"))
+        .values("total")
+    )
+    history_visible = (
+        Q(chat__type=Chat.Type.PRIVATE)
+        | Q(chat__history_visible_to_new_members=True)
+        | Q(chat__memberships__can_see_pre_join_history=True)
+        | Q(created_at__gte=F("chat__memberships__joined_at"))
+    )
+    visible_message = (
+        Message.objects.filter(
+            Q(id__gt=F("chat__memberships__cleared_before_message_id")),
+            history_visible,
+            chat=OuterRef("pk"),
+            chat__memberships__user=user,
+            is_deleted=False,
+        )
+        .exclude(hidden_for_users__user=user)
+        .order_by("-id")
+    )
+    unread_count = (
+        Message.objects.filter(
+            Q(id__gt=F("chat__memberships__cleared_before_message_id")),
+            Q(id__gt=F("chat__memberships__last_read_message_id")),
+            history_visible,
+            chat=OuterRef("pk"),
+            chat__memberships__user=user,
+            is_deleted=False,
+        )
+        .exclude(sender=user)
+        .exclude(hidden_for_users__user=user)
+        .order_by()
+        .values("chat_id")
+        .annotate(total=Count("id"))
+        .values("total")
+    )
 
     chats = list(
         Chat.objects.filter(
@@ -498,10 +544,14 @@ def _prepare_sidebar_chats(user, archived=False):
             memberships__is_hidden=False,
         )
         .annotate(
-            last_message_id_ui=Subquery(last_message.values("id")[:1]),
-            last_message_text_ui=Subquery(last_message.values("text")[:1]),
-            last_message_sender_id_ui=Subquery(last_message.values("sender_id")[:1]),
-            last_message_created_at_ui=Subquery(last_message.values("created_at")[:1]),
+            last_message_id_ui=Subquery(visible_message.values("id")[:1]),
+            last_message_text_ui=Subquery(visible_message.values("text")[:1]),
+            last_message_sender_id_ui=Subquery(
+                visible_message.values("sender_id")[:1]
+            ),
+            last_message_created_at_ui=Subquery(
+                visible_message.values("created_at")[:1]
+            ),
             last_read_message_id_ui=Coalesce(
                 Subquery(
                     membership.values("last_read_message_id")[:1],
@@ -523,16 +573,14 @@ def _prepare_sidebar_chats(user, archived=False):
                 membership.values("can_see_pre_join_history")[:1],
                 output_field=BooleanField(),
             ),
-        )
-        .annotate(
-            unread_count_ui=Count(
-                "messages",
-                filter=(
-                    ~Q(messages__sender=user)
-                    & Q(messages__is_deleted=False)
-                    & Q(messages__id__gt=F("last_read_message_id_ui"))
-                ),
-            )
+            member_count_ui=Coalesce(
+                Subquery(member_count[:1], output_field=BigIntegerField()),
+                Value(0, output_field=BigIntegerField()),
+            ),
+            unread_count_ui=Coalesce(
+                Subquery(unread_count[:1], output_field=BigIntegerField()),
+                Value(0, output_field=BigIntegerField()),
+            ),
         )
         .prefetch_related("participants")
         .order_by(
@@ -540,54 +588,39 @@ def _prepare_sidebar_chats(user, archived=False):
             F("last_message_created_at_ui").desc(nulls_last=True),
             "-updated_at",
         )
+        .distinct()
     )
 
-    for chat in chats:
-        membership_row = ChatParticipant.objects.get(chat=chat, user=user)
-        visible = Message.objects.filter(
-            chat=chat,
-            is_deleted=False,
-            id__gt=membership_row.cleared_before_message_id,
-        ).exclude(hidden_for_users__user=user)
-        if (
-            chat.type != Chat.Type.PRIVATE
-            and not chat.history_visible_to_new_members
-            and not membership_row.can_see_pre_join_history
+    last_message_ids = [
+        chat.last_message_id_ui
+        for chat in chats
+        if chat.last_message_id_ui
+    ]
+    attachment_kinds = {}
+    if last_message_ids:
+        for message_id, kind in (
+            MessageAttachment.objects.filter(message_id__in=last_message_ids)
+            .order_by("message_id", "id")
+            .values_list("message_id", "kind")
         ):
-            visible = visible.filter(created_at__gte=membership_row.joined_at)
+            attachment_kinds.setdefault(message_id, kind)
 
-        latest_visible = visible.order_by("-id").values(
-            "id", "text", "sender_id", "created_at"
-        ).first()
-        if latest_visible:
-            chat.last_message_id_ui = latest_visible["id"]
-            chat.last_message_text_ui = latest_visible["text"]
-            chat.last_message_sender_id_ui = latest_visible["sender_id"]
-            chat.last_message_created_at_ui = latest_visible["created_at"]
-        else:
-            chat.last_message_id_ui = None
-            chat.last_message_text_ui = ""
-            chat.last_message_sender_id_ui = None
-            chat.last_message_created_at_ui = None
-        chat.unread_count_ui = visible.exclude(sender=user).filter(
-            id__gt=chat.last_read_message_id_ui or 0
-        ).count()
-
+    for chat in chats:
         _decorate_chat_ui(chat, user)
         preview = " ".join((chat.last_message_text_ui or "").split())
         if preview:
             chat.last_message_preview_ui = preview
         elif chat.last_message_id_ui:
-            last_kind = MessageAttachment.objects.filter(
-                message_id=chat.last_message_id_ui,
-            ).values_list("kind", flat=True).first()
             chat.last_message_preview_ui = {
                 MessageAttachment.Kind.VOICE: "Голосовое сообщение",
                 MessageAttachment.Kind.AUDIO: "Аудио",
                 MessageAttachment.Kind.IMAGE: "Фото",
                 MessageAttachment.Kind.VIDEO: "Видео",
                 MessageAttachment.Kind.FILE: "Файл",
-            }.get(last_kind, "Медиа")
+            }.get(
+                attachment_kinds.get(chat.last_message_id_ui),
+                "Медиа",
+            )
         else:
             chat.last_message_preview_ui = ""
 
@@ -649,13 +682,32 @@ def _posting_capabilities(chat, membership, user):
 
 
 def _forward_targets(user):
+    member_count = (
+        ChatParticipant.objects.filter(chat=OuterRef("pk"))
+        .values("chat_id")
+        .annotate(total=Count("id"))
+        .values("total")
+    )
     targets = list(
         Chat.objects.filter(
             participants=user,
             memberships__user=user,
             memberships__is_hidden=False,
         )
-        .prefetch_related("participants", "memberships__user")
+        .annotate(
+            member_count_ui=Coalesce(
+                Subquery(member_count[:1], output_field=BigIntegerField()),
+                Value(0, output_field=BigIntegerField()),
+            )
+        )
+        .prefetch_related(
+            "participants",
+            Prefetch(
+                "memberships",
+                queryset=ChatParticipant.objects.filter(user=user).select_related("user"),
+                to_attr="_viewer_memberships",
+            ),
+        )
         .distinct()
         .order_by("-updated_at")[:60]
     )
@@ -676,37 +728,24 @@ def _account_slots_with_unread(request):
     slots = account_slots(request)
     for slot in slots:
         slot_user = slot["user"]
-        unread = 0
-        memberships = ChatParticipant.objects.filter(
-            user=slot_user,
-            is_hidden=False,
-        ).values(
-            "chat_id",
-            "last_read_message_id",
-            "joined_at",
-            "cleared_before_message_id",
-            "chat__type",
-            "can_see_pre_join_history",
-            "chat__history_visible_to_new_members",
-        )
-        for membership in memberships:
-            message_query = Message.objects.filter(
-                chat_id=membership["chat_id"],
-                is_deleted=False,
-                id__gt=max(
-                    membership["last_read_message_id"] or 0,
-                    membership["cleared_before_message_id"] or 0,
+        unread = (
+            Message.objects.filter(
+                Q(id__gt=F("chat__memberships__last_read_message_id")),
+                Q(id__gt=F("chat__memberships__cleared_before_message_id")),
+                (
+                    Q(chat__type=Chat.Type.PRIVATE)
+                    | Q(chat__history_visible_to_new_members=True)
+                    | Q(chat__memberships__can_see_pre_join_history=True)
+                    | Q(created_at__gte=F("chat__memberships__joined_at"))
                 ),
-            ).exclude(hidden_for_users__user=slot_user)
-            if (
-                membership["chat__type"] != Chat.Type.PRIVATE
-                and not membership["chat__history_visible_to_new_members"]
-                and not membership["can_see_pre_join_history"]
-            ):
-                message_query = message_query.filter(
-                    created_at__gte=membership["joined_at"]
-                )
-            unread += message_query.exclude(sender=slot_user).count()
+                chat__memberships__user=slot_user,
+                chat__memberships__is_hidden=False,
+                is_deleted=False,
+            )
+            .exclude(sender=slot_user)
+            .exclude(hidden_for_users__user=slot_user)
+            .count()
+        )
         slot["unread_count"] = unread
     return slots
 
@@ -1075,14 +1114,28 @@ def global_search(request):
             is_hidden=False,
         )
         .select_related("chat")
+        .prefetch_related("chat__participants")
         .order_by("-is_pinned", "-chat__updated_at")[:120]
     )
     joined_ids = {membership.chat_id for membership in memberships}
+    collective_ids = {
+        membership.chat_id
+        for membership in memberships
+        if membership.chat.type != Chat.Type.PRIVATE
+    }
+    collective_counts = dict(
+        ChatParticipant.objects.filter(chat_id__in=collective_ids)
+        .values("chat_id")
+        .annotate(total=Count("id"))
+        .values_list("chat_id", "total")
+    )
 
     chat_results = []
     chat_by_id = {}
     for membership in memberships:
         chat = membership.chat
+        if chat.type != Chat.Type.PRIVATE:
+            chat.member_count_ui = collective_counts.get(chat.pk, 0)
         _decorate_chat_ui(chat, request.user)
         chat_by_id[chat.pk] = chat
         haystack = (chat.search_text_ui or "").lower()
@@ -1182,29 +1235,44 @@ def global_search(request):
     ]
 
     message_results = []
-    for membership in memberships:
-        if len(message_results) >= 18:
-            break
-        chat = membership.chat
-        matches = list(
-            _visible_message_queryset(chat, request.user)
-            .filter(is_deleted=False)
-            .filter(
-                Q(text__icontains=query)
-                | Q(attachments__original_name__icontains=query)
+    if memberships:
+        search_matches = (
+            Message.objects.filter(
+                Q(id__gt=F("chat__memberships__cleared_before_message_id")),
+                (
+                    Q(chat__type=Chat.Type.PRIVATE)
+                    | Q(chat__history_visible_to_new_members=True)
+                    | Q(chat__memberships__can_see_pre_join_history=True)
+                    | Q(created_at__gte=F("chat__memberships__joined_at"))
+                ),
+                (
+                    Q(text__icontains=query)
+                    | Q(attachments__original_name__icontains=query)
+                ),
+                chat__memberships__user=request.user,
+                chat__memberships__is_hidden=False,
+                is_deleted=False,
             )
-            .select_related("sender")
+            .exclude(hidden_for_users__user=request.user)
+            .select_related("sender", "chat")
             .distinct()
-            .order_by("-id")[:4]
+            .order_by("-id")[:18]
         )
-        if not matches:
-            continue
-        decorated = chat_by_id.get(chat.pk)
-        if decorated is None:
-            _decorate_chat_ui(chat, request.user)
-            decorated = chat
-            chat_by_id[chat.pk] = chat
-        for message in matches:
+        for message in search_matches:
+            chat = message.chat
+            decorated = chat_by_id.get(chat.pk)
+            if decorated is None:
+                membership = next(
+                    (item for item in memberships if item.chat_id == chat.pk),
+                    None,
+                )
+                if membership is None:
+                    continue
+                if chat.type != Chat.Type.PRIVATE:
+                    chat.member_count_ui = collective_counts.get(chat.pk, 0)
+                _decorate_chat_ui(chat, request.user)
+                decorated = chat
+                chat_by_id[chat.pk] = chat
             message_results.append(
                 {
                     "id": message.pk,
@@ -1221,8 +1289,6 @@ def global_search(request):
                     ),
                 }
             )
-            if len(message_results) >= 18:
-                break
 
     return JsonResponse(
         {

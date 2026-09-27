@@ -69,17 +69,17 @@
 
         <nav class="tg-settings-list" aria-label="Разделы настроек">
           <a class="tg-settings-row" href="{% url 'messenger:home' %}?profile={{ request.user.username|urlencode }}" data-settings-close-on-follow>
-            <span class="tg-native-icon tg-native-icon--profile tg-settings-row__native-icon" aria-hidden="true"></span>
+            <span class="tg-settings-section-icon tg-settings-section-icon--account" aria-hidden="true"></span>
             <span class="tg-settings-row__label">Мой аккаунт</span>
           </a>
 
           <button class="tg-settings-row" type="button" data-settings-target="privacy">
-            <span class="tg-native-icon tg-native-icon--lock tg-settings-row__native-icon" aria-hidden="true"></span>
+            <span class="tg-settings-section-icon tg-settings-section-icon--lock" aria-hidden="true"></span>
             <span class="tg-settings-row__label">Конфиденциальность и безопасность</span>
           </button>
 
           <button class="tg-settings-row" type="button" data-settings-target="chat">
-            <span class="tg-native-icon tg-native-icon--settings tg-settings-row__native-icon" aria-hidden="true"></span>
+            <span class="tg-settings-section-icon tg-settings-section-icon--chat" aria-hidden="true"></span>
             <span class="tg-settings-row__label">Настройки чатов</span>
           </button>
         </nav>
@@ -306,7 +306,7 @@
 
         <div class="tg-settings-subsection">
           <button class="tg-settings-row" type="button" data-settings-target="archive">
-            <span class="tg-native-icon tg-native-icon--archive tg-settings-row__native-icon" aria-hidden="true"></span>
+            <span class="tg-settings-section-icon tg-settings-section-icon--archive" aria-hidden="true"></span>
             <span class="tg-settings-row__label">Настройки архива</span>
             <span class="tg-settings-chevron" aria-hidden="true"></span>
           </button>

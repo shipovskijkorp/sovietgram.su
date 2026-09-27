@@ -4,7 +4,9 @@ from io import BytesIO
 
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import connection
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
@@ -24,6 +26,7 @@ from .models import (
     PinnedMessage,
 )
 from .services import get_or_create_direct_chat
+from .views import _prepare_sidebar_chats
 
 
 class ChatFeatureTests(TestCase):
@@ -49,6 +52,38 @@ class ChatFeatureTests(TestCase):
         self.charlie = User.objects.create_user("charlie", "charlie@example.com", self.password)
         self.chat = get_or_create_direct_chat(self.alice, self.bob)
         self.client.force_login(self.alice)
+
+    def test_sidebar_chat_preparation_does_not_scale_queries_per_chat(self):
+        for index in range(6):
+            group = Chat.objects.create(
+                type=Chat.Type.GROUP,
+                title=f"Query group {index}",
+            )
+            ChatParticipant.objects.create(
+                chat=group,
+                user=self.alice,
+                role=ChatParticipant.Role.MEMBER,
+            )
+            ChatParticipant.objects.create(
+                chat=group,
+                user=self.bob,
+                role=ChatParticipant.Role.MEMBER,
+            )
+            Message.objects.create(
+                chat=group,
+                sender=self.bob,
+                text=f"Message {index}",
+            )
+
+        with CaptureQueriesContext(connection) as captured:
+            chats = _prepare_sidebar_chats(self.alice)
+
+        self.assertGreaterEqual(len(chats), 7)
+        self.assertLessEqual(
+            len(captured),
+            4,
+            "Sidebar preparation regressed to per-chat database queries.",
+        )
 
     def test_direct_chat_uses_private_type_and_member_roles(self):
         self.assertEqual(self.chat.type, Chat.Type.PRIVATE)

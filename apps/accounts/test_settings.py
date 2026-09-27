@@ -81,6 +81,10 @@ class SettingsTests(TestCase):
         self.assertContains(response, "Мой аккаунт")
         self.assertContains(response, "Конфиденциальность и безопасность")
         self.assertContains(response, "Настройки чатов")
+        self.assertContains(response, "tg-settings-section-icon--account", html=False)
+        self.assertContains(response, "tg-settings-section-icon--lock", html=False)
+        self.assertContains(response, "tg-settings-section-icon--chat", html=False)
+        self.assertContains(response, "tg-settings-section-icon--archive", html=False)
         self.assertContains(response, "js/settings.js", html=False)
         self.assertNotContains(response, "Сохранить настройки")
 
