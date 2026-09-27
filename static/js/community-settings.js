@@ -242,6 +242,16 @@
       actions.appendChild(roleButton);
     }
 
+    if (member.can_transfer_owner) {
+      const transfer = document.createElement("button");
+      transfer.type = "button";
+      transfer.className = "community-settings-person__role";
+      transfer.textContent = "Передать";
+      transfer.title = "Передать права владельца";
+      transfer.addEventListener("click", () => transferOwnership(member));
+      actions.appendChild(transfer);
+    }
+
     if (mode === "members" && member.can_remove) {
       const remove = document.createElement("button");
       remove.type = "button";
@@ -399,6 +409,14 @@
   async function changeMemberRole(member) {
     const next = member.role === "admin" ? "member" : "admin";
     await memberAction({ action: "role", username: member.username, role: next });
+  }
+
+  async function transferOwnership(member) {
+    const accepted = window.confirm(
+      "Передать права владельца " + member.display_name + "? После передачи вы останетесь администратором.",
+    );
+    if (!accepted) return;
+    await memberAction({ action: "transfer_owner", username: member.username });
   }
 
   async function removeMember(member) {

@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.urls import reverse
 from django.utils import timezone
 
 
@@ -64,6 +65,12 @@ class User(AbstractUser):
     @property
     def display_name(self):
         return self.get_full_name().strip() or self.username
+
+    @property
+    def avatar_url(self):
+        if not self.avatar:
+            return ""
+        return reverse("accounts:profile_avatar", args=[self.username])
 
     @property
     def initials(self):

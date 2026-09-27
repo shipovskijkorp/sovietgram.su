@@ -5,6 +5,8 @@ from django.core.cache import cache
 from django.shortcuts import redirect
 from django.utils import timezone
 
+from .lifecycle import delete_user_account
+
 
 def _purge_inactive_accounts(now, exclude_user_id=None):
     if not cache.add("sovietgram:privacy:inactive-purge", 1, timeout=3600):
@@ -23,7 +25,7 @@ def _purge_inactive_accounts(now, exclude_user_id=None):
         base = user.last_seen_at or user.date_joined
         days = int(user.delete_after_inactive_days or 365)
         if base and base <= now - timedelta(days=days):
-            user.delete()
+            delete_user_account(user)
 
 
 def _purge_expired_messages():
@@ -50,7 +52,7 @@ class UserActivityMiddleware:
             if base and base <= now - timedelta(days=days):
                 expired = request.user
                 logout(request)
-                expired.delete()
+                delete_user_account(expired)
                 return redirect("accounts:login")
 
             previous = request.session.get("sovietgram_activity_touch", 0)

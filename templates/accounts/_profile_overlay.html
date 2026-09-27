@@ -66,7 +66,7 @@
           {% if slot.is_current %}
             <div class="tg-profile-account is-current">
               <span class="tg-profile-account__avatar">
-                {% if slot.user.avatar %}<img src="{{ slot.user.avatar.url }}" alt="">{% else %}<span>{{ slot.user.initials }}</span>{% endif %}
+                {% if slot.user.avatar %}<img src="{{ slot.user.avatar_url }}" alt="">{% else %}<span>{{ slot.user.initials }}</span>{% endif %}
               </span>
               <strong>{{ slot.user.display_name }}</strong>
               {% if slot.unread_count %}<b>{{ slot.unread_count }}</b>{% endif %}
@@ -76,7 +76,7 @@
               {% csrf_token %}
               <button class="tg-profile-account" type="submit">
                 <span class="tg-profile-account__avatar">
-                  {% if slot.user.avatar %}<img src="{{ slot.user.avatar.url }}" alt="">{% else %}<span>{{ slot.user.initials }}</span>{% endif %}
+                  {% if slot.user.avatar %}<img src="{{ slot.user.avatar_url }}" alt="">{% else %}<span>{{ slot.user.initials }}</span>{% endif %}
                 </span>
                 <strong>{{ slot.user.display_name }}</strong>
                 {% if slot.unread_count %}<b>{{ slot.unread_count }}</b>{% endif %}
@@ -170,7 +170,7 @@
           {% if slot.is_current %}
             <div class="tg-profile-account is-current">
               <span class="tg-profile-account__avatar">
-                {% if slot.user.avatar %}<img src="{{ slot.user.avatar.url }}" alt="">{% else %}<span>{{ slot.user.initials }}</span>{% endif %}
+                {% if slot.user.avatar %}<img src="{{ slot.user.avatar_url }}" alt="">{% else %}<span>{{ slot.user.initials }}</span>{% endif %}
               </span>
               <strong>{{ slot.user.display_name }}</strong>
               {% if slot.unread_count %}<b>{{ slot.unread_count }}</b>{% endif %}
@@ -180,7 +180,7 @@
               {% csrf_token %}
               <button class="tg-profile-account" type="submit">
                 <span class="tg-profile-account__avatar">
-                  {% if slot.user.avatar %}<img src="{{ slot.user.avatar.url }}" alt="">{% else %}<span>{{ slot.user.initials }}</span>{% endif %}
+                  {% if slot.user.avatar %}<img src="{{ slot.user.avatar_url }}" alt="">{% else %}<span>{{ slot.user.initials }}</span>{% endif %}
                 </span>
                 <strong>{{ slot.user.display_name }}</strong>
                 {% if slot.unread_count %}<b>{{ slot.unread_count }}</b>{% endif %}

@@ -20,7 +20,7 @@
 
     <div class="public-profile-main">
       {% if profile_user.avatar and profile_avatar_visible %}
-        <img class="public-profile-avatar" src="{{ profile_user.avatar.url }}" alt="Фотография {{ profile_user.display_name }}">
+        <img class="public-profile-avatar" src="{{ profile_user.avatar_url }}" alt="Фотография {{ profile_user.display_name }}">
       {% else %}
         <span class="public-profile-avatar public-profile-avatar--fallback">{{ profile_user.initials }}</span>
       {% endif %}

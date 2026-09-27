@@ -53,7 +53,7 @@
           data-settings-close-on-follow
         >
           {% if request.user.avatar %}
-            <img class="tg-settings-cover__avatar" src="{{ request.user.avatar.url }}" alt="">
+            <img class="tg-settings-cover__avatar" src="{{ request.user.avatar_url }}" alt="">
           {% else %}
             <span class="tg-settings-cover__avatar tg-settings-cover__avatar--fallback">{{ request.user.initials }}</span>
           {% endif %}

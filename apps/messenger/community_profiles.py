@@ -86,14 +86,52 @@ class CommunityProfileForm(forms.Form):
         return cleaned
 
 
+def _ensure_collective_owner(chat):
+    if ChatParticipant.objects.filter(
+        chat=chat,
+        role=ChatParticipant.Role.OWNER,
+    ).exists():
+        return
+
+    with transaction.atomic():
+        Chat.objects.select_for_update().get(pk=chat.pk)
+        if ChatParticipant.objects.filter(
+            chat=chat,
+            role=ChatParticipant.Role.OWNER,
+        ).exists():
+            return
+
+        candidates = ChatParticipant.objects.filter(chat=chat)
+        successor = (
+            candidates.filter(role=ChatParticipant.Role.ADMIN)
+            .order_by("joined_at", "id")
+            .first()
+            or candidates.order_by("joined_at", "id").first()
+        )
+        if successor is None:
+            return
+
+        successor.role = ChatParticipant.Role.OWNER
+        successor.save(update_fields=("role",))
+        _log(
+            chat,
+            None,
+            "owner_repair",
+            f"Права владельца восстановлены для {successor.user.display_name}.",
+            target_user=successor.user,
+        )
+
+
 def _collective_chat_for_user(user, chat_id):
-    return get_object_or_404(
+    chat = get_object_or_404(
         Chat.objects.filter(
             pk=chat_id,
             type__in=(Chat.Type.GROUP, Chat.Type.CHANNEL),
             participants=user,
         ).distinct()
     )
+    _ensure_collective_owner(chat)
+    return chat
 
 
 def _membership(chat, user):
@@ -183,6 +221,11 @@ def _member_payload(actor, membership):
         and user.pk != actor.user_id
         and membership.role != ChatParticipant.Role.OWNER
     )
+    transferable = (
+        actor_is_owner
+        and user.pk != actor.user_id
+        and membership.role != ChatParticipant.Role.OWNER
+    )
     return {
         "id": membership.pk,
         "user_id": user.pk,
@@ -190,7 +233,7 @@ def _member_payload(actor, membership):
         "username": user.username,
         "initials": user.initials,
         "avatar_url": (
-            user.avatar.url
+            user.avatar_url
             if user.avatar and privacy_allows(user, actor.user, "profile_photo")
             else ""
         ),
@@ -201,6 +244,7 @@ def _member_payload(actor, membership):
         "is_self": user.pk == actor.user_id,
         "can_remove": removable,
         "can_change_role": changeable,
+        "can_transfer_owner": transferable,
     }
 
 
@@ -656,7 +700,7 @@ def community_member_candidates(request, chat_id):
                     "username": user.username,
                     "initials": user.initials,
                     "avatar_url": (
-                        user.avatar.url
+                        user.avatar_url
                         if user.avatar and privacy_allows(user, request.user, "profile_photo")
                         else ""
                     ),
@@ -730,6 +774,37 @@ def community_member_action(request, chat_id):
             f"Удалён участник {target_user.display_name}.",
             target_user=target_user,
         )
+    elif action == "transfer_owner":
+        if actor.role != ChatParticipant.Role.OWNER:
+            return _json_error("Передать права владельца может только владелец.", status=403)
+        if target is None:
+            return _json_error("Пользователь не состоит здесь.")
+        if target.user_id == request.user.pk:
+            return _json_error("Нельзя передать права владельца самому себе.")
+        if target.role == ChatParticipant.Role.OWNER:
+            return _json_error("Этот пользователь уже владелец.", status=400)
+
+        with transaction.atomic():
+            locked_actor = ChatParticipant.objects.select_for_update().get(pk=actor.pk)
+            locked_target = ChatParticipant.objects.select_for_update().get(pk=target.pk)
+            if locked_actor.role != ChatParticipant.Role.OWNER:
+                return _json_error("Права владельца уже были переданы.", status=409)
+            if locked_target.role == ChatParticipant.Role.OWNER:
+                return _json_error("Этот пользователь уже владелец.", status=409)
+
+            locked_target.role = ChatParticipant.Role.OWNER
+            locked_target.save(update_fields=("role",))
+            locked_actor.role = ChatParticipant.Role.ADMIN
+            locked_actor.save(update_fields=("role",))
+            _log(
+                chat,
+                request.user,
+                "owner_transfer",
+                f"Права владельца переданы {target_user.display_name}.",
+                target_user=target_user,
+            )
+        actor.role = ChatParticipant.Role.ADMIN
+        target.role = ChatParticipant.Role.OWNER
     elif action == "role":
         if actor.role != ChatParticipant.Role.OWNER:
             return _json_error("Менять администраторов может только владелец.", status=403)

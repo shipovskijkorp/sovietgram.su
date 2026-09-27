@@ -6,6 +6,7 @@ from .views import (
     SovietgramPasswordChangeView,
     add_account,
     profile,
+    profile_avatar,
     public_profile,
     register,
     remove_avatar,
@@ -29,5 +30,6 @@ urlpatterns = [
         SovietgramPasswordChangeView.as_view(),
         name="password_change",
     ),
+    path("u/<str:username>/avatar/", profile_avatar, name="profile_avatar"),
     path("u/<str:username>/", public_profile, name="public_profile"),
 ]

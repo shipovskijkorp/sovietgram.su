@@ -220,7 +220,11 @@ def privacy_rule_payload(user):
                 "username": person.username,
                 "display_name": person.display_name,
                 "initials": person.initials,
-                "avatar_url": person.avatar.url if person.avatar else "",
+                "avatar_url": (
+                    person.avatar_url
+                    if person.avatar and privacy_allows(person, user, "profile_photo")
+                    else ""
+                ),
             }
 
         always = [person_payload(pk) for pk in rule["always"]]
@@ -251,7 +255,12 @@ def blocked_users_payload(user):
             "username": link.blocked.username,
             "display_name": link.blocked.display_name,
             "initials": link.blocked.initials,
-            "avatar_url": link.blocked.avatar.url if link.blocked.avatar else "",
+            "avatar_url": (
+                link.blocked.avatar_url
+                if link.blocked.avatar
+                and privacy_allows(link.blocked, user, "profile_photo")
+                else ""
+            ),
         }
         for link in links
         if link.blocked.is_active

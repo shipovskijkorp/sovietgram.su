@@ -4,7 +4,7 @@ from django.contrib import admin
 from django.http import Http404
 from django.urls import include, path
 
-def _deny_private_message_media(request, path):
+def _deny_private_media(request, path):
     raise Http404
 
 
@@ -16,6 +16,7 @@ urlpatterns = [
 
 if settings.DEBUG:
     urlpatterns += [
-        path("media/messages/<path:path>", _deny_private_message_media),
+        path("media/messages/<path:path>", _deny_private_media),
+        path("media/avatars/<path:path>", _deny_private_media),
     ]
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -1,4 +1,5 @@
 import json
+import mimetypes
 from datetime import timedelta
 
 from django.contrib import messages
@@ -6,11 +7,11 @@ from django.contrib.auth import login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView, PasswordChangeView
-from django.http import JsonResponse
+from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
 from .forms import (
     IdentifierAuthenticationForm,
@@ -255,7 +256,7 @@ def profile(request):
                 "last_name": user.last_name,
                 "username": user.username,
                 "bio": user.bio,
-                "avatar_url": user.avatar.url if user.avatar else "",
+                "avatar_url": user.avatar_url if user.avatar else "",
                 "initials": user.initials,
                 "birthday": user.birthday.isoformat() if user.birthday else "",
                 "birthday_display": user.birthday.strftime("%d.%m.%Y") if user.birthday else "",
@@ -528,6 +529,44 @@ def remove_avatar(request):
     return redirect("accounts:profile")
 
 
+@require_GET
+def profile_avatar(request, username):
+    profile_user = get_object_or_404(
+        User,
+        username__iexact=username,
+        is_active=True,
+    )
+    viewer = request.user if request.user.is_authenticated else None
+    account_slots = request.session.get("sovietgram_accounts_v1", [])
+    slot_authorized = any(
+        isinstance(item, dict)
+        and str(item.get("user_id", "")) == str(profile_user.pk)
+        for item in account_slots
+    )
+    if (
+        not profile_user.avatar
+        or not (
+            slot_authorized
+            or privacy_allows(profile_user, viewer, "profile_photo")
+        )
+    ):
+        raise Http404
+
+    try:
+        handle = profile_user.avatar.open("rb")
+    except (FileNotFoundError, OSError, ValueError):
+        raise Http404
+
+    content_type = (
+        mimetypes.guess_type(profile_user.avatar.name)[0]
+        or "application/octet-stream"
+    )
+    response = FileResponse(handle, content_type=content_type)
+    response["Cache-Control"] = "private, no-store"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
 def public_profile(request, username):
     from apps.messenger.models import Contact
 
@@ -580,7 +619,7 @@ def public_profile(request, username):
                 "bio": profile_user.bio if bio_visible else "",
                 "status": status,
                 "avatar_url": (
-                    profile_user.avatar.url
+                    profile_user.avatar_url
                     if profile_user.avatar and photo_visible
                     else ""
                 ),

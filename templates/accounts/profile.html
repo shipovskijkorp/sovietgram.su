@@ -14,7 +14,7 @@
 
     <div class="settings-user">
       {% if request.user.avatar %}
-        <img class="settings-user__avatar" src="{{ request.user.avatar.url }}" alt="Фотография профиля">
+        <img class="settings-user__avatar" src="{{ request.user.avatar_url }}" alt="Фотография профиля">
       {% else %}
         <span class="settings-user__avatar settings-user__avatar--fallback">{{ request.user.initials }}</span>
       {% endif %}
@@ -56,7 +56,7 @@
       <section class="settings-card profile-hero-card">
         <label class="avatar-editor" for="{{ form.avatar.id_for_label }}" title="Изменить фотографию">
           {% if request.user.avatar %}
-            <img id="avatarPreviewImage" src="{{ request.user.avatar.url }}" alt="Фотография профиля">
+            <img id="avatarPreviewImage" src="{{ request.user.avatar_url }}" alt="Фотография профиля">
             <span id="avatarPreviewFallback" class="avatar-editor__fallback" hidden>{{ request.user.initials }}</span>
           {% else %}
             <img id="avatarPreviewImage" src="" alt="Новая фотография профиля" hidden>

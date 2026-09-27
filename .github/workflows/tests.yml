@@ -1,6 +1,9 @@
 name: Tests
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
   workflow_dispatch:
 
@@ -25,9 +28,12 @@ jobs:
         run: python manage.py test
       - name: Check JavaScript syntax
         run: |
+          node --check static/js/app.js
           node --check static/js/attachment-menu.js
           node --check static/js/attachment-files.js
           node --check static/js/chat.js
+          node --check static/js/voice-messages.js
+          node --check static/js/community-wizard.js
           node --check static/js/attachment-special.js
           node --check static/js/article-editor.js
           node --check static/js/chat-controls.js

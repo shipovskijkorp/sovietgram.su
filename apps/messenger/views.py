@@ -276,7 +276,7 @@ def _decorate_chat_ui(chat, user):
         chat.username_ui = "" if chat.is_saved_ui else other_user.username
         chat.avatar_text_ui = "★" if chat.is_saved_ui else other_user.initials
         chat.other_user_avatar_url_ui = (
-            other_user.avatar.url
+            other_user.avatar_url
             if (
                 not chat.is_saved_ui
                 and other_user.avatar
@@ -671,7 +671,7 @@ def _community_candidates(user):
             continue
         candidate.presence_ui = _presence_text(candidate, user)
         candidate.avatar_url_ui = (
-            candidate.avatar.url
+            candidate.avatar_url
             if candidate.avatar and privacy_allows(candidate, user, "profile_photo")
             else ""
         )
@@ -1100,7 +1100,7 @@ def global_search(request):
             "display_name": user.display_name,
             "username": user.username,
             "avatar_url": (
-                user.avatar.url
+                user.avatar_url
                 if user.avatar and privacy_allows(user, request.user, "profile_photo")
                 else ""
             ),
@@ -1217,7 +1217,7 @@ def contacts(request):
     contact_ids = {item.user_id for item in contact_links}
     for item in contact_links:
         item.avatar_url_ui = (
-            item.user.avatar.url
+            item.user.avatar_url
             if item.user.avatar and privacy_allows(item.user, request.user, "profile_photo")
             else ""
         )
@@ -1237,7 +1237,7 @@ def contacts(request):
         for user in user_results:
             user.is_contact_ui = user.pk in contact_ids
             user.avatar_url_ui = (
-                user.avatar.url
+                user.avatar_url
                 if user.avatar and privacy_allows(user, request.user, "profile_photo")
                 else ""
             )

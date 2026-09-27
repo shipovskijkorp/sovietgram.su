@@ -105,7 +105,7 @@
     <footer class="sidebar__footer">
       <a class="account-mini" href="{% url 'accounts:public_profile' request.user.username %}" data-user-profile data-self-profile title="Открыть профиль">
         {% if request.user.avatar %}
-          <img class="account-mini__avatar account-mini__avatar--image" src="{{ request.user.avatar.url }}" alt="">
+          <img class="account-mini__avatar account-mini__avatar--image" src="{{ request.user.avatar_url }}" alt="">
         {% else %}
           <span class="account-mini__avatar">{{ request.user.initials }}</span>
         {% endif %}
@@ -259,8 +259,8 @@
         <div class="message-flow" id="messageFlow">
           <div class="dialog-start">
             {% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}
-              {% if selected_chat.other_user.avatar %}
-                <img src="{{ selected_chat.other_user.avatar.url }}" alt="">
+              {% if selected_chat.other_user_avatar_url_ui %}
+                <img src="{{ selected_chat.other_user_avatar_url_ui }}" alt="">
               {% else %}
                 <span>{{ selected_chat.avatar_text_ui }}</span>
               {% endif %}
@@ -792,7 +792,7 @@
   <header class="chat-info-header"><strong>Информация</strong><button id="chatInfoClose" type="button"><span class="tg-native-icon tg-native-icon--close tg-native-icon--compact" aria-hidden="true"></span></button></header>
   <section class="chat-info-identity">
     {% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}
-      {% if selected_chat.other_user.avatar %}<img class="chat-info-avatar" src="{{ selected_chat.other_user.avatar.url }}" alt="">{% else %}<span class="chat-info-avatar chat-info-avatar--fallback">{{ selected_chat.avatar_text_ui }}</span>{% endif %}
+      {% if selected_chat.other_user_avatar_url_ui %}<img class="chat-info-avatar" src="{{ selected_chat.other_user_avatar_url_ui }}" alt="">{% else %}<span class="chat-info-avatar chat-info-avatar--fallback">{{ selected_chat.avatar_text_ui }}</span>{% endif %}
       <h2>{{ selected_chat.display_name_ui }}</h2><p>@{{ selected_chat.username_ui }}</p>
       <a href="{% url 'accounts:public_profile' selected_chat.other_user.username %}" data-user-profile>Открыть профиль</a>
     {% else %}
@@ -839,7 +839,7 @@
   <button class="profile-account-header" id="profileAccountToggle" type="button" aria-expanded="false" aria-controls="profileAccountList">
     <span class="profile-account-header__avatar">
       {% if request.user.avatar %}
-        <img src="{{ request.user.avatar.url }}" alt="">
+        <img src="{{ request.user.avatar_url }}" alt="">
       {% else %}
         <span>{{ request.user.initials }}</span>
       {% endif %}
@@ -859,7 +859,7 @@
         <div class="profile-account-item profile-account-item--current">
           <span class="profile-account-item__avatar">
             {% if slot.user.avatar %}
-              <img src="{{ slot.user.avatar.url }}" alt="" width="36" height="36">
+              <img src="{{ slot.user.avatar_url }}" alt="" width="36" height="36">
             {% else %}
               <span>{{ slot.user.initials }}</span>
             {% endif %}
@@ -873,7 +873,7 @@
           <button class="profile-account-item" type="submit">
             <span class="profile-account-item__avatar">
               {% if slot.user.avatar %}
-                <img src="{{ slot.user.avatar.url }}" alt="" width="36" height="36">
+                <img src="{{ slot.user.avatar_url }}" alt="" width="36" height="36">
               {% else %}
                 <span>{{ slot.user.initials }}</span>
               {% endif %}
@@ -1033,6 +1033,7 @@
 <script src="{% static 'js/attachment-special.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/article-editor.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/chat-controls.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/community-wizard.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/community-profile.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/community-settings.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/settings.js' %}?v={{ static_version }}"></script>

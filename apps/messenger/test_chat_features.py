@@ -85,6 +85,7 @@ class ChatFeatureTests(TestCase):
         self.assertContains(response, 'id="communityWizard"', html=False)
         self.assertContains(response, 'data-community-open="group"', html=False)
         self.assertContains(response, 'data-community-open="channel"', html=False)
+        self.assertContains(response, "community-wizard.js", html=False)
         self.assertContains(response, "Добавить участников")
         self.assertContains(response, self.bob.display_name)
 
@@ -818,6 +819,125 @@ class ChatFeatureTests(TestCase):
             HTTP_X_REQUESTED_WITH="XMLHttpRequest",
         )
         self.assertEqual(denied_role.status_code, 403)
+
+    def test_owner_can_transfer_community_ownership_and_then_leave(self):
+        group = Chat.objects.create(
+            type=Chat.Type.GROUP,
+            title="Передача владельца",
+        )
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.alice,
+            role=ChatParticipant.Role.OWNER,
+        )
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.bob,
+            role=ChatParticipant.Role.MEMBER,
+        )
+
+        transferred = self.client.post(
+            reverse("messenger:community_member_action", args=[group.pk]),
+            {
+                "action": "transfer_owner",
+                "username": self.bob.username,
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(transferred.status_code, 200)
+        self.assertEqual(
+            ChatParticipant.objects.get(chat=group, user=self.bob).role,
+            ChatParticipant.Role.OWNER,
+        )
+        self.assertEqual(
+            ChatParticipant.objects.get(chat=group, user=self.alice).role,
+            ChatParticipant.Role.ADMIN,
+        )
+        self.assertTrue(
+            ChatAdminLog.objects.filter(
+                chat=group,
+                action="owner_transfer",
+                target_user=self.bob,
+            ).exists()
+        )
+
+        left = self.client.post(
+            reverse("messenger:community_profile_action", args=[group.pk]),
+            {"action": "leave"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(left.status_code, 200)
+        self.assertTrue(left.json()["left"])
+        self.assertFalse(
+            ChatParticipant.objects.filter(chat=group, user=self.alice).exists()
+        )
+
+    def test_non_owner_cannot_transfer_community_ownership(self):
+        group = Chat.objects.create(
+            type=Chat.Type.GROUP,
+            title="Передача запрещена",
+        )
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.bob,
+            role=ChatParticipant.Role.OWNER,
+        )
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.alice,
+            role=ChatParticipant.Role.ADMIN,
+        )
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.charlie,
+            role=ChatParticipant.Role.MEMBER,
+        )
+
+        response = self.client.post(
+            reverse("messenger:community_member_action", args=[group.pk]),
+            {
+                "action": "transfer_owner",
+                "username": self.charlie.username,
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            ChatParticipant.objects.get(chat=group, user=self.bob).role,
+            ChatParticipant.Role.OWNER,
+        )
+
+    def test_ownerless_community_is_repaired_on_management_access(self):
+        group = Chat.objects.create(
+            type=Chat.Type.GROUP,
+            title="Осиротевшая группа",
+        )
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.alice,
+            role=ChatParticipant.Role.ADMIN,
+        )
+        ChatParticipant.objects.create(
+            chat=group,
+            user=self.bob,
+            role=ChatParticipant.Role.MEMBER,
+        )
+
+        response = self.client.get(
+            reverse("messenger:community_profile", args=[group.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            ChatParticipant.objects.get(chat=group, user=self.alice).role,
+            ChatParticipant.Role.OWNER,
+        )
+        self.assertTrue(
+            ChatAdminLog.objects.filter(
+                chat=group,
+                action="owner_repair",
+                target_user=self.alice,
+            ).exists()
+        )
 
     def test_channel_member_profile_hides_subscriber_list(self):
         channel = Chat.objects.create(
