@@ -264,8 +264,11 @@
     const list = (articles || []).filter(Boolean);
     return {
       text: list.some((article) => (
-        Boolean((article.dataset.messageText || "").trim())
-        || Boolean(article.dataset.messageKind)
+        !article.querySelector(".message-media")
+        && (
+          Boolean((article.dataset.messageText || "").trim())
+          || Boolean(article.dataset.messageKind)
+        )
       )),
       media: list.some((article) => Boolean(article.querySelector(".message-media"))),
       voice: list.some((article) => Boolean(article.querySelector("[data-voice-player]"))),
