@@ -1375,6 +1375,7 @@ function updateConversationStatus(typing, status) {
 let newestMessageId = 0;
 document.querySelectorAll("[data-message-id]").forEach((node) => { newestMessageId = Math.max(newestMessageId, Number(node.dataset.messageId) || 0); });
 let newestUpdateAt = messageStage?.dataset.serverTime || new Date().toISOString();
+let newestUpdateId = 0;
 let pollBusy = false;
 async function pollMessages() {
   if (!messageStage?.dataset.pollUrl || pollBusy || document.hidden) return;
@@ -1383,6 +1384,7 @@ async function pollMessages() {
     const url = new URL(messageStage.dataset.pollUrl, window.location.origin);
     url.searchParams.set("after", String(newestMessageId));
     url.searchParams.set("since", newestUpdateAt);
+    url.searchParams.set("after_update_id", String(newestUpdateId));
     const response = await fetch(url, { credentials: "same-origin" });
     if (!response.ok) return;
     const payload = await response.json();
@@ -1392,7 +1394,8 @@ async function pollMessages() {
     updateReadReceipts(payload.other_last_read_id);
     updateConversationStatus(payload.other_typing, payload.other_status);
     renderPinnedMessages(payload.pins || []);
-    newestUpdateAt = payload.server_time || newestUpdateAt;
+    newestUpdateAt = payload.updates_cursor_time || payload.server_time || newestUpdateAt;
+    newestUpdateId = Number(payload.updates_cursor_id) || 0;
   } catch (_error) {
     // The next polling cycle retries silently.
   } finally {
