@@ -177,6 +177,7 @@ let profileFieldKey = "";
 let profileBioSaveTimer = 0;
 let profileBioSaveInFlight = null;
 let profileRefreshTimer = 0;
+let profileRefreshBusy = false;
 
 function csrfToken() {
   return document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || "";
@@ -297,27 +298,71 @@ function stopProfileRefresh() {
   profileRefreshTimer = 0;
 }
 
+function formatProfileLastSeen(profile, now = new Date()) {
+  // Privacy-restricted profiles only expose approximate text from Django.
+  if (!profile?.last_seen_exact) return profile?.status || "был(а) давно";
+  if (profile.is_online) return "в сети";
+  if (!profile.last_seen_at) return profile.status || "был(а) давно";
+
+  const seen = new Date(profile.last_seen_at);
+  if (!Number.isFinite(seen.getTime())) return profile.status || "был(а) давно";
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startYesterday = new Date(startToday);
+  startYesterday.setDate(startYesterday.getDate() - 1);
+  const time = new Intl.DateTimeFormat("ru-RU", {
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  }).format(seen);
+  if (seen >= startToday) return `был(а) сегодня в ${time}`;
+  if (seen >= startYesterday) return `был(а) вчера в ${time}`;
+  const date = new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+  }).format(seen);
+  return `был(а) ${date} в ${time}`;
+}
+
+function updateProfilePresence(profile) {
+  const status = formatProfileLastSeen(profile);
+  if (userProfileStatus) userProfileStatus.textContent = status;
+  if (userProfileEditStatus) userProfileEditStatus.textContent = status;
+}
+
+async function refreshProfilePresence() {
+  const profileUrl = openedProfile?.profile_url;
+  if (!profileUrl || userProfileOverlay?.hidden || document.hidden || profileRefreshBusy) return;
+  profileRefreshBusy = true;
+  try {
+    const response = await fetch(profileUrl, {
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!response.ok) return;
+    const fresh = await response.json();
+    if (!fresh.ok || !openedProfile || userProfileOverlay.hidden
+        || openedProfile.profile_url !== profileUrl) return;
+
+    openedProfile.status = fresh.status;
+    openedProfile.is_online = fresh.is_online;
+    openedProfile.last_seen_exact = fresh.last_seen_exact;
+    openedProfile.last_seen_at = fresh.last_seen_at;
+    openedProfile.is_contact = fresh.is_contact;
+    updateProfilePresence(openedProfile);
+  } catch (_error) {
+    // The next refresh retries automatically.
+  } finally {
+    profileRefreshBusy = false;
+  }
+}
+
 function startProfileRefresh() {
   stopProfileRefresh();
-  profileRefreshTimer = window.setInterval(async () => {
-    if (!openedProfile?.profile_url || userProfileOverlay?.hidden) return;
-    try {
-      const response = await fetch(openedProfile.profile_url, {
-        headers: { "X-Requested-With": "XMLHttpRequest" },
-        credentials: "same-origin",
-      });
-      if (!response.ok) return;
-      const fresh = await response.json();
-      if (!fresh.ok || !openedProfile) return;
-      openedProfile.status = fresh.status;
-      openedProfile.is_contact = fresh.is_contact;
-      if (userProfileStatus) userProfileStatus.textContent = fresh.status || "";
-      if (userProfileEditStatus) userProfileEditStatus.textContent = fresh.status || "";
-    } catch (_error) {
-      // Presence refresh is best-effort.
-    }
-  }, 30000);
+  profileRefreshTimer = window.setInterval(() => { void refreshProfilePresence(); }, 10000);
 }
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) void refreshProfilePresence();
+});
+window.addEventListener?.("focus", () => { void refreshProfilePresence(); });
 
 function closeProfileChannelContext() {
   if (userProfileChannelContext) userProfileChannelContext.hidden = true;
@@ -429,7 +474,7 @@ function renderUserProfile(profile) {
     userProfileAvatar.classList.toggle("is-clickable", Boolean(profile.avatar_url));
   }
   if (userProfileName) userProfileName.textContent = profile.display_name || profile.username || "";
-  if (userProfileStatus) userProfileStatus.textContent = profile.status || "";
+  updateProfilePresence(profile);
   if (userProfileUsername) userProfileUsername.textContent = `@${profile.username || ""}`;
 
   if (userProfileBioSection && userProfileBio) {
@@ -617,7 +662,7 @@ function fillUserProfileEdit() {
   if (userProfileEditDisplayName) {
     userProfileEditDisplayName.textContent = openedProfile.display_name || openedProfile.username || "";
   }
-  if (userProfileEditStatus) userProfileEditStatus.textContent = openedProfile.status || "";
+  updateProfilePresence(openedProfile);
 
   updateProfileChannelChoice(
     openedProfile,

@@ -21,6 +21,41 @@ class MultiAccountTests(TestCase):
         )
         self.client.force_login(self.first)
 
+    def test_each_account_keeps_its_own_login_time_when_switching(self):
+        self.client.logout()
+        first_login = self.client.post(
+            reverse("accounts:login"),
+            {"username": self.first.username, "password": self.password},
+        )
+        self.assertEqual(first_login.status_code, 302)
+        first_time = self.client.session["sovietgram_session_login_times_v1"][str(self.first.pk)]
+
+        added = self.client.post(
+            reverse("accounts:add_account"),
+            {"username": self.second.username, "password": self.password},
+        )
+        self.assertRedirects(added, reverse("messenger:home"))
+        login_times = self.client.session["sovietgram_session_login_times_v1"]
+        self.assertEqual(login_times[str(self.first.pk)], first_time)
+        self.assertIn(str(self.second.pk), login_times)
+
+        state_url = reverse("accounts:settings")
+        response = self.client.get(
+            state_url, {"action": "privacy_state"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.json()["sessions"][0]["login_at"], login_times[str(self.second.pk)])
+
+        switched = self.client.post(
+            reverse("accounts:switch_account", args=[self.first.pk])
+        )
+        self.assertRedirects(switched, reverse("messenger:home"))
+        first_state = self.client.get(
+            state_url, {"action": "privacy_state"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(first_state.json()["sessions"][0]["login_at"], first_time)
+
     def test_add_account_keeps_first_session_and_switches_to_second(self):
         response = self.client.post(
             reverse("accounts:add_account"),

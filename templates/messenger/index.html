@@ -86,7 +86,7 @@
             {% endif %}
             <span class="conversation-header__text">
               <strong>{{ selected_chat.display_name_ui }}</strong>
-              <small id="conversationStatus">{{ selected_chat.other_status_ui }}</small>
+              <small id="conversationStatus" data-presence-exact="{{ selected_chat.other_last_seen_exact_ui|yesno:'true,false' }}" data-last-seen-at="{{ selected_chat.other_last_seen_at_ui }}" data-is-online="{{ selected_chat.other_is_online_ui|yesno:'true,false' }}">{{ selected_chat.other_status_ui }}</small>
             </span>
           </a>
         {% elif selected_chat.type != 'private' %}
@@ -98,7 +98,7 @@
             {% endif %}
             <span class="conversation-header__text">
               <strong>{{ selected_chat.display_name_ui }}</strong>
-              <small id="conversationStatus">{{ selected_chat.other_status_ui }}</small>
+              <small id="conversationStatus" data-presence-exact="{{ selected_chat.other_last_seen_exact_ui|yesno:'true,false' }}" data-last-seen-at="{{ selected_chat.other_last_seen_at_ui }}" data-is-online="{{ selected_chat.other_is_online_ui|yesno:'true,false' }}">{{ selected_chat.other_status_ui }}</small>
             </span>
           </button>
         {% else %}
@@ -110,7 +110,7 @@
             {% endif %}
             <span class="conversation-header__text">
               <strong>{{ selected_chat.display_name_ui }}</strong>
-              <small id="conversationStatus">{{ selected_chat.other_status_ui }}</small>
+              <small id="conversationStatus" data-presence-exact="{{ selected_chat.other_last_seen_exact_ui|yesno:'true,false' }}" data-last-seen-at="{{ selected_chat.other_last_seen_at_ui }}" data-is-online="{{ selected_chat.other_is_online_ui|yesno:'true,false' }}">{{ selected_chat.other_status_ui }}</small>
             </span>
           </span>
         {% endif %}

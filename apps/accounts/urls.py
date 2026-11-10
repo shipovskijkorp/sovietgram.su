@@ -6,6 +6,7 @@ from .views import (
     SovietgramPasswordChangeView,
     add_account,
     profile,
+    presence_heartbeat,
     profile_avatar,
     public_profile,
     register,
@@ -23,6 +24,7 @@ urlpatterns = [
     path("accounts/add/", add_account, name="add_account"),
     path("accounts/switch/<int:user_id>/", switch_account, name="switch_account"),
     path("profile/", profile, name="profile"),
+    path("presence/heartbeat/", presence_heartbeat, name="presence_heartbeat"),
     path("settings/", settings_view, name="settings"),
     path("profile/avatar/remove/", remove_avatar, name="remove_avatar"),
     path(

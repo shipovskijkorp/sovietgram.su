@@ -307,12 +307,22 @@ def active_sessions_payload(user, current_session_key=""):
             data = {}
         user_agent = str(data.get("sovietgram_session_user_agent", "") or "").strip()
         ip = str(data.get("sovietgram_session_ip", "") or "").strip()
+        login_times = data.get("sovietgram_session_login_times_v1")
+        if not isinstance(login_times, dict):
+            login_times = {}
+        # Each account has its own login timestamp even when accounts share
+        # a single browser session. Legacy sessions have no reliable login time.
+        login_at = login_times.get(str(user.pk))
+        if not isinstance(login_at, str):
+            login_at = ""
         result.append(
             {
                 "token": _session_token(session.session_key),
                 "current": session.session_key == current_session_key,
                 "user_agent": user_agent or "Неизвестное устройство",
                 "ip": ip,
+                "login_at": login_at,
+                "expires_at": session.expire_date.isoformat(),
                 "expires": timezone.localtime(session.expire_date).strftime("%d.%m.%Y %H:%M"),
             }
         )
@@ -339,6 +349,18 @@ def terminate_sessions(user, current_session_key="", token=None, others=False):
 
 
 def remember_session_device(request):
+    # Called only after successful sign-in/registration (not on each request).
+    # UTC-aware ISO timestamps let every device display the same instant in
+    # its own timezone rather than confusing login time with session expiry.
+    if request.user.is_authenticated:
+        login_times = request.session.get("sovietgram_session_login_times_v1")
+        if not isinstance(login_times, dict):
+            login_times = {}
+        else:
+            login_times = dict(login_times)
+        login_times[str(request.user.pk)] = timezone.now().isoformat()
+        request.session["sovietgram_session_login_times_v1"] = login_times
+
     request.session["sovietgram_session_user_agent"] = (
         request.META.get("HTTP_USER_AGENT", "") or ""
     )[:240]

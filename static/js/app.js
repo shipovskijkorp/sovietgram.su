@@ -40,6 +40,33 @@ function syncClientTimezone() {
 
 syncClientTimezone();
 
+// A tab may remain open on settings or the chat list without making requests.
+// Keep presence fresh only while the signed-in user has this window in focus.
+// The backend writes last_seen_at at most once every 45 seconds.
+if (document.documentElement.dataset.authenticated === "true") {
+  let presencePending = false;
+  async function touchPresence() {
+    if (presencePending || document.hidden || !document.hasFocus()) return;
+    presencePending = true;
+    try {
+      await fetch("/presence/heartbeat/", {
+        method: "GET",
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+    } catch (_error) {
+      // The next heartbeat will retry if the connection is interrupted.
+    } finally {
+      presencePending = false;
+    }
+  }
+  window.setInterval(() => { void touchPresence(); }, 30000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) void touchPresence();
+  });
+  window.addEventListener("focus", () => { void touchPresence(); });
+}
+
 function applyClientTheme(theme, persist = true) {
   const next = theme === "dark" ? "dark" : "light";
   document.documentElement.dataset.theme = next;

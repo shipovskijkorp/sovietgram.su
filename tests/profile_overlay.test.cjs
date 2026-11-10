@@ -4,6 +4,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
+// Ensure calendar boundaries are tested in a non-UTC timezone.
+process.env.TZ = "Europe/Stockholm";
 const source = fs.readFileSync(
   path.join(__dirname, "../static/js/profile.js"), "utf8"
 );
@@ -48,6 +50,7 @@ function harness(saveRequest) {
     "userProfileBioCount", "userProfileEditError", "userProfileFieldEditor",
     "userProfileFieldInput", "userProfileFieldSave", "userProfileFieldError",
     "userProfileBirthdayChoice", "userProfileBirthdayInput",
+    "userProfileStatus", "userProfileEditStatus",
   ];
   const elems = Object.fromEntries(ids.map(id => [id, element(id)]));
   const toasts = [];
@@ -166,4 +169,59 @@ test("bio blur and close reuse one pending POST instead of racing", async () => 
   await Promise.all([onBlur, closing]);
   assert.equal(count, 1);
   assert.equal(elems.userProfileOverlay.hidden, true);
+});
+
+test("profile last seen uses browser timezone across UTC midnight", () => {
+  const { context } = harness(async () => { throw new Error("no fetch"); });
+  const result = vm.runInContext(`
+    formatProfileLastSeen({
+      status: "старый серверный статус",
+      last_seen_exact: true,
+      last_seen_at: "2026-11-09T23:30:00+00:00",
+      is_online: false,
+    }, new Date("2026-11-10T12:00:00+01:00"))
+  `, context);
+  assert.equal(result, "был(а) сегодня в 00:30");
+});
+
+test("private presence never renders hidden exact time", () => {
+  const { context } = harness(async () => { throw new Error("no fetch"); });
+  const result = vm.runInContext(`
+    formatProfileLastSeen({
+      status: "был(а) недавно",
+      last_seen_exact: false,
+      last_seen_at: "2026-11-09T23:30:00+00:00",
+      is_online: true,
+    }, new Date("2026-11-10T12:00:00+01:00"))
+  `, context);
+  assert.equal(result, "был(а) недавно");
+});
+
+test("profile online state updates without a full page reload", async () => {
+  const { context, elems } = harness(async (url, options) => {
+    assert.equal(url, "/u/ivan/");
+    assert.equal(options.cache, "no-store");
+    return {
+      ok: true,
+      async json() {
+        return {
+          ok: true, status: "в сети", is_online: true,
+          last_seen_exact: true,
+          last_seen_at: "2026-11-10T19:35:00+00:00",
+          is_contact: false,
+        };
+      },
+    };
+  });
+  vm.runInContext(`
+    renderUserProfile({
+      profile_url: "/u/ivan/", is_self: false, username: "ivan",
+      status: "был(а) давно", last_seen_exact: false,
+      last_seen_at: "", is_online: false,
+    });
+  `, context);
+  assert.equal(elems.userProfileStatus.textContent, "был(а) давно");
+  await vm.runInContext("refreshProfilePresence()", context);
+  assert.equal(elems.userProfileStatus.textContent, "в сети");
+  assert.equal(elems.userProfileEditStatus.textContent, "в сети");
 });

@@ -72,6 +72,7 @@
   let blockSearchTimer = 0;
   let privacySearchController = null;
   let blockSearchController = null;
+  let sessionsSyncBusy = false;
 
   const privacyQuestion = document.getElementById("privacyRuleQuestion");
   const privacyAlwaysCount = document.getElementById("privacyAlwaysCount");
@@ -213,6 +214,10 @@
     if (menuButton) menuButton.hidden = next !== "main";
     closeMenu();
     if (scroll) scroll.scrollTop = 0;
+    if (next === "sessions") {
+      renderSessions();
+      void syncSessions();
+    }
   }
 
   function openSettings(screen = "main", options = {}) {
@@ -603,6 +608,16 @@
     });
   }
 
+  function formatSessionTimestamp(timestamp, fallback = "") {
+    if (typeof timestamp !== "string" || !timestamp) return fallback;
+    const date = new Date(timestamp);
+    if (!Number.isFinite(date.getTime())) return fallback;
+    return new Intl.DateTimeFormat("ru-RU", {
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hour12: false,
+    }).format(date);
+  }
+
   function renderSessions() {
     if (!privacySessionsList) return;
     privacySessionsList.replaceChildren();
@@ -619,7 +634,14 @@
       const strong = document.createElement("strong");
       strong.textContent = session.current ? "Этот сеанс" : session.user_agent;
       const small = document.createElement("small");
-      small.textContent = [session.current ? session.user_agent : "", session.ip, `до ${session.expires}`].filter(Boolean).join(" · ");
+      const loginTime = formatSessionTimestamp(session.login_at);
+      const expirationTime = formatSessionTimestamp(session.expires_at, session.expires || "");
+      small.textContent = [
+        session.current ? session.user_agent : "",
+        session.ip,
+        loginTime ? `Вход: ${loginTime}` : "Вход: нет данных",
+        expirationTime ? `Истекает: ${expirationTime}` : "",
+      ].filter(Boolean).join(" · ");
       copy.append(strong, small);
 
       row.append(icon, copy);
@@ -645,6 +667,31 @@
     const count = document.getElementById("privacySessionCount");
     if (count) count.textContent = String(sessions.length);
     if (terminateOtherSessions) terminateOtherSessions.hidden = sessions.filter((item) => !item.current).length === 0;
+  }
+
+  async function syncSessions() {
+    if (sessionsSyncBusy || root.hidden || currentScreen !== "sessions" || document.hidden) return;
+    sessionsSyncBusy = true;
+    try {
+      const url = new URL(endpoint, window.location.origin);
+      url.searchParams.set("action", "privacy_state");
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+        cache: "no-store",
+      });
+      if (!response.ok) return;
+      const payload = await response.json();
+      if (!payload.ok || !Array.isArray(payload.sessions)) return;
+      if (root.hidden || currentScreen !== "sessions") return;
+      sessions = payload.sessions;
+      renderSessions();
+    } catch (_error) {
+      // The next refresh retries silently on intermittent connection errors.
+    } finally {
+      sessionsSyncBusy = false;
+    }
   }
 
   function passwordErrorsText(errors) {
@@ -701,7 +748,6 @@
       renderScreen(next);
       setUrlScreen(next, "push");
       if (next === "blocked") renderBlocked();
-      if (next === "sessions") renderSessions();
     });
   });
 
@@ -801,6 +847,10 @@
   passwordForm?.addEventListener("submit", submitPassword);
 
   window.addEventListener("popstate", openSettingsFromUrl);
+  window.setInterval(() => { void syncSessions(); }, 15000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) void syncSessions();
+  });
 
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape" || root.hidden) return;

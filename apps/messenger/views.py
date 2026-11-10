@@ -259,8 +259,6 @@ def _presence_text(user, viewer=None):
         return "был(а) недавно" if delta < timedelta(days=3) else "был(а) давно"
 
     local_seen = timezone.localtime(user.last_seen_at)
-    if delta < timedelta(minutes=15):
-        return "был(а) недавно"
     if local_seen.date() == timezone.localdate():
         return f"был(а) сегодня в {local_seen:%H:%M}"
     if local_seen.date() == timezone.localdate() - timedelta(days=1):
@@ -812,6 +810,17 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
     membership = _membership(selected_chat, user)
     _decorate_chat_ui(selected_chat, user)
     selected_chat.other_status_ui = selected_chat.status_ui
+    selected_chat.other_last_seen_exact_ui = False
+    selected_chat.other_last_seen_at_ui = ""
+    selected_chat.other_is_online_ui = False
+    if selected_chat.type == Chat.Type.PRIVATE and not selected_chat.is_saved_ui:
+        peer = selected_chat.other_user
+        if privacy_allows(peer, user, "last_seen"):
+            selected_chat.other_last_seen_exact_ui = True
+            selected_chat.other_last_seen_at_ui = (
+                peer.last_seen_at.isoformat() if peer.last_seen_at else ""
+            )
+            selected_chat.other_is_online_ui = bool(peer.is_online)
     other_last_read_id = (
         _other_last_read_id(selected_chat, user)
         if selected_chat.type == Chat.Type.PRIVATE
@@ -2754,6 +2763,9 @@ def poll_messages(request, chat_id):
         _visible_pins_queryset(chat, request.user).values_list("message_id", flat=True)
     )
 
+    other_last_seen_exact = False
+    other_last_seen_at = ""
+    other_is_online = False
     if chat.type == Chat.Type.PRIVATE:
         other_membership = _other_membership(chat, request.user)
         other_user = other_user_for_chat(chat, request.user)
@@ -2770,11 +2782,14 @@ def poll_messages(request, chat_id):
             and other_membership.last_typing_at
             and other_membership.last_typing_at >= now - timedelta(seconds=5)
         )
-        other_status = (
-            "Личное облако"
-            if chat.direct_key == f"self:{request.user.pk}"
-            else _presence_text(other_user, request.user)
-        )
+        is_saved = chat.direct_key == f"self:{request.user.pk}"
+        other_status = "Личное облако" if is_saved else _presence_text(other_user, request.user)
+        if not is_saved and privacy_allows(other_user, request.user, "last_seen"):
+            other_last_seen_exact = True
+            other_last_seen_at = (
+                other_user.last_seen_at.isoformat() if other_user.last_seen_at else ""
+            )
+            other_is_online = bool(other_user.is_online)
     else:
         other_typing = False
         _decorate_chat_ui(chat, request.user)
@@ -2807,6 +2822,9 @@ def poll_messages(request, chat_id):
             "other_last_read_id": other_last_read_id,
             "other_typing": other_typing,
             "other_status": other_status,
+            "other_last_seen_exact": other_last_seen_exact,
+            "other_last_seen_at": other_last_seen_at,
+            "other_is_online": other_is_online,
             "pins": _serialize_visible_pins(chat, request.user),
             "server_time": now.isoformat(),
         }

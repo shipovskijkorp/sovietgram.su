@@ -156,6 +156,102 @@ class PrivacySettingsTests(TestCase):
         self.assertTrue(sessions)
         self.assertTrue(any(item["current"] for item in sessions))
 
+    def test_login_timestamp_is_real_and_stays_utc_across_timezone_changes(self):
+        # A user's sign-in is not the same as when the session will expire.
+        response = self.client.post(
+            reverse("accounts:login"),
+            {"username": self.alice.username, "password": self.password},
+            HTTP_USER_AGENT="Test browser",
+        )
+        self.assertEqual(response.status_code, 302)
+        initial_session = self.client.session
+        login_times = initial_session["sovietgram_session_login_times_v1"]
+        login_time = login_times[str(self.alice.pk)]
+        self.assertLess(abs(
+            (timezone.now() - timezone.datetime.fromisoformat(login_time)).total_seconds()
+        ), 15)
+
+        settings_url = reverse("accounts:settings")
+        state = self.client.get(
+            settings_url,
+            {"action": "privacy_state"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(state.status_code, 200)
+        sessions = state.json()["sessions"]
+        self.assertEqual(len(sessions), 1)
+        self.assertTrue(sessions[0]["current"])
+        self.assertEqual(sessions[0]["login_at"], login_time)
+        self.assertIn("+00:00", sessions[0]["login_at"])
+        self.assertIn("+00:00", sessions[0]["expires_at"])
+        self.assertNotEqual(sessions[0]["login_at"], sessions[0]["expires_at"])
+        self.assertEqual(sessions[0]["user_agent"], "Test browser")
+
+        self.client.cookies["sovietgram_timezone"] = "Pacific/Auckland"
+        refreshed = self.client.get(
+            settings_url,
+            {"action": "privacy_state"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(refreshed.json()["sessions"][0]["login_at"], login_time)
+        # Django may extend the session expiry after a request that modifies
+        # session metadata. It must still describe nearly the same future time.
+        original_expiry = timezone.datetime.fromisoformat(sessions[0]["expires_at"])
+        refreshed_expiry = timezone.datetime.fromisoformat(
+            refreshed.json()["sessions"][0]["expires_at"]
+        )
+        self.assertLess(abs((refreshed_expiry - original_expiry).total_seconds()), 60)
+
+    def test_legacy_session_does_not_invent_login_timestamp(self):
+        self.client.force_login(self.alice)
+        response = self.client.get(
+            reverse("accounts:settings"),
+            {"action": "privacy_state"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["sessions"][0]["login_at"], "")
+
+    def test_presence_time_is_exact_only_when_privacy_allows(self):
+        when = timezone.now() - timedelta(minutes=5)
+        User.objects.filter(pk=self.alice.pk).update(last_seen_at=when)
+
+        self.client.force_login(self.bob)
+        url = reverse("accounts:public_profile", args=[self.alice.username])
+        visible = self.client.get(
+            url, HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(visible.status_code, 200)
+        self.assertTrue(visible.json()["last_seen_exact"])
+        self.assertEqual(visible.json()["last_seen_at"], when.isoformat())
+        self.assertFalse(visible.json()["is_online"])
+
+        set_privacy_rule(self.alice, "last_seen", "nobody")
+        hidden = self.client.get(url, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertEqual(hidden.status_code, 200)
+        self.assertFalse(hidden.json()["last_seen_exact"])
+        self.assertEqual(hidden.json()["last_seen_at"], "")
+        self.assertFalse(hidden.json()["is_online"])
+        self.assertIn(hidden.json()["status"], ("был(а) недавно", "был(а) давно"))
+
+        self.client.force_login(self.alice)
+        own = self.client.get(url, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertTrue(own.json()["last_seen_exact"])
+        self.assertTrue(own.json()["last_seen_at"])
+
+    def test_presence_heartbeat_requires_login_and_updates_activity(self):
+        url = reverse("accounts:presence_heartbeat")
+        self.assertEqual(self.client.get(url).status_code, 302)
+        self.client.force_login(self.alice)
+        old = timezone.now() - timedelta(minutes=10)
+        User.objects.filter(pk=self.alice.pk).update(last_seen_at=old)
+        touched = self.client.get(url)
+        self.assertEqual(touched.status_code, 200)
+        self.assertTrue(touched.json()["ok"])
+        self.assertEqual(touched["Cache-Control"], "no-store")
+        self.alice.refresh_from_db()
+        self.assertGreater(self.alice.last_seen_at, old)
+
     def test_default_auto_delete_is_applied_to_new_direct_chat(self):
         self.alice.default_auto_delete_seconds = 86400
         self.alice.save(update_fields=["default_auto_delete_seconds"])

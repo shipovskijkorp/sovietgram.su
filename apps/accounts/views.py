@@ -316,6 +316,15 @@ def _parse_id_list(raw):
 
 
 @login_required
+@require_GET
+def presence_heartbeat(request):
+    """Keep a focused browser session online via the activity middleware."""
+    response = JsonResponse({"ok": True})
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+@login_required
 def settings_view(request):
     wants_json = request.headers.get("x-requested-with") == "XMLHttpRequest"
 
@@ -586,7 +595,8 @@ def public_profile(request, username):
 
     if request.headers.get("x-requested-with") == "XMLHttpRequest":
         last_seen_visible = privacy_allows(profile_user, viewer, "last_seen")
-        if is_self or last_seen_visible:
+        exact_presence = bool(is_self or last_seen_visible)
+        if exact_presence:
             if profile_user.is_online:
                 status = "в сети"
             elif profile_user.last_seen_at:
@@ -622,6 +632,15 @@ def public_profile(request, username):
                 "username": profile_user.username,
                 "bio": profile_user.bio if bio_visible else "",
                 "status": status,
+                # Send UTC-aware timestamps to the browser for local formatting.
+                # A hidden presence setting must never disclose exact timestamps.
+                "last_seen_exact": exact_presence,
+                "last_seen_at": (
+                    profile_user.last_seen_at.isoformat()
+                    if exact_presence and profile_user.last_seen_at
+                    else ""
+                ),
+                "is_online": bool(profile_user.is_online) if exact_presence else False,
                 "avatar_url": (
                     profile_user.avatar_url
                     if profile_user.avatar and photo_visible

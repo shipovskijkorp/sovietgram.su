@@ -1366,9 +1366,33 @@ function updateReadReceipts(lastReadId) {
   });
 }
 const conversationStatus = document.getElementById("conversationStatus");
-function updateConversationStatus(typing, status) {
+function localConversationPresence(status, isExact, lastSeenAt, isOnline) {
+  // profile.js is included by base.html before this script.
+  if (!isExact || typeof formatProfileLastSeen !== "function") return status;
+  return formatProfileLastSeen({
+    status,
+    last_seen_exact: true,
+    last_seen_at: lastSeenAt || "",
+    is_online: Boolean(isOnline),
+  });
+}
+if (conversationStatus?.dataset.presenceExact === "true") {
+  conversationStatus.textContent = localConversationPresence(
+    conversationStatus.textContent,
+    true,
+    conversationStatus.dataset.lastSeenAt,
+    conversationStatus.dataset.isOnline === "true",
+  );
+}
+function updateConversationStatus(typing, status, presence = null) {
   if (!conversationStatus) return;
-  conversationStatus.textContent = typing ? "печатает…" : (status || conversationStatus.textContent);
+  const localized = presence ? localConversationPresence(
+    status,
+    presence.other_last_seen_exact,
+    presence.other_last_seen_at,
+    presence.other_is_online,
+  ) : status;
+  conversationStatus.textContent = typing ? "печатает…" : (localized || conversationStatus.textContent);
   conversationStatus.classList.toggle("is-typing", Boolean(typing));
 }
 
@@ -1385,14 +1409,14 @@ async function pollMessages() {
     url.searchParams.set("after", String(newestMessageId));
     url.searchParams.set("since", newestUpdateAt);
     url.searchParams.set("after_update_id", String(newestUpdateId));
-    const response = await fetch(url, { credentials: "same-origin" });
+    const response = await fetch(url, { credentials: "same-origin", cache: "no-store" });
     if (!response.ok) return;
     const payload = await response.json();
     for (const message of payload.messages || []) renderMessage(message);
     for (const message of payload.updates || []) applyMessageUpdate(message);
     newestMessageId = Math.max(newestMessageId, Number(payload.high_watermark) || 0, ...(payload.messages || []).map((item) => Number(item.id) || 0));
     updateReadReceipts(payload.other_last_read_id);
-    updateConversationStatus(payload.other_typing, payload.other_status);
+    updateConversationStatus(payload.other_typing, payload.other_status, payload);
     renderPinnedMessages(payload.pins || []);
     newestUpdateAt = payload.updates_cursor_time || payload.server_time || newestUpdateAt;
     newestUpdateId = Number(payload.updates_cursor_id) || 0;
