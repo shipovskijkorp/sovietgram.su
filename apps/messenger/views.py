@@ -424,7 +424,7 @@ def _posting_restriction(
     if chat.type != Chat.Type.GROUP:
         return None
 
-    if text and not has_attachments and not chat.members_can_send_messages:
+    if text and not chat.members_can_send_messages:
         return ("Администраторы запретили участникам отправлять текстовые сообщения.", 0)
     if has_attachments and not chat.members_can_send_media:
         return ("Администраторы запретили участникам отправлять медиа и файлы.", 0)
@@ -523,7 +523,7 @@ def _prepare_sidebar_chats(user, archived=False):
     unread_count = (
         Message.objects.filter(
             Q(id__gt=F("chat__memberships__cleared_before_message_id")),
-            Q(id__gt=F("chat__memberships__last_read_message_id")),
+            Q(id__gt=Coalesce(F("chat__memberships__last_read_message_id"), Value(0, output_field=BigIntegerField()), output_field=BigIntegerField())),
             history_visible,
             chat=OuterRef("pk"),
             chat__memberships__user=user,
@@ -730,7 +730,7 @@ def _account_slots_with_unread(request):
         slot_user = slot["user"]
         unread = (
             Message.objects.filter(
-                Q(id__gt=F("chat__memberships__last_read_message_id")),
+                Q(id__gt=Coalesce(F("chat__memberships__last_read_message_id"), Value(0, output_field=BigIntegerField()), output_field=BigIntegerField())),
                 Q(id__gt=F("chat__memberships__cleared_before_message_id")),
                 (
                     Q(chat__type=Chat.Type.PRIVATE)
@@ -895,6 +895,26 @@ def home(request):
         request,
         "messenger/index.html",
         _messenger_context(request, archived=archived),
+    )
+
+
+@login_required
+@require_GET
+def sidebar_snapshot(request):
+    """Refresh unread counts and new chats without reloading the conversation."""
+    archived = request.GET.get("archived") == "1"
+    chats = _prepare_sidebar_chats(request.user, archived=archived)
+    archive_chats = chats if archived else _prepare_sidebar_chats(request.user, archived=True)
+    return render(
+        request,
+        "messenger/_chat_list.html",
+        {
+            "chats": chats,
+            "show_archived": archived,
+            "archived_count": len(archive_chats),
+            "archived_unread_count": sum(chat.unread_count_ui or 0 for chat in archive_chats),
+            "archive_preview": ", ".join(chat.display_name_ui for chat in archive_chats[:3]),
+        },
     )
 
 
@@ -2686,6 +2706,10 @@ def poll_messages(request, chat_id):
         since = now
     elif timezone.is_naive(since):
         since = timezone.make_aware(since, timezone.get_current_timezone())
+    try:
+        after_update_id = max(0, int(request.GET.get("after_update_id", "0")))
+    except (TypeError, ValueError):
+        after_update_id = 0
 
     base = _visible_message_queryset(chat, request.user)
     new_messages = list(
@@ -2695,12 +2719,32 @@ def poll_messages(request, chat_id):
         mark_chat_read(chat, request.user, new_messages[-1])
 
     updated_messages = list(
-        base.filter(id__lte=after_id, updated_at__gt=since)
+        base.filter(id__lte=after_id)
+        .filter(
+            Q(updated_at__gt=since)
+            | Q(updated_at=since, id__gt=after_update_id)
+        )
         .order_by("updated_at", "id")[:100]
     )
     _hide_inaccessible_reply_previews(chat, request.user, new_messages)
     _hide_inaccessible_reply_previews(chat, request.user, updated_messages)
-    high_watermark = chat.messages.order_by("-id").values_list("id", flat=True).first() or after_id
+
+    # Never move past a page of messages that was not delivered to the client.
+    # Both new messages and edits may require multiple polling requests.
+    high_watermark = (
+        new_messages[-1].pk
+        if len(new_messages) == 100
+        else max(
+            after_id,
+            chat.messages.order_by("-id").values_list("id", flat=True).first() or 0,
+        )
+    )
+    if len(updated_messages) == 100:
+        updates_cursor_time = updated_messages[-1].updated_at
+        updates_cursor_id = updated_messages[-1].pk
+    else:
+        updates_cursor_time = now
+        updates_cursor_id = 0
     other_last_read_id = (
         _other_last_read_id(chat, request.user)
         if chat.type == Chat.Type.PRIVATE
@@ -2758,6 +2802,8 @@ def poll_messages(request, chat_id):
                 for message in updated_messages
             ],
             "high_watermark": high_watermark,
+            "updates_cursor_time": updates_cursor_time.isoformat(),
+            "updates_cursor_id": updates_cursor_id,
             "other_last_read_id": other_last_read_id,
             "other_typing": other_typing,
             "other_status": other_status,

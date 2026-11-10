@@ -2,7 +2,7 @@ from datetime import date
 from io import BytesIO
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import Client, TestCase
 from PIL import Image
 from django.urls import reverse
 
@@ -20,6 +20,58 @@ class ProfileTests(TestCase):
             email="ivan@example.com",
             password=self.password,
         )
+
+    def test_overlay_birthday_and_bio_save_with_csrf_enabled(self):
+        # The browser's profile editor sends multipart FormData through AJAX.
+        # Enforce real CSRF checks so missing form tokens cannot go unnoticed.
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.user)
+        home = client.get(reverse("messenger:home"))
+        self.assertEqual(home.status_code, 200)
+        csrf = client.cookies["csrftoken"].value
+        url = reverse("accounts:profile")
+        payload = {
+            "first_name": "Иван",
+            "username": self.user.username,
+            "bio": "Текст после редактирования",
+            "birthday": "2007-05-16",
+            "personal_channel": "",
+        }
+        without_token = client.post(
+            url,
+            payload,
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(without_token.status_code, 403)
+
+        saved = client.post(
+            url,
+            {**payload, "csrfmiddlewaretoken": csrf},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(saved.status_code, 200)
+        self.assertTrue(saved.json()["ok"])
+        self.assertEqual(saved.json()["birthday"], "2007-05-16")
+        self.assertEqual(saved.json()["bio"], "Текст после редактирования")
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.birthday, date(2007, 5, 16))
+        self.assertEqual(self.user.bio, "Текст после редактирования")
+
+        changed = client.post(
+            url,
+            {
+                **payload,
+                "csrfmiddlewaretoken": csrf,
+                "birthday": "2006-11-10",
+                "bio": "Описание изменено повторно",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(changed.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.birthday, date(2006, 11, 10))
+        self.assertEqual(self.user.bio, "Описание изменено повторно")
 
     def test_profile_requires_login(self):
         response = self.client.get(reverse("accounts:profile"))

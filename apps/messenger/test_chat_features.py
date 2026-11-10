@@ -53,6 +53,92 @@ class ChatFeatureTests(TestCase):
         self.chat = get_or_create_direct_chat(self.alice, self.bob)
         self.client.force_login(self.alice)
 
+    def test_poll_batches_new_messages_without_skipping(self):
+        Message.objects.bulk_create([
+            Message(chat=self.chat, sender=self.bob, text=f"Incoming {index}")
+            for index in range(115)
+        ])
+        url = reverse("messenger:poll_messages", args=[self.chat.pk])
+        first = self.client.get(url, {"after": 0}).json()
+        self.assertEqual(len(first["messages"]), 100)
+        self.assertEqual(first["high_watermark"], first["messages"][-1]["id"])
+
+        second = self.client.get(url, {"after": first["high_watermark"]}).json()
+        self.assertEqual(len(second["messages"]), 15)
+        delivered = [item["id"] for item in first["messages"] + second["messages"]]
+        self.assertEqual(len(set(delivered)), 115)
+
+    def test_poll_batches_updates_with_equal_timestamps(self):
+        from datetime import timedelta
+
+        messages = Message.objects.bulk_create([
+            Message(chat=self.chat, sender=self.bob, text=f"Original {index}")
+            for index in range(115)
+        ])
+        timestamp = timezone.now()
+        Message.objects.filter(pk__in=[m.pk for m in messages]).update(
+            text="Edited", updated_at=timestamp
+        )
+        url = reverse("messenger:poll_messages", args=[self.chat.pk])
+        params = {
+            "after": messages[-1].pk,
+            "since": (timestamp - timedelta(seconds=1)).isoformat(),
+        }
+        first = self.client.get(url, params).json()
+        self.assertEqual(len(first["updates"]), 100)
+        second = self.client.get(url, {
+            "after": messages[-1].pk,
+            "since": first["updates_cursor_time"],
+            "after_update_id": first["updates_cursor_id"],
+        }).json()
+        self.assertEqual(len(second["updates"]), 15)
+        delivered = [item["id"] for item in first["updates"] + second["updates"]]
+        self.assertEqual(len(set(delivered)), 115)
+
+    def test_group_media_permission_cannot_bypass_text_restriction(self):
+        group = Chat.objects.create(
+            type=Chat.Type.GROUP, title="Files only",
+            members_can_send_messages=False, members_can_send_media=True,
+        )
+        ChatParticipant.objects.create(
+            chat=group, user=self.alice, role=ChatParticipant.Role.MEMBER,
+        )
+        ChatParticipant.objects.create(
+            chat=group, user=self.bob, role=ChatParticipant.Role.OWNER,
+        )
+        url = reverse("messenger:send_message", args=[group.pk])
+        denied = self.client.post(url, {
+            "text": "Forbidden caption",
+            "attachment_mode": "file",
+            "attachments": SimpleUploadedFile("doc.txt", b"valid file"),
+        }, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertEqual(denied.status_code, 403)
+        self.assertEqual(Message.objects.filter(chat=group).count(), 0)
+
+        accepted = self.client.post(url, {
+            "text": "",
+            "attachment_mode": "file",
+            "attachments": SimpleUploadedFile("doc.txt", b"valid file"),
+        }, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertEqual(accepted.status_code, 200)
+        self.assertEqual(Message.objects.filter(chat=group).count(), 1)
+
+    def test_sidebar_snapshot_updates_and_requires_login(self):
+        url = reverse("messenger:sidebar_snapshot")
+        first = self.client.get(url)
+        self.assertEqual(first.status_code, 200)
+        self.assertContains(first, 'id="chatList"')
+        self.assertNotContains(first, 'class="chat-row__unread"')
+
+        Message.objects.create(chat=self.chat, sender=self.bob, text="A new message")
+        second = self.client.get(url)
+        self.assertContains(second, "A new message")
+        self.assertContains(second, 'class="chat-row__unread"')
+
+        self.client.logout()
+        denied = self.client.get(url)
+        self.assertEqual(denied.status_code, 302)
+
     def test_sidebar_chat_preparation_does_not_scale_queries_per_chat(self):
         for index in range(6):
             group = Chat.objects.create(

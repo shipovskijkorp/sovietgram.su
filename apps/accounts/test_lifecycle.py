@@ -49,6 +49,35 @@ class AccountLifecycleTests(TestCase):
             password=self.password,
         )
 
+    def test_expired_account_login_uses_safe_cleanup(self):
+        from datetime import timedelta
+
+        from django.urls import reverse
+        from django.utils import timezone
+
+        group = Chat.objects.create(type=Chat.Type.GROUP, title="Owner cleanup")
+        ChatParticipant.objects.create(
+            chat=group, user=self.alice, role=ChatParticipant.Role.OWNER,
+        )
+        ChatParticipant.objects.create(
+            chat=group, user=self.bob, role=ChatParticipant.Role.ADMIN,
+        )
+        direct = get_or_create_direct_chat(self.alice, self.charlie)
+        User.objects.filter(pk=self.alice.pk).update(
+            last_seen_at=timezone.now() - timedelta(days=400),
+        )
+        response = self.client.post(
+            reverse("accounts:login"),
+            {"username": self.alice.username, "password": self.password},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(pk=self.alice.pk).exists())
+        self.assertFalse(Chat.objects.filter(pk=direct.pk).exists())
+        self.assertEqual(
+            ChatParticipant.objects.get(chat=group, user=self.bob).role,
+            ChatParticipant.Role.OWNER,
+        )
+
     def test_account_deletion_removes_private_chat_and_stored_files(self):
         chat = get_or_create_direct_chat(self.alice, self.bob)
         message = Message.objects.create(

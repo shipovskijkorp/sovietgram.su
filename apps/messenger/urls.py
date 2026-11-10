@@ -8,6 +8,7 @@ urlpatterns = [
     path("", views.home, name="home"),
     path("contacts/", views.contacts, name="contacts"),
     path("search/", views.global_search, name="global_search"),
+    path("sidebar/", views.sidebar_snapshot, name="sidebar_snapshot"),
     path("create/", views.create_community, name="create_community"),
     path("join/<str:username>/", views.join_public_chat, name="join_public_chat"),
     path("invite/<str:token>/", community_profiles.join_invite, name="join_invite"),

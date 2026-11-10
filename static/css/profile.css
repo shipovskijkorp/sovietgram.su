@@ -2061,6 +2061,15 @@ body:not([data-theme="dark"]) .tg-profile-channel-picker__footer {
   border-bottom-color: #c94a53;
 }
 
+/* Keep the native birthday picker indicator legible in both themes. */
+.tg-profile-field-editor__body input[type="date"] {
+  color-scheme: dark;
+  cursor: pointer;
+}
+body:not([data-theme="dark"]) .tg-profile-field-editor__body input[type="date"] {
+  color-scheme: light;
+}
+
 .tg-profile-field-editor__error {
   margin-top: 10px;
   padding: 8px 10px;

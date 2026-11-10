@@ -42,3 +42,29 @@ jobs:
           node --check static/js/settings.js
           node --check static/js/community-profile.js
           node --check static/js/community-settings.js
+
+      - name: Test profile editor interactions
+        run: node --test tests/profile_overlay.test.cjs
+
+      - name: Package changed and new files
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          git diff --name-only --diff-filter=AM "origin/${{ github.base_ref }}" HEAD > /tmp/sovietgram-changed-files.txt
+          if [ -s /tmp/sovietgram-changed-files.txt ]; then
+            zip -q sovietgram-changed-files.zip -@ < /tmp/sovietgram-changed-files.txt
+          fi
+          git diff --binary --diff-filter=D "origin/${{ github.base_ref }}" HEAD > deletions.patch
+          if [ ! -s deletions.patch ]; then
+            rm deletions.patch
+          fi
+      - name: Upload patch ZIP
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sovietgram-changed-files-patch
+          path: |
+            sovietgram-changed-files.zip
+            deletions.patch
+          if-no-files-found: error
+          retention-days: 30

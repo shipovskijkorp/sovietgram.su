@@ -175,6 +175,7 @@ let profileAvatarPreviewUrl = "";
 let pendingProfileChannelId = "";
 let profileFieldKey = "";
 let profileBioSaveTimer = 0;
+let profileBioSaveInFlight = null;
 let profileRefreshTimer = 0;
 
 function csrfToken() {
@@ -235,6 +236,9 @@ async function saveSelfProfile(changes = {}, avatarFile = null) {
   };
 
   const body = new FormData();
+  // Django rejects overlay saves without CSRF protection, including birthdays and bios.
+  const token = userProfileEditForm?.querySelector("[name='csrfmiddlewaretoken']")?.value || csrfToken();
+  body.set("csrfmiddlewaretoken", token);
   body.set("first_name", values.first_name ?? "");
   body.set("username", values.username ?? "");
   body.set("bio", values.bio ?? "");
@@ -248,10 +252,10 @@ async function saveSelfProfile(changes = {}, avatarFile = null) {
     headers: { "X-Requested-With": "XMLHttpRequest" },
     credentials: "same-origin",
   });
-  const payload = await response.json();
-  if (!response.ok || !payload.ok) {
-    const error = new Error("profile validation failed");
-    error.profileErrors = payload.errors;
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.ok) {
+    const error = new Error("Не удалось сохранить профиль.");
+    error.profileErrors = payload?.errors;
     throw error;
   }
 
@@ -362,26 +366,44 @@ async function flushBioSave() {
     window.clearTimeout(profileBioSaveTimer);
     profileBioSaveTimer = 0;
   }
+
+  // Blur, debounce and the close button can trigger the same save at once.
+  // Share the pending request and save any text typed while it was in flight.
+  if (profileBioSaveInFlight) {
+    if (!await profileBioSaveInFlight) return false;
+  }
   if (!openedProfile?.is_self || !userProfileBioInput) return true;
+
   const bio = userProfileBioInput.value;
   if (bio === (openedProfile.bio || "")) return true;
-  try {
-    await saveSelfProfile({ bio });
-    if (userProfileEditError) userProfileEditError.hidden = true;
-    return true;
-  } catch (error) {
-    if (userProfileEditError) {
-      userProfileEditError.textContent = profileErrorsToText(error?.profileErrors);
-      userProfileEditError.hidden = false;
+
+  const saving = (async () => {
+    try {
+      await saveSelfProfile({ bio });
+      if (userProfileEditError) userProfileEditError.hidden = true;
+      return true;
+    } catch (error) {
+      if (userProfileEditError) {
+        userProfileEditError.textContent = profileErrorsToText(error?.profileErrors);
+        userProfileEditError.hidden = false;
+      }
+      return false;
     }
-    return false;
+  })();
+  profileBioSaveInFlight = saving;
+  try {
+    return await saving;
+  } finally {
+    if (profileBioSaveInFlight === saving) profileBioSaveInFlight = null;
   }
 }
 
 async function closeUserProfile() {
   if (!userProfileOverlay) return;
   if (userProfileEditForm && !userProfileEditForm.hidden) {
-    if (!await flushBioSave()) return;
+    if (!await flushBioSave()) {
+      showProfileToast("Не удалось сохранить «О себе». Изменения не сохранены.");
+    }
   }
   closeProfileFieldEditor();
   closeProfilePhotoViewer();
@@ -649,6 +671,9 @@ async function saveProfileFieldEditor() {
   userProfileFieldSave.disabled = true;
   if (userProfileFieldError) userProfileFieldError.hidden = true;
   try {
+    if (!await flushBioSave()) {
+      throw new Error("Не удалось сохранить «О себе» перед изменением поля.");
+    }
     await saveSelfProfile({ [profileFieldKey]: value });
     fillUserProfileEdit();
     closeProfileFieldEditor();
@@ -837,7 +862,9 @@ userProfileEdit?.addEventListener("click", () => {
 
 userProfileEditBack?.addEventListener("click", async () => {
   if (!openedProfile) return;
-  if (!await flushBioSave()) return;
+  if (!await flushBioSave()) {
+    showProfileToast("Не удалось сохранить «О себе». Изменения не сохранены.");
+  }
   renderUserProfile(openedProfile);
 });
 
@@ -988,7 +1015,9 @@ document.addEventListener("keydown", (event) => {
   if (userProfileEditForm && !userProfileEditForm.hidden) {
     event.preventDefault();
     void (async () => {
-      if (!await flushBioSave()) return;
+      if (!await flushBioSave()) {
+        showProfileToast("Не удалось сохранить «О себе». Изменения не сохранены.");
+      }
       if (openedProfile) renderUserProfile(openedProfile);
     })();
     return;

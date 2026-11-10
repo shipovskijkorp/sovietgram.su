@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.backends import ModelBackend
 
+from .lifecycle import delete_user_account
 from .privacy import account_expired_for_inactivity
 
 
@@ -19,7 +20,7 @@ class EmailOrUsernameBackend(ModelBackend):
 
         if user and user.check_password(password):
             if account_expired_for_inactivity(user):
-                user.delete()
+                delete_user_account(user)
                 return None
             if self.user_can_authenticate(user):
                 return user
