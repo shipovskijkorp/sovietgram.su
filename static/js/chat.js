@@ -1409,7 +1409,7 @@ async function pollMessages() {
     url.searchParams.set("after", String(newestMessageId));
     url.searchParams.set("since", newestUpdateAt);
     url.searchParams.set("after_update_id", String(newestUpdateId));
-    const response = await fetch(url, { credentials: "same-origin" });
+    const response = await fetch(url, { credentials: "same-origin", cache: "no-store" });
     if (!response.ok) return;
     const payload = await response.json();
     for (const message of payload.messages || []) renderMessage(message);
