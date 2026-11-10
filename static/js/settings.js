@@ -89,6 +89,7 @@
   const blockedUserSearch = document.getElementById("blockedUserSearch");
   const blockedUsersList = document.getElementById("blockedUsersList");
   const blockedSearchResults = document.getElementById("blockedSearchResults");
+  const blockedSearchEmpty = document.getElementById("blockedSearchEmpty");
   const blockedUsersEmpty = document.getElementById("blockedUsersEmpty");
   const privacySessionsList = document.getElementById("privacySessionsList");
   const terminateOtherSessions = document.getElementById("terminateOtherSessions");
@@ -530,11 +531,13 @@
     url.searchParams.set("q", query.trim());
     const response = await fetch(url, {
       credentials: "same-origin",
+      cache: "no-store",
       signal,
     });
-    if (!response.ok) return [];
-    const payload = await response.json().catch(() => ({}));
-    return (payload.people || []).map(personFromSearch);
+    if (!response.ok) throw new Error("Поиск временно недоступен.");
+    const payload = await response.json();
+    if (!Array.isArray(payload.people)) throw new Error("Неверный ответ поиска.");
+    return payload.people.map(personFromSearch);
   }
 
   async function renderExceptionSearch(query, signal) {
@@ -544,7 +547,14 @@
       people = await searchPeople(query, signal);
     } catch (error) {
       if (error?.name === "AbortError") return;
-      throw error;
+      if (currentScreen === "privacy-exceptions" && privacyExceptionSearch?.value.trim() === query.trim()) {
+        privacyExceptionResults.replaceChildren();
+        if (privacyExceptionEmpty) {
+          privacyExceptionEmpty.textContent = error.message || "Ошибка поиска.";
+          privacyExceptionEmpty.hidden = false;
+        }
+      }
+      return;
     }
     if (
       signal?.aborted
@@ -556,8 +566,10 @@
     const otherKind = activeExceptionKind === "always" ? "never" : "always";
     const rule = privacyRules[activePrivacyKey];
 
+    let visible = 0;
     people.forEach((person) => {
       if (selectedIds.has(person.id)) return;
+      visible += 1;
       privacyExceptionResults.appendChild(
         personRow(person, "Добавить", async () => {
           if (privacyRuleSaving) return;
@@ -577,7 +589,10 @@
         }),
       );
     });
-    if (privacyExceptionEmpty) privacyExceptionEmpty.hidden = Boolean(people.length);
+    if (privacyExceptionEmpty) {
+      privacyExceptionEmpty.textContent = visible ? "" : "Подходящих пользователей нет.";
+      privacyExceptionEmpty.hidden = visible > 0;
+    }
   }
 
   function openExceptionPicker(kind) {
@@ -589,7 +604,10 @@
     }
     if (privacyExceptionSearch) privacyExceptionSearch.value = "";
     if (privacyExceptionResults) privacyExceptionResults.replaceChildren();
-    if (privacyExceptionEmpty) privacyExceptionEmpty.hidden = false;
+    if (privacyExceptionEmpty) {
+      privacyExceptionEmpty.textContent = "Введите имя или @username.";
+      privacyExceptionEmpty.hidden = false;
+    }
     renderExceptionSelected();
     renderScreen("privacy-exceptions");
     setUrlScreen("privacy-exceptions", "push");
@@ -625,7 +643,14 @@
       people = await searchPeople(query, signal);
     } catch (error) {
       if (error?.name === "AbortError") return;
-      throw error;
+      if (currentScreen === "blocked" && blockedUserSearch?.value.trim() === query.trim()) {
+        blockedSearchResults.replaceChildren();
+        if (blockedSearchEmpty) {
+          blockedSearchEmpty.textContent = error.message || "Ошибка поиска.";
+          blockedSearchEmpty.hidden = false;
+        }
+      }
+      return;
     }
     if (
       signal?.aborted
@@ -634,8 +659,10 @@
     ) return;
     const blockedIds = new Set(blockedUsers.map((item) => item.id));
     blockedSearchResults.replaceChildren();
+    let visible = 0;
     people.forEach((person) => {
       if (blockedIds.has(person.id)) return;
+      visible += 1;
       blockedSearchResults.appendChild(
         personRow(person, "Заблокировать", async () => {
           try {
@@ -644,6 +671,7 @@
             renderBlocked();
             blockedUserSearch.value = "";
             blockedSearchResults.replaceChildren();
+            if (blockedSearchEmpty) blockedSearchEmpty.hidden = true;
             showStatus("Пользователь заблокирован");
           } catch (error) {
             showStatus(error.message, true);
@@ -651,6 +679,10 @@
         }),
       );
     });
+    if (blockedSearchEmpty) {
+      blockedSearchEmpty.textContent = visible ? "" : "Подходящих пользователей нет.";
+      blockedSearchEmpty.hidden = visible > 0;
+    }
   }
 
   function formatSessionTimestamp(timestamp, fallback = "") {
@@ -856,7 +888,10 @@
     const query = privacyExceptionSearch.value;
     if (!query.trim()) {
       privacyExceptionResults?.replaceChildren();
-      if (privacyExceptionEmpty) privacyExceptionEmpty.hidden = false;
+      if (privacyExceptionEmpty) {
+        privacyExceptionEmpty.textContent = "Введите имя или @username.";
+        privacyExceptionEmpty.hidden = false;
+      }
       return;
     }
     privacySearchTimer = window.setTimeout(() => {
@@ -872,6 +907,7 @@
     const query = blockedUserSearch.value;
     if (!query.trim()) {
       blockedSearchResults?.replaceChildren();
+      if (blockedSearchEmpty) blockedSearchEmpty.hidden = true;
       return;
     }
     blockSearchTimer = window.setTimeout(() => {
