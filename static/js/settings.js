@@ -72,7 +72,11 @@
   let blockSearchTimer = 0;
   let privacySearchController = null;
   let blockSearchController = null;
-  let sessionsSyncBusy = false;
+  let settingsSyncBusy = false;
+  let settingsMutationCount = 0;
+  let settingsRevision = 0;
+  let privacyRuleSaving = false;
+  const settingsSaving = new Set();
 
   const privacyQuestion = document.getElementById("privacyRuleQuestion");
   const privacyAlwaysCount = document.getElementById("privacyAlwaysCount");
@@ -165,20 +169,28 @@
   }
 
   async function post(data) {
-    const body = new FormData();
-    body.append("csrfmiddlewaretoken", csrfToken);
-    Object.entries(data).forEach(([key, value]) => body.append(key, String(value)));
-    const response = await fetch(endpoint, {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "X-Requested-With": "XMLHttpRequest" },
-      body,
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !payload.ok) {
-      throw new Error(payload.error || "Не удалось сохранить настройку.");
+    // Ignore any in-flight state snapshot that predates a local mutation.
+    settingsMutationCount += 1;
+    settingsRevision += 1;
+    try {
+      const body = new FormData();
+      body.append("csrfmiddlewaretoken", csrfToken);
+      Object.entries(data).forEach(([key, value]) => body.append(key, String(value)));
+      const response = await fetch(endpoint, {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+        body,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error || "Не удалось сохранить настройку.");
+      }
+      return payload;
+    } finally {
+      settingsMutationCount -= 1;
     }
-    return payload;
   }
 
   function closeMenu() {
@@ -214,10 +226,7 @@
     if (menuButton) menuButton.hidden = next !== "main";
     closeMenu();
     if (scroll) scroll.scrollTop = 0;
-    if (next === "sessions") {
-      renderSessions();
-      void syncSessions();
-    }
+    if (next === "sessions") renderSessions();
   }
 
   function openSettings(screen = "main", options = {}) {
@@ -230,6 +239,7 @@
     root.hidden = false;
     document.body.classList.add("settings-open");
     renderScreen(next);
+    void syncSettingsState();
     if (options.history === "replace") setUrlScreen(next, "replace");
     if (options.history === "push") setUrlScreen(next, "push");
   }
@@ -669,9 +679,10 @@
     if (terminateOtherSessions) terminateOtherSessions.hidden = sessions.filter((item) => !item.current).length === 0;
   }
 
-  async function syncSessions() {
-    if (sessionsSyncBusy || root.hidden || currentScreen !== "sessions" || document.hidden) return;
-    sessionsSyncBusy = true;
+  async function syncSettingsState() {
+    if (settingsSyncBusy || settingsMutationCount || root.hidden || document.hidden) return;
+    settingsSyncBusy = true;
+    const revision = settingsRevision;
     try {
       const url = new URL(endpoint, window.location.origin);
       url.searchParams.set("action", "privacy_state");
@@ -683,14 +694,44 @@
       });
       if (!response.ok) return;
       const payload = await response.json();
-      if (!payload.ok || !Array.isArray(payload.sessions)) return;
-      if (root.hidden || currentScreen !== "sessions") return;
-      sessions = payload.sessions;
-      renderSessions();
+      if (!payload.ok || settingsRevision !== revision || settingsMutationCount || root.hidden) return;
+
+      if (payload.rules && typeof payload.rules === "object") {
+        privacyRules = payload.rules;
+        syncPrivacyRows();
+        if (currentScreen === "privacy-rule" || currentScreen === "privacy-exceptions") {
+          updatePrivacyEditor();
+          if (currentScreen === "privacy-exceptions") renderExceptionSelected();
+        }
+      }
+      if (Array.isArray(payload.blocked)) {
+        blockedUsers = payload.blocked;
+        renderBlocked();
+      }
+      if (Array.isArray(payload.sessions)) {
+        sessions = payload.sessions;
+        renderSessions();
+      }
+      if (payload.preferences && typeof payload.preferences === "object") {
+        Object.entries(payload.preferences).forEach(([setting, value]) => {
+          if (!controlsFor(setting).length || settingsSaving.has(setting)) return;
+          const textValue = typeof value === "boolean" ? String(value) : String(value ?? "");
+          currentValues.set(setting, textValue);
+          applyValue(setting, textValue);
+        });
+      }
+      if (payload.delete_after_inactive_label) {
+        const label = document.getElementById("privacyInactiveValue");
+        if (label) label.textContent = payload.delete_after_inactive_label;
+      }
+      if (payload.default_auto_delete_label) {
+        const label = document.getElementById("privacyAutoDeleteValue");
+        if (label) label.textContent = payload.default_auto_delete_label;
+      }
     } catch (_error) {
-      // The next refresh retries silently on intermittent connection errors.
+      // Settings stay usable offline; the next refresh will retry.
     } finally {
-      sessionsSyncBusy = false;
+      settingsSyncBusy = false;
     }
   }
 
@@ -847,9 +888,9 @@
   passwordForm?.addEventListener("submit", submitPassword);
 
   window.addEventListener("popstate", openSettingsFromUrl);
-  window.setInterval(() => { void syncSessions(); }, 15000);
+  window.setInterval(() => { void syncSettingsState(); }, 15000);
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) void syncSessions();
+    if (!document.hidden) void syncSettingsState();
   });
 
   document.addEventListener("keydown", (event) => {
