@@ -331,6 +331,10 @@ def active_sessions_payload(user, current_session_key=""):
 
 
 def terminate_sessions(user, current_session_key="", token=None, others=False):
+    # Never interpret a missing individual session token as "terminate all".
+    # Bulk revocation requires the explicit others=True operation.
+    if not others and not token:
+        return 0
     deleted = 0
     now = timezone.now()
     sessions = Session.objects.filter(expire_date__gt=now)
