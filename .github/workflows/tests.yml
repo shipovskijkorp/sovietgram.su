@@ -43,8 +43,8 @@ jobs:
           node --check static/js/community-profile.js
           node --check static/js/community-settings.js
 
-      - name: Test profile editor interactions
-        run: node --test tests/profile_overlay.test.cjs
+      - name: Test profile and session UI interactions
+        run: node --test tests/*.test.cjs
 
       - name: Package changed and new files
         if: github.event_name == 'pull_request'
