@@ -1,0 +1,57 @@
+{% load static %}
+    <section class="chat-list{% if not chats and not archived_count %} chat-list--empty{% endif %}" id="chatList" data-refresh-url="{% url 'messenger:sidebar_snapshot' %}{% if show_archived %}?archived=1{% endif %}" aria-label="{% if show_archived %}Архив{% else %}Чаты{% endif %}">
+      {% if not show_archived and archived_count and not request.user.archive_in_main_menu %}
+        <a class="archive-folder-row" href="{% url 'messenger:home' %}?archived=1">
+          <span class="archive-folder-row__avatar">
+            <span class="tg-native-icon tg-native-icon--archive-open" aria-hidden="true"></span>
+          </span>
+          <span class="archive-folder-row__body">
+            <strong>Архив</strong>
+            <small>{% if archive_preview %}{{ archive_preview }}{% else %}{{ archived_count }} чат{{ archived_count|pluralize:'а,ов' }}{% endif %}</small>
+          </span>
+          {% if archived_unread_count %}<b class="archive-folder-row__badge">{{ archived_unread_count }}</b>{% endif %}
+        </a>
+      {% endif %}
+      {% for chat in chats %}
+        <a class="chat-row{% if selected_chat and selected_chat.pk == chat.pk %} is-active{% endif %}" href="{% url 'messenger:chat' chat.pk %}" data-chat-row data-search="{{ chat.search_text_ui }}">
+          {% if chat.type == 'private' and chat.other_user_avatar_url_ui %}
+            <img class="chat-row__avatar" src="{{ chat.other_user_avatar_url_ui }}" alt="">
+          {% elif chat.type != 'private' and chat.avatar %}
+            <img class="chat-row__avatar" src="{{ chat.avatar.url }}" alt="">
+          {% else %}
+            <span class="chat-row__avatar chat-row__avatar--fallback">{{ chat.avatar_text_ui }}</span>
+          {% endif %}
+          <span class="chat-row__body">
+            <span class="chat-row__headline">
+              <strong>{{ chat.display_name_ui }}</strong>
+              {% if chat.last_message_created_at_ui %}<time>{{ chat.last_message_created_at_ui|date:'H:i' }}</time>{% endif %}
+            </span>
+            {% if chat.username_ui %}<span class="chat-row__meta">@{{ chat.username_ui }}</span>{% elif chat.is_collective_ui %}<span class="chat-row__meta">{{ chat.status_ui }}</span>{% endif %}
+            <span class="chat-row__preview{% if chat.draft_text_ui %} chat-row__preview--draft{% endif %}">
+              {% if chat.draft_text_ui %}
+                <b>Черновик:</b> {{ chat.draft_text_ui|truncatechars:52 }}
+              {% elif chat.last_message_id_ui %}
+                {% if chat.last_message_sender_id_ui == request.user.pk and not chat.is_saved_ui %}<b>Вы:</b> {% endif %}{{ chat.last_message_preview_ui|truncatechars:58 }}
+              {% else %}
+                {% if chat.type == 'channel' %}Эфир пока тих{% elif chat.type == 'group' %}Собрание ещё не началось{% else %}Диалог создан{% endif %}
+              {% endif %}
+            </span>
+          </span>
+          <span class="chat-row__flags">
+            {% if chat.is_pinned_ui %}<span class="tg-native-icon tg-native-icon--pin tg-native-icon--small" title="Закреплён" aria-hidden="true"></span>{% endif %}
+            {% if chat.is_muted_ui %}<span class="tg-native-icon tg-native-icon--mute tg-native-icon--small" title="Без уведомлений" aria-hidden="true"></span>{% endif %}
+          </span>
+          {% if chat.unread_count_ui %}<span class="chat-row__unread">{{ chat.unread_count_ui }}</span>{% endif %}
+        </a>
+      {% empty %}
+        {% if show_archived or not archived_count or request.user.archive_in_main_menu %}
+          <div class="chat-empty">
+            <span class="chat-empty__icon">{% if show_archived %}<span class="tg-native-icon tg-native-icon--archive" aria-hidden="true"></span>{% else %}✉{% endif %}</span>
+            <strong>{% if show_archived %}Архив пуст{% else %}Чатов пока нет{% endif %}</strong>
+            <p>{% if show_archived %}Здесь появятся чаты, которые вы отправите в архив.{% else %}Найдите человека или канал и выходите на связь.{% endif %}</p>
+            {% if not show_archived %}<a class="chat-empty__action" href="{% url 'messenger:contacts' %}?focus=search">Открыть поиск</a>{% endif %}
+          </div>
+        {% endif %}
+      {% endfor %}
+      <div class="chat-filter-empty" id="chatFilterEmpty" hidden>Ничего не найдено.</div>
+    </section>
