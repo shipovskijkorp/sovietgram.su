@@ -369,6 +369,12 @@
         const target = document.getElementById("privacyAutoDeleteValue");
         if (target) target.textContent = payload.label || savedValue;
       }
+      if (setting === "archive_in_main_menu") {
+        // Archive placement is rendered by Django in both the sidebar and
+        // the navigation menu. Reload once after saving to update both.
+        window.location.reload();
+        return;
+      }
       showStatus("Сохранено");
     } catch (error) {
       if (previousValue != null) applyValue(setting, previousValue);
