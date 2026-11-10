@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from django.contrib.auth import get_user_model
+from django.contrib.auth import HASH_SESSION_KEY, SESSION_KEY, get_user_model
 from django.contrib.sessions.models import Session
 from django.db.models import Q
 from django.utils import timezone
+from django.utils.crypto import constant_time_compare
 
 from .models import UserBlock
 
@@ -181,12 +182,13 @@ def privacy_allows(owner, viewer, key):
     rule = get_privacy_rule(owner, key)
     viewer_id = getattr(viewer, "pk", None)
     if viewer_id is not None:
+        # Blocking takes priority over a stale "always allow" exception.
+        if UserBlock.objects.filter(blocker=owner, blocked_id=viewer_id).exists():
+            return False
         if viewer_id in rule["never"]:
             return False
         if viewer_id in rule["always"]:
             return True
-        if UserBlock.objects.filter(blocker=owner, blocked_id=viewer_id).exists():
-            return False
 
     option = rule["option"]
     if option == "everyone":
@@ -275,17 +277,28 @@ def blocked_users_payload(user):
     ]
 
 
-def _session_contains_user(session, user_id):
+def _session_contains_user(session, user):
     try:
         data = session.get_decoded()
     except Exception:
         return False
-    if str(data.get("_auth_user_id", "")) == str(user_id):
+
+    user_id = str(user.pk)
+    current_hash = user.get_session_auth_hash()
+    if str(data.get(SESSION_KEY, "")) == user_id and constant_time_compare(
+        str(data.get(HASH_SESSION_KEY, "")), current_hash
+    ):
         return True
+
     accounts = data.get("sovietgram_accounts_v1")
     if not isinstance(accounts, list):
         return False
-    return any(str(item.get("user_id", "")) == str(user_id) for item in accounts if isinstance(item, dict))
+    return any(
+        str(item.get("user_id", "")) == user_id
+        and constant_time_compare(str(item.get("session_hash", "")), current_hash)
+        for item in accounts
+        if isinstance(item, dict)
+    )
 
 
 def _session_token(session_key):
@@ -299,7 +312,7 @@ def active_sessions_payload(user, current_session_key=""):
     result = []
     sessions = Session.objects.filter(expire_date__gt=now).order_by("-expire_date")
     for session in sessions.iterator():
-        if not _session_contains_user(session, user.pk):
+        if not _session_contains_user(session, user):
             continue
         try:
             data = session.get_decoded()
@@ -339,7 +352,7 @@ def terminate_sessions(user, current_session_key="", token=None, others=False):
     now = timezone.now()
     sessions = Session.objects.filter(expire_date__gt=now)
     for session in sessions.iterator():
-        if not _session_contains_user(session, user.pk):
+        if not _session_contains_user(session, user):
             continue
         if session.session_key == current_session_key:
             continue
