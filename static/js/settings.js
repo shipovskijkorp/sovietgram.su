@@ -579,7 +579,6 @@
     privacyExceptionResults.replaceChildren();
     const selectedIds = new Set(exceptionSelected().map((item) => item.id));
     const otherKind = activeExceptionKind === "always" ? "never" : "always";
-    const rule = privacyRules[activePrivacyKey];
 
     let visible = 0;
     people.forEach((person) => {
@@ -588,6 +587,10 @@
       privacyExceptionResults.appendChild(
         personRow(person, "Добавить", async () => {
           if (privacyRuleSaving) return;
+          // Read the latest confirmed rule: another tab may have changed it
+          // since these search results were rendered.
+          const rule = privacyRules[activePrivacyKey];
+          if (!rule) return;
           const nextRule = {
             ...rule,
             [otherKind]: (rule[otherKind] || []).filter((item) => item.id !== person.id),
