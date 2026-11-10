@@ -899,6 +899,26 @@ def home(request):
 
 
 @login_required
+@require_GET
+def sidebar_snapshot(request):
+    """Refresh unread counts and new chats without reloading the conversation."""
+    archived = request.GET.get("archived") == "1"
+    chats = _prepare_sidebar_chats(request.user, archived=archived)
+    archive_chats = chats if archived else _prepare_sidebar_chats(request.user, archived=True)
+    return render(
+        request,
+        "messenger/_chat_list.html",
+        {
+            "chats": chats,
+            "show_archived": archived,
+            "archived_count": len(archive_chats),
+            "archived_unread_count": sum(chat.unread_count_ui or 0 for chat in archive_chats),
+            "archive_preview": ", ".join(chat.display_name_ui for chat in archive_chats[:3]),
+        },
+    )
+
+
+@login_required
 def chat_detail(request, chat_id):
     chat = _chat_for_user(request.user, chat_id)
     membership = _membership(chat, request.user)
