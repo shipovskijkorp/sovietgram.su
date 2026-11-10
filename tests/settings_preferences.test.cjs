@@ -246,6 +246,8 @@ test("archive placement is applied immediately with a single reload", async () =
   await view.tick();
   view.archive.checked = true;
   await view.archive.fire("change");
+  // The real change listener intentionally starts the save asynchronously.
+  await view.tick();
   assert.equal(view.postCount(), 1);
   assert.equal(view.server.preferences.archive_in_main_menu, true);
   assert.equal(view.reloadCount(), 1);
