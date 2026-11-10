@@ -194,7 +194,13 @@ class PrivacySettingsTests(TestCase):
             HTTP_X_REQUESTED_WITH="XMLHttpRequest",
         )
         self.assertEqual(refreshed.json()["sessions"][0]["login_at"], login_time)
-        self.assertEqual(refreshed.json()["sessions"][0]["expires_at"], sessions[0]["expires_at"])
+        # Django may extend the session expiry after a request that modifies
+        # session metadata. It must still describe nearly the same future time.
+        original_expiry = timezone.datetime.fromisoformat(sessions[0]["expires_at"])
+        refreshed_expiry = timezone.datetime.fromisoformat(
+            refreshed.json()["sessions"][0]["expires_at"]
+        )
+        self.assertLess(abs((refreshed_expiry - original_expiry).total_seconds()), 60)
 
     def test_legacy_session_does_not_invent_login_timestamp(self):
         self.client.force_login(self.alice)
