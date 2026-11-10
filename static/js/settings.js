@@ -482,9 +482,18 @@
       button.type = "button";
       button.className = "tg-settings-person__action";
       button.textContent = actionText;
-      button.addEventListener("click", (event) => {
+      let busy = false;
+      button.addEventListener("click", async (event) => {
         event.stopPropagation();
-        action?.(person, row);
+        if (busy) return;
+        busy = true;
+        button.disabled = true;
+        try {
+          await action?.(person, row);
+        } finally {
+          busy = false;
+          button.disabled = false;
+        }
       });
       row.appendChild(button);
     }
@@ -728,13 +737,17 @@
         button.className = "tg-settings-session__action";
         button.textContent = "Завершить";
         button.addEventListener("click", async () => {
+          if (!window.confirm("Завершить выбранный сеанс? На этом устройстве потребуется войти заново.")) return;
+          button.disabled = true;
           try {
             const payload = await post({ action: "terminate_session", token: session.token });
             sessions = payload.sessions || [];
             renderSessions();
             showStatus("Сеанс завершён");
           } catch (error) {
-            showStatus(error.message, true);
+            showStatus(error.message || "Не удалось завершить сеанс.", true);
+          } finally {
+            button.disabled = false;
           }
         });
         row.appendChild(button);
@@ -856,6 +869,7 @@
       renderScreen(next);
       setUrlScreen(next, "push");
       if (next === "blocked") renderBlocked();
+      void syncSettingsState();
     });
   });
 
@@ -917,13 +931,17 @@
   });
 
   terminateOtherSessions?.addEventListener("click", async () => {
+    if (!window.confirm("Завершить все другие сеансы Sovietgram? На остальных устройствах потребуется войти заново.")) return;
+    terminateOtherSessions.disabled = true;
     try {
       const payload = await post({ action: "terminate_other_sessions" });
       sessions = payload.sessions || [];
       renderSessions();
       showStatus("Другие сеансы завершены");
     } catch (error) {
-      showStatus(error.message, true);
+      showStatus(error.message || "Не удалось завершить сеансы.", true);
+    } finally {
+      terminateOtherSessions.disabled = false;
     }
   });
 
