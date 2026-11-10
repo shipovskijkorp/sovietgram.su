@@ -1,8 +1,8 @@
 (() => {
   const sidebarInput = document.getElementById("chatFilter");
   const sidebarResults = document.getElementById("sidebarGlobalSearch");
-  const chatRows = Array.from(document.querySelectorAll("[data-chat-row]"));
-  const chatFilterEmpty = document.getElementById("chatFilterEmpty");
+  const chatRows = () => Array.from(document.querySelectorAll("[data-chat-row]"));
+  const chatFilterEmpty = () => document.getElementById("chatFilterEmpty");
 
   const peopleInput = document.getElementById("peopleSearchInput");
   const contactsResults = document.getElementById("contactsLiveSearch");
@@ -229,13 +229,14 @@
     if (!sidebarInput) return;
     const query = sidebarInput.value.trim().toLowerCase().replace(/^@/, "");
     let visible = 0;
-    chatRows.forEach((row) => {
+    chatRows().forEach((row) => {
       const matches = !query || (row.dataset.search || "").includes(query);
       row.hidden = !matches;
       if (matches) visible += 1;
     });
-    if (chatFilterEmpty) {
-      chatFilterEmpty.hidden = Boolean(query) || visible !== 0 || chatRows.length === 0;
+    const empty = chatFilterEmpty();
+    if (empty) {
+      empty.hidden = Boolean(query) || visible !== 0 || chatRows().length === 0;
     }
   }
 
@@ -246,8 +247,9 @@
       sidebarResults.hidden = true;
       sidebarResults.replaceChildren();
     }
-    chatRows.forEach((row) => { row.hidden = false; });
-    if (chatFilterEmpty) chatFilterEmpty.hidden = true;
+    chatRows().forEach((row) => { row.hidden = false; });
+    const empty = chatFilterEmpty();
+    if (empty) empty.hidden = true;
   }
 
   if (sidebarInput) {
@@ -277,6 +279,39 @@
         resetSidebarSearch();
         sidebarInput.blur();
       }
+    });
+  }
+
+  const chatList = document.getElementById("chatList");
+  if (chatList && sidebarInput) {
+    let sidebarRefreshBusy = false;
+    async function refreshSidebar() {
+      if (sidebarRefreshBusy || document.hidden || sidebarInput.value.trim()) return;
+      sidebarRefreshBusy = true;
+      try {
+        const response = await fetch(chatList.dataset.refreshUrl, {
+          credentials: "same-origin",
+          cache: "no-store",
+        });
+        if (!response.ok || sidebarInput.value.trim()) return;
+        const html = await response.text();
+        if (sidebarInput.value.trim()) return;
+        const next = new DOMParser().parseFromString(html, "text/html").getElementById("chatList");
+        if (!next) return;
+        next.querySelectorAll("[data-chat-row]").forEach((row) => {
+          if (new URL(row.href).pathname === window.location.pathname) row.classList.add("is-active");
+        });
+        chatList.replaceChildren(...next.childNodes);
+        chatList.classList.toggle("chat-list--empty", next.classList.contains("chat-list--empty"));
+      } catch (_error) {
+        // Transient connection failures must not interrupt the conversation.
+      } finally {
+        sidebarRefreshBusy = false;
+      }
+    }
+    window.setInterval(refreshSidebar, 5000);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) refreshSidebar();
     });
   }
 
