@@ -26,7 +26,9 @@
   color: var(--settings-text);
 }
 
-.tg-settings-overlay[hidden] {
+.tg-settings-overlay[hidden],
+.tg-settings-overlay [hidden] {
+  /* Author display rules (grid/flex) must never override hidden controls. */
   display: none !important;
 }
 
