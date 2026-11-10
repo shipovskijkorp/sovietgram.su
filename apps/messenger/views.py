@@ -523,7 +523,7 @@ def _prepare_sidebar_chats(user, archived=False):
     unread_count = (
         Message.objects.filter(
             Q(id__gt=F("chat__memberships__cleared_before_message_id")),
-            Q(id__gt=Coalesce(F("chat__memberships__last_read_message_id"), Value(0))),
+            Q(id__gt=Coalesce(F("chat__memberships__last_read_message_id"), Value(0, output_field=BigIntegerField()), output_field=BigIntegerField())),
             history_visible,
             chat=OuterRef("pk"),
             chat__memberships__user=user,
@@ -730,7 +730,7 @@ def _account_slots_with_unread(request):
         slot_user = slot["user"]
         unread = (
             Message.objects.filter(
-                Q(id__gt=Coalesce(F("chat__memberships__last_read_message_id"), Value(0))),
+                Q(id__gt=Coalesce(F("chat__memberships__last_read_message_id"), Value(0, output_field=BigIntegerField()), output_field=BigIntegerField())),
                 Q(id__gt=F("chat__memberships__cleared_before_message_id")),
                 (
                     Q(chat__type=Chat.Type.PRIVATE)
