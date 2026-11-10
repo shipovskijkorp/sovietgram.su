@@ -156,6 +156,56 @@ class PrivacySettingsTests(TestCase):
         self.assertTrue(sessions)
         self.assertTrue(any(item["current"] for item in sessions))
 
+    def test_login_timestamp_is_real_and_stays_utc_across_timezone_changes(self):
+        # A user's sign-in is not the same as when the session will expire.
+        response = self.client.post(
+            reverse("accounts:login"),
+            {"username": self.alice.username, "password": self.password},
+            HTTP_USER_AGENT="Test browser",
+        )
+        self.assertEqual(response.status_code, 302)
+        initial_session = self.client.session
+        login_times = initial_session["sovietgram_session_login_times_v1"]
+        login_time = login_times[str(self.alice.pk)]
+        self.assertLess(abs(
+            (timezone.now() - timezone.datetime.fromisoformat(login_time)).total_seconds()
+        ), 15)
+
+        settings_url = reverse("accounts:settings")
+        state = self.client.get(
+            settings_url,
+            {"action": "privacy_state"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(state.status_code, 200)
+        sessions = state.json()["sessions"]
+        self.assertEqual(len(sessions), 1)
+        self.assertTrue(sessions[0]["current"])
+        self.assertEqual(sessions[0]["login_at"], login_time)
+        self.assertIn("+00:00", sessions[0]["login_at"])
+        self.assertIn("+00:00", sessions[0]["expires_at"])
+        self.assertNotEqual(sessions[0]["login_at"], sessions[0]["expires_at"])
+        self.assertEqual(sessions[0]["user_agent"], "Test browser")
+
+        self.client.cookies["sovietgram_timezone"] = "Pacific/Auckland"
+        refreshed = self.client.get(
+            settings_url,
+            {"action": "privacy_state"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(refreshed.json()["sessions"][0]["login_at"], login_time)
+        self.assertEqual(refreshed.json()["sessions"][0]["expires_at"], sessions[0]["expires_at"])
+
+    def test_legacy_session_does_not_invent_login_timestamp(self):
+        self.client.force_login(self.alice)
+        response = self.client.get(
+            reverse("accounts:settings"),
+            {"action": "privacy_state"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["sessions"][0]["login_at"], "")
+
     def test_default_auto_delete_is_applied_to_new_direct_chat(self):
         self.alice.default_auto_delete_seconds = 86400
         self.alice.save(update_fields=["default_auto_delete_seconds"])
