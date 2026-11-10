@@ -53,6 +53,37 @@ class ChatFeatureTests(TestCase):
         self.chat = get_or_create_direct_chat(self.alice, self.bob)
         self.client.force_login(self.alice)
 
+    def test_chat_header_presence_updates_with_exact_timestamp_and_privacy(self):
+        from datetime import timedelta
+
+        last_seen = timezone.now() - timedelta(minutes=5)
+        User.objects.filter(pk=self.bob.pk).update(last_seen_at=last_seen)
+        poll_url = reverse("messenger:poll_messages", args=[self.chat.pk])
+        payload = self.client.get(poll_url, {"after": 0}).json()
+        self.assertTrue(payload["other_last_seen_exact"])
+        self.assertEqual(payload["other_last_seen_at"], last_seen.isoformat())
+        self.assertFalse(payload["other_is_online"])
+        self.assertNotEqual(payload["other_status"], "был(а) недавно")
+
+        page = self.client.get(reverse("messenger:chat", args=[self.chat.pk]))
+        self.assertContains(page, 'data-presence-exact="true"')
+        self.assertContains(page, last_seen.isoformat())
+
+        self.client.cookies["sovietgram_timezone"] = "Pacific/Auckland"
+        different_zone = self.client.get(poll_url, {"after": 0}).json()
+        self.assertEqual(different_zone["other_last_seen_at"], last_seen.isoformat())
+
+        set_privacy_rule(self.bob, "last_seen", "nobody")
+        private = self.client.get(poll_url, {"after": 0}).json()
+        self.assertFalse(private["other_last_seen_exact"])
+        self.assertEqual(private["other_last_seen_at"], "")
+        self.assertFalse(private["other_is_online"])
+        self.assertEqual(private["other_status"], "был(а) недавно")
+
+        hidden_page = self.client.get(reverse("messenger:chat", args=[self.chat.pk]))
+        self.assertContains(hidden_page, 'data-presence-exact="false"')
+        self.assertNotContains(hidden_page, last_seen.isoformat())
+
     def test_poll_batches_new_messages_without_skipping(self):
         Message.objects.bulk_create([
             Message(chat=self.chat, sender=self.bob, text=f"Incoming {index}")
