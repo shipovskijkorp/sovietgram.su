@@ -122,6 +122,9 @@ test("close button works even when bio save fails (no trapping modal)", async ()
   }));
   elems.userProfileBioInput.value = "Новый текст";
   await elems.userProfileEditClose.click();
+  // The actual click handler intentionally starts an async close without
+  // blocking DOM dispatch; let its save/error microtasks settle.
+  await new Promise(resolve => setImmediate(resolve));
   assert.equal(elems.userProfileOverlay.hidden, true);
   assert.ok(toasts.some(text => text.includes("не сохранены")));
 });
