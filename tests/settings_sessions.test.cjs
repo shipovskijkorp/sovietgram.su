@@ -83,8 +83,8 @@ test("shows login instant in local timezone, distinct from session expiry", asyn
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(view.list.children.length, 1);
   const details = view.list.children[0].children[1].children[1].textContent;
-  assert.match(details, /Вход: 10\\.11\\.2026, 20:30/);
-  assert.match(details, /Истекает: 11\\.11\\.2026, 20:30/);
+  assert.ok(details.includes("Вход: 10.11.2026, 20:30"));
+  assert.ok(details.includes("Истекает: 11.11.2026, 20:30"));
   assert.equal(view.count.textContent, "1");
 });
 
