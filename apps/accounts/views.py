@@ -1,5 +1,6 @@
 import json
 import mimetypes
+import re
 from datetime import timedelta
 
 from django.contrib import messages
@@ -336,6 +337,15 @@ def settings_view(request):
                     "ok": True,
                     "rules": privacy_rule_payload(request.user),
                     "blocked": blocked_users_payload(request.user),
+                    "preferences": {
+                        "theme": request.user.theme,
+                        "enter_to_send": request.user.enter_to_send,
+                        "keep_archived_chats": request.user.keep_archived_chats,
+                        "archive_unknown_chats": request.user.archive_unknown_chats,
+                        "archive_in_main_menu": request.user.archive_in_main_menu,
+                        "delete_after_inactive_days": request.user.delete_after_inactive_days,
+                        "default_auto_delete_seconds": request.user.default_auto_delete_seconds,
+                    },
                     "sessions": active_sessions_payload(
                         request.user,
                         request.session.session_key or "",
@@ -350,6 +360,7 @@ def settings_view(request):
                     ),
                 }
             )
+        return JsonResponse({"ok": False, "error": "Неизвестное действие."}, status=400)
 
     if request.method == "GET" and not wants_json:
         section = request.GET.get("section", "main")
@@ -415,11 +426,21 @@ def settings_view(request):
 
         if action == "terminate_session":
             token = request.POST.get("token", "").strip()
-            terminate_sessions(
+            if not re.fullmatch(r"[0-9a-f]{24}", token):
+                return JsonResponse(
+                    {"ok": False, "error": "Не указан корректный идентификатор сеанса."},
+                    status=400,
+                )
+            deleted = terminate_sessions(
                 request.user,
                 request.session.session_key or "",
-                token=token or None,
+                token=token,
             )
+            if not deleted:
+                return JsonResponse(
+                    {"ok": False, "error": "Сеанс уже завершён или не найден."},
+                    status=404,
+                )
             return JsonResponse(
                 {
                     "ok": True,

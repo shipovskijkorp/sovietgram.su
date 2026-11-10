@@ -72,7 +72,11 @@
   let blockSearchTimer = 0;
   let privacySearchController = null;
   let blockSearchController = null;
-  let sessionsSyncBusy = false;
+  let settingsSyncBusy = false;
+  let settingsMutationCount = 0;
+  let settingsRevision = 0;
+  let privacyRuleSaving = false;
+  const settingsSaving = new Set();
 
   const privacyQuestion = document.getElementById("privacyRuleQuestion");
   const privacyAlwaysCount = document.getElementById("privacyAlwaysCount");
@@ -85,6 +89,7 @@
   const blockedUserSearch = document.getElementById("blockedUserSearch");
   const blockedUsersList = document.getElementById("blockedUsersList");
   const blockedSearchResults = document.getElementById("blockedSearchResults");
+  const blockedSearchEmpty = document.getElementById("blockedSearchEmpty");
   const blockedUsersEmpty = document.getElementById("blockedUsersEmpty");
   const privacySessionsList = document.getElementById("privacySessionsList");
   const terminateOtherSessions = document.getElementById("terminateOtherSessions");
@@ -165,20 +170,28 @@
   }
 
   async function post(data) {
-    const body = new FormData();
-    body.append("csrfmiddlewaretoken", csrfToken);
-    Object.entries(data).forEach(([key, value]) => body.append(key, String(value)));
-    const response = await fetch(endpoint, {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "X-Requested-With": "XMLHttpRequest" },
-      body,
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !payload.ok) {
-      throw new Error(payload.error || "Не удалось сохранить настройку.");
+    // Ignore any in-flight state snapshot that predates a local mutation.
+    settingsMutationCount += 1;
+    settingsRevision += 1;
+    try {
+      const body = new FormData();
+      body.append("csrfmiddlewaretoken", csrfToken);
+      Object.entries(data).forEach(([key, value]) => body.append(key, String(value)));
+      const response = await fetch(endpoint, {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+        body,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error || "Не удалось сохранить настройку.");
+      }
+      return payload;
+    } finally {
+      settingsMutationCount -= 1;
     }
-    return payload;
   }
 
   function closeMenu() {
@@ -214,10 +227,7 @@
     if (menuButton) menuButton.hidden = next !== "main";
     closeMenu();
     if (scroll) scroll.scrollTop = 0;
-    if (next === "sessions") {
-      renderSessions();
-      void syncSessions();
-    }
+    if (next === "sessions") renderSessions();
   }
 
   function openSettings(screen = "main", options = {}) {
@@ -230,6 +240,7 @@
     root.hidden = false;
     document.body.classList.add("settings-open");
     renderScreen(next);
+    void syncSettingsState();
     if (options.history === "replace") setUrlScreen(next, "replace");
     if (options.history === "push") setUrlScreen(next, "push");
   }
@@ -332,7 +343,7 @@
 
   async function saveSetting(control) {
     const setting = control.dataset.setting;
-    if (!setting) return;
+    if (!setting || settingsSaving.has(setting)) return;
     const nextValue = controlValue(control);
     const previousValue = currentValues.get(setting);
     if (previousValue === nextValue) {
@@ -340,6 +351,7 @@
       return;
     }
 
+    settingsSaving.add(setting);
     applyValue(setting, nextValue);
     setSaving(setting, true);
     try {
@@ -357,11 +369,18 @@
         const target = document.getElementById("privacyAutoDeleteValue");
         if (target) target.textContent = payload.label || savedValue;
       }
+      if (setting === "archive_in_main_menu") {
+        // Archive placement is rendered by Django in both the sidebar and
+        // the navigation menu. Reload once after saving to update both.
+        window.location.reload();
+        return;
+      }
       showStatus("Сохранено");
     } catch (error) {
       if (previousValue != null) applyValue(setting, previousValue);
       showStatus(error.message || "Не удалось сохранить настройку.", true);
     } finally {
+      settingsSaving.delete(setting);
       setSaving(setting, false);
     }
   }
@@ -393,23 +412,46 @@
     if (title) title.textContent = rule.title;
   }
 
-  async function savePrivacyRule() {
-    const rule = privacyRules[activePrivacyKey];
-    if (!rule) return;
+  function setPrivacyRuleSaving(busy) {
+    root.querySelectorAll(
+      'input[name="privacy-rule-option"], [data-privacy-exception], [data-settings-screen="privacy-exceptions"] .tg-settings-person__action',
+    ).forEach((control) => { control.disabled = busy; });
+  }
+
+  async function savePrivacyRule(nextRule) {
+    if (privacyRuleSaving || !privacyRules[activePrivacyKey]) return false;
+    const key = activePrivacyKey;
+    privacyRuleSaving = true;
+    setPrivacyRuleSaving(true);
     try {
+      // Keep the committed rule unchanged until the server accepts the edit.
+      // This also avoids an out-of-order response silently overwriting a newer edit.
       const payload = await post({
         action: "privacy_rule",
-        key: activePrivacyKey,
-        option: rule.option,
-        always: JSON.stringify((rule.always || []).map((item) => item.id)),
-        never: JSON.stringify((rule.never || []).map((item) => item.id)),
+        key,
+        option: nextRule.option,
+        always: JSON.stringify((nextRule.always || []).map((item) => item.id)),
+        never: JSON.stringify((nextRule.never || []).map((item) => item.id)),
       });
-      privacyRules[activePrivacyKey] = payload.rule;
-      updatePrivacyEditor();
+      privacyRules[key] = payload.rule;
+      if (activePrivacyKey === key) {
+        updatePrivacyEditor();
+        renderExceptionSelected();
+      }
       syncPrivacyRows();
       showStatus("Сохранено");
+      return true;
     } catch (error) {
-      showStatus(error.message, true);
+      // Re-render from the last confirmed server state on rejection.
+      if (activePrivacyKey === key) {
+        updatePrivacyEditor();
+        renderExceptionSelected();
+      }
+      showStatus(error.message || "Не удалось сохранить конфиденциальность.", true);
+      return false;
+    } finally {
+      privacyRuleSaving = false;
+      setPrivacyRuleSaving(false);
     }
   }
 
@@ -446,9 +488,18 @@
       button.type = "button";
       button.className = "tg-settings-person__action";
       button.textContent = actionText;
-      button.addEventListener("click", (event) => {
+      let busy = false;
+      button.addEventListener("click", async (event) => {
         event.stopPropagation();
-        action?.(person, row);
+        if (busy) return;
+        busy = true;
+        button.disabled = true;
+        try {
+          await action?.(person, row);
+        } finally {
+          busy = false;
+          button.disabled = false;
+        }
       });
       row.appendChild(button);
     }
@@ -467,10 +518,13 @@
     selected.forEach((person) => {
       privacyExceptionSelected.appendChild(
         personRow(person, "Убрать", async () => {
+          if (privacyRuleSaving) return;
           const rule = privacyRules[activePrivacyKey];
-          rule[activeExceptionKind] = rule[activeExceptionKind].filter((item) => item.id !== person.id);
-          renderExceptionSelected();
-          await savePrivacyRule();
+          const nextRule = {
+            ...rule,
+            [activeExceptionKind]: (rule[activeExceptionKind] || []).filter((item) => item.id !== person.id),
+          };
+          await savePrivacyRule(nextRule);
         }),
       );
     });
@@ -492,11 +546,13 @@
     url.searchParams.set("q", query.trim());
     const response = await fetch(url, {
       credentials: "same-origin",
+      cache: "no-store",
       signal,
     });
-    if (!response.ok) return [];
-    const payload = await response.json().catch(() => ({}));
-    return (payload.people || []).map(personFromSearch);
+    if (!response.ok) throw new Error("Поиск временно недоступен.");
+    const payload = await response.json();
+    if (!Array.isArray(payload.people)) throw new Error("Неверный ответ поиска.");
+    return payload.people.map(personFromSearch);
   }
 
   async function renderExceptionSearch(query, signal) {
@@ -506,7 +562,14 @@
       people = await searchPeople(query, signal);
     } catch (error) {
       if (error?.name === "AbortError") return;
-      throw error;
+      if (currentScreen === "privacy-exceptions" && privacyExceptionSearch?.value.trim() === query.trim()) {
+        privacyExceptionResults.replaceChildren();
+        if (privacyExceptionEmpty) {
+          privacyExceptionEmpty.textContent = error.message || "Ошибка поиска.";
+          privacyExceptionEmpty.hidden = false;
+        }
+      }
+      return;
     }
     if (
       signal?.aborted
@@ -516,23 +579,38 @@
     privacyExceptionResults.replaceChildren();
     const selectedIds = new Set(exceptionSelected().map((item) => item.id));
     const otherKind = activeExceptionKind === "always" ? "never" : "always";
-    const rule = privacyRules[activePrivacyKey];
 
+    let visible = 0;
     people.forEach((person) => {
       if (selectedIds.has(person.id)) return;
+      visible += 1;
       privacyExceptionResults.appendChild(
         personRow(person, "Добавить", async () => {
-          rule[otherKind] = (rule[otherKind] || []).filter((item) => item.id !== person.id);
-          rule[activeExceptionKind] = [...(rule[activeExceptionKind] || []), person];
-          renderExceptionSelected();
-          await savePrivacyRule();
-          privacyExceptionSearch.value = "";
-          privacyExceptionResults.replaceChildren();
-          if (privacyExceptionEmpty) privacyExceptionEmpty.hidden = false;
+          if (privacyRuleSaving) return;
+          // Read the latest confirmed rule: another tab may have changed it
+          // since these search results were rendered.
+          const rule = privacyRules[activePrivacyKey];
+          if (!rule) return;
+          const nextRule = {
+            ...rule,
+            [otherKind]: (rule[otherKind] || []).filter((item) => item.id !== person.id),
+            [activeExceptionKind]: [...(rule[activeExceptionKind] || []), person],
+          };
+          if (await savePrivacyRule(nextRule)) {
+            privacyExceptionSearch.value = "";
+            privacyExceptionResults.replaceChildren();
+            if (privacyExceptionEmpty) {
+              privacyExceptionEmpty.textContent = "Введите имя или @username.";
+              privacyExceptionEmpty.hidden = false;
+            }
+          }
         }),
       );
     });
-    if (privacyExceptionEmpty) privacyExceptionEmpty.hidden = Boolean(people.length);
+    if (privacyExceptionEmpty) {
+      privacyExceptionEmpty.textContent = visible ? "" : "Подходящих пользователей нет.";
+      privacyExceptionEmpty.hidden = visible > 0;
+    }
   }
 
   function openExceptionPicker(kind) {
@@ -544,11 +622,21 @@
     }
     if (privacyExceptionSearch) privacyExceptionSearch.value = "";
     if (privacyExceptionResults) privacyExceptionResults.replaceChildren();
-    if (privacyExceptionEmpty) privacyExceptionEmpty.hidden = false;
+    if (privacyExceptionEmpty) {
+      privacyExceptionEmpty.textContent = "Введите имя или @username.";
+      privacyExceptionEmpty.hidden = false;
+    }
     renderExceptionSelected();
     renderScreen("privacy-exceptions");
     setUrlScreen("privacy-exceptions", "push");
     window.setTimeout(() => privacyExceptionSearch?.focus(), 0);
+  }
+
+  function syncBlockedSearchVisibility() {
+    const searching = Boolean(blockedUserSearch?.value.trim());
+    if (blockedUsersList) blockedUsersList.hidden = searching;
+    if (blockedUsersEmpty) blockedUsersEmpty.hidden = searching || blockedUsers.length > 0;
+    if (!searching && blockedSearchEmpty) blockedSearchEmpty.hidden = true;
   }
 
   function renderBlocked() {
@@ -568,7 +656,7 @@
         }),
       );
     });
-    blockedUsersEmpty.hidden = blockedUsers.length > 0;
+    syncBlockedSearchVisibility();
     const count = document.getElementById("privacyBlockedCount");
     if (count) count.textContent = blockedUsers.length ? String(blockedUsers.length) : "Нет";
   }
@@ -580,7 +668,14 @@
       people = await searchPeople(query, signal);
     } catch (error) {
       if (error?.name === "AbortError") return;
-      throw error;
+      if (currentScreen === "blocked" && blockedUserSearch?.value.trim() === query.trim()) {
+        blockedSearchResults.replaceChildren();
+        if (blockedSearchEmpty) {
+          blockedSearchEmpty.textContent = error.message || "Ошибка поиска.";
+          blockedSearchEmpty.hidden = false;
+        }
+      }
+      return;
     }
     if (
       signal?.aborted
@@ -589,16 +684,19 @@
     ) return;
     const blockedIds = new Set(blockedUsers.map((item) => item.id));
     blockedSearchResults.replaceChildren();
+    let visible = 0;
     people.forEach((person) => {
       if (blockedIds.has(person.id)) return;
+      visible += 1;
       blockedSearchResults.appendChild(
         personRow(person, "Заблокировать", async () => {
           try {
             const payload = await post({ action: "block", username: person.username });
             blockedUsers = payload.blocked || [];
-            renderBlocked();
             blockedUserSearch.value = "";
             blockedSearchResults.replaceChildren();
+            renderBlocked();
+            if (blockedSearchEmpty) blockedSearchEmpty.hidden = true;
             showStatus("Пользователь заблокирован");
           } catch (error) {
             showStatus(error.message, true);
@@ -606,6 +704,10 @@
         }),
       );
     });
+    if (blockedSearchEmpty) {
+      blockedSearchEmpty.textContent = visible ? "" : "Подходящих пользователей нет.";
+      blockedSearchEmpty.hidden = visible > 0;
+    }
   }
 
   function formatSessionTimestamp(timestamp, fallback = "") {
@@ -651,13 +753,17 @@
         button.className = "tg-settings-session__action";
         button.textContent = "Завершить";
         button.addEventListener("click", async () => {
+          if (!window.confirm("Завершить выбранный сеанс? На этом устройстве потребуется войти заново.")) return;
+          button.disabled = true;
           try {
             const payload = await post({ action: "terminate_session", token: session.token });
             sessions = payload.sessions || [];
             renderSessions();
             showStatus("Сеанс завершён");
           } catch (error) {
-            showStatus(error.message, true);
+            showStatus(error.message || "Не удалось завершить сеанс.", true);
+          } finally {
+            button.disabled = false;
           }
         });
         row.appendChild(button);
@@ -669,9 +775,10 @@
     if (terminateOtherSessions) terminateOtherSessions.hidden = sessions.filter((item) => !item.current).length === 0;
   }
 
-  async function syncSessions() {
-    if (sessionsSyncBusy || root.hidden || currentScreen !== "sessions" || document.hidden) return;
-    sessionsSyncBusy = true;
+  async function syncSettingsState() {
+    if (settingsSyncBusy || settingsMutationCount || root.hidden || document.hidden) return;
+    settingsSyncBusy = true;
+    const revision = settingsRevision;
     try {
       const url = new URL(endpoint, window.location.origin);
       url.searchParams.set("action", "privacy_state");
@@ -683,14 +790,44 @@
       });
       if (!response.ok) return;
       const payload = await response.json();
-      if (!payload.ok || !Array.isArray(payload.sessions)) return;
-      if (root.hidden || currentScreen !== "sessions") return;
-      sessions = payload.sessions;
-      renderSessions();
+      if (!payload.ok || settingsRevision !== revision || settingsMutationCount || root.hidden) return;
+
+      if (payload.rules && typeof payload.rules === "object") {
+        privacyRules = payload.rules;
+        syncPrivacyRows();
+        if (currentScreen === "privacy-rule" || currentScreen === "privacy-exceptions") {
+          updatePrivacyEditor();
+          if (currentScreen === "privacy-exceptions") renderExceptionSelected();
+        }
+      }
+      if (Array.isArray(payload.blocked)) {
+        blockedUsers = payload.blocked;
+        renderBlocked();
+      }
+      if (Array.isArray(payload.sessions)) {
+        sessions = payload.sessions;
+        renderSessions();
+      }
+      if (payload.preferences && typeof payload.preferences === "object") {
+        Object.entries(payload.preferences).forEach(([setting, value]) => {
+          if (!controlsFor(setting).length || settingsSaving.has(setting)) return;
+          const textValue = typeof value === "boolean" ? String(value) : String(value ?? "");
+          currentValues.set(setting, textValue);
+          applyValue(setting, textValue);
+        });
+      }
+      if (payload.delete_after_inactive_label) {
+        const label = document.getElementById("privacyInactiveValue");
+        if (label) label.textContent = payload.delete_after_inactive_label;
+      }
+      if (payload.default_auto_delete_label) {
+        const label = document.getElementById("privacyAutoDeleteValue");
+        if (label) label.textContent = payload.default_auto_delete_label;
+      }
     } catch (_error) {
-      // The next refresh retries silently on intermittent connection errors.
+      // Settings stay usable offline; the next refresh will retry.
     } finally {
-      sessionsSyncBusy = false;
+      settingsSyncBusy = false;
     }
   }
 
@@ -748,6 +885,7 @@
       renderScreen(next);
       setUrlScreen(next, "push");
       if (next === "blocked") renderBlocked();
+      void syncSettingsState();
     });
   });
 
@@ -767,9 +905,9 @@
 
   root.querySelectorAll('input[name="privacy-rule-option"]').forEach((radio) => {
     radio.addEventListener("change", async () => {
-      if (!radio.checked || !privacyRules[activePrivacyKey]) return;
-      privacyRules[activePrivacyKey].option = radio.value;
-      await savePrivacyRule();
+      const current = privacyRules[activePrivacyKey];
+      if (!radio.checked || !current || privacyRuleSaving) return;
+      await savePrivacyRule({ ...current, option: radio.value });
     });
   });
 
@@ -780,7 +918,10 @@
     const query = privacyExceptionSearch.value;
     if (!query.trim()) {
       privacyExceptionResults?.replaceChildren();
-      if (privacyExceptionEmpty) privacyExceptionEmpty.hidden = false;
+      if (privacyExceptionEmpty) {
+        privacyExceptionEmpty.textContent = "Введите имя или @username.";
+        privacyExceptionEmpty.hidden = false;
+      }
       return;
     }
     privacySearchTimer = window.setTimeout(() => {
@@ -794,8 +935,10 @@
     blockSearchController?.abort();
     blockSearchController = null;
     const query = blockedUserSearch.value;
+    syncBlockedSearchVisibility();
     if (!query.trim()) {
       blockedSearchResults?.replaceChildren();
+      if (blockedSearchEmpty) blockedSearchEmpty.hidden = true;
       return;
     }
     blockSearchTimer = window.setTimeout(() => {
@@ -805,13 +948,17 @@
   });
 
   terminateOtherSessions?.addEventListener("click", async () => {
+    if (!window.confirm("Завершить все другие сеансы Sovietgram? На остальных устройствах потребуется войти заново.")) return;
+    terminateOtherSessions.disabled = true;
     try {
       const payload = await post({ action: "terminate_other_sessions" });
       sessions = payload.sessions || [];
       renderSessions();
       showStatus("Другие сеансы завершены");
     } catch (error) {
-      showStatus(error.message, true);
+      showStatus(error.message || "Не удалось завершить сеансы.", true);
+    } finally {
+      terminateOtherSessions.disabled = false;
     }
   });
 
@@ -847,9 +994,9 @@
   passwordForm?.addEventListener("submit", submitPassword);
 
   window.addEventListener("popstate", openSettingsFromUrl);
-  window.setInterval(() => { void syncSessions(); }, 15000);
+  window.setInterval(() => { void syncSettingsState(); }, 15000);
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) void syncSessions();
+    if (!document.hidden) void syncSettingsState();
   });
 
   document.addEventListener("keydown", (event) => {
