@@ -68,11 +68,6 @@
         <div class="tg-settings-section-gap"></div>
 
         <nav class="tg-settings-list" aria-label="Разделы настроек">
-          <a class="tg-settings-row" href="{% url 'messenger:home' %}?profile={{ request.user.username|urlencode }}" data-settings-close-on-follow>
-            <span class="tg-settings-section-icon tg-settings-section-icon--account" aria-hidden="true"></span>
-            <span class="tg-settings-row__label">Мой аккаунт</span>
-          </a>
-
           <button class="tg-settings-row" type="button" data-settings-target="privacy">
             <span class="tg-settings-section-icon tg-settings-section-icon--lock" aria-hidden="true"></span>
             <span class="tg-settings-row__label">Конфиденциальность и безопасность</span>
@@ -212,6 +207,7 @@
           </label>
           <div class="tg-settings-people" id="blockedUsersList"></div>
           <div class="tg-settings-people" id="blockedSearchResults"></div>
+          <p class="tg-settings-empty" id="blockedSearchEmpty" hidden></p>
           <p class="tg-settings-empty" id="blockedUsersEmpty">Список заблокированных пользователей пуст.</p>
         </div>
       </section>
