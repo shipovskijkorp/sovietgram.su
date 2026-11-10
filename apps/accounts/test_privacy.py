@@ -206,6 +206,46 @@ class PrivacySettingsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["sessions"][0]["login_at"], "")
 
+    def test_presence_time_is_exact_only_when_privacy_allows(self):
+        when = timezone.now() - timedelta(minutes=5)
+        User.objects.filter(pk=self.alice.pk).update(last_seen_at=when)
+
+        self.client.force_login(self.bob)
+        url = reverse("accounts:public_profile", args=[self.alice.username])
+        visible = self.client.get(
+            url, HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(visible.status_code, 200)
+        self.assertTrue(visible.json()["last_seen_exact"])
+        self.assertEqual(visible.json()["last_seen_at"], when.isoformat())
+        self.assertFalse(visible.json()["is_online"])
+
+        set_privacy_rule(self.alice, "last_seen", "nobody")
+        hidden = self.client.get(url, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertEqual(hidden.status_code, 200)
+        self.assertFalse(hidden.json()["last_seen_exact"])
+        self.assertEqual(hidden.json()["last_seen_at"], "")
+        self.assertFalse(hidden.json()["is_online"])
+        self.assertIn(hidden.json()["status"], ("был(а) недавно", "был(а) давно"))
+
+        self.client.force_login(self.alice)
+        own = self.client.get(url, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertTrue(own.json()["last_seen_exact"])
+        self.assertTrue(own.json()["last_seen_at"])
+
+    def test_presence_heartbeat_requires_login_and_updates_activity(self):
+        url = reverse("accounts:presence_heartbeat")
+        self.assertEqual(self.client.get(url).status_code, 302)
+        self.client.force_login(self.alice)
+        old = timezone.now() - timedelta(minutes=10)
+        User.objects.filter(pk=self.alice.pk).update(last_seen_at=old)
+        touched = self.client.get(url)
+        self.assertEqual(touched.status_code, 200)
+        self.assertTrue(touched.json()["ok"])
+        self.assertEqual(touched["Cache-Control"], "no-store")
+        self.alice.refresh_from_db()
+        self.assertGreater(self.alice.last_seen_at, old)
+
     def test_default_auto_delete_is_applied_to_new_direct_chat(self):
         self.alice.default_auto_delete_seconds = 86400
         self.alice.save(update_fields=["default_auto_delete_seconds"])
