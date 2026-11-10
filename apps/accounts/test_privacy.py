@@ -60,6 +60,25 @@ class PrivacySettingsTests(TestCase):
         self.alice.refresh_from_db()
         self.assertFalse(privacy_allows(self.alice, self.bob, "messages"))
 
+    def test_blocked_user_cannot_bypass_privacy_with_always_allow_exception(self):
+        set_privacy_rule(
+            self.alice, "last_seen", "nobody", always=[self.bob.pk],
+        )
+        self.assertTrue(privacy_allows(self.alice, self.bob, "last_seen"))
+
+        UserBlock.objects.create(blocker=self.alice, blocked=self.bob)
+        self.assertFalse(privacy_allows(self.alice, self.bob, "last_seen"))
+        self.assertFalse(privacy_allows(self.alice, self.bob, "profile_photo"))
+
+        self.client.force_login(self.bob)
+        response = self.client.get(
+            reverse("accounts:public_profile", args=[self.alice.username]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["last_seen_exact"])
+        self.assertEqual(response.json()["last_seen_at"], "")
+
     def test_messages_privacy_blocks_new_direct_chat(self):
         set_privacy_rule(self.alice, "messages", "nobody")
         self.client.force_login(self.bob)
