@@ -342,7 +342,7 @@
 
   async function saveSetting(control) {
     const setting = control.dataset.setting;
-    if (!setting) return;
+    if (!setting || settingsSaving.has(setting)) return;
     const nextValue = controlValue(control);
     const previousValue = currentValues.get(setting);
     if (previousValue === nextValue) {
@@ -350,6 +350,7 @@
       return;
     }
 
+    settingsSaving.add(setting);
     applyValue(setting, nextValue);
     setSaving(setting, true);
     try {
@@ -372,6 +373,7 @@
       if (previousValue != null) applyValue(setting, previousValue);
       showStatus(error.message || "Не удалось сохранить настройку.", true);
     } finally {
+      settingsSaving.delete(setting);
       setSaving(setting, false);
     }
   }
@@ -403,23 +405,46 @@
     if (title) title.textContent = rule.title;
   }
 
-  async function savePrivacyRule() {
-    const rule = privacyRules[activePrivacyKey];
-    if (!rule) return;
+  function setPrivacyRuleSaving(busy) {
+    root.querySelectorAll(
+      'input[name="privacy-rule-option"], [data-privacy-exception], [data-settings-screen="privacy-exceptions"] .tg-settings-person__action',
+    ).forEach((control) => { control.disabled = busy; });
+  }
+
+  async function savePrivacyRule(nextRule) {
+    if (privacyRuleSaving || !privacyRules[activePrivacyKey]) return false;
+    const key = activePrivacyKey;
+    privacyRuleSaving = true;
+    setPrivacyRuleSaving(true);
     try {
+      // Keep the committed rule unchanged until the server accepts the edit.
+      // This also avoids an out-of-order response silently overwriting a newer edit.
       const payload = await post({
         action: "privacy_rule",
-        key: activePrivacyKey,
-        option: rule.option,
-        always: JSON.stringify((rule.always || []).map((item) => item.id)),
-        never: JSON.stringify((rule.never || []).map((item) => item.id)),
+        key,
+        option: nextRule.option,
+        always: JSON.stringify((nextRule.always || []).map((item) => item.id)),
+        never: JSON.stringify((nextRule.never || []).map((item) => item.id)),
       });
-      privacyRules[activePrivacyKey] = payload.rule;
-      updatePrivacyEditor();
+      privacyRules[key] = payload.rule;
+      if (activePrivacyKey === key) {
+        updatePrivacyEditor();
+        renderExceptionSelected();
+      }
       syncPrivacyRows();
       showStatus("Сохранено");
+      return true;
     } catch (error) {
-      showStatus(error.message, true);
+      // Re-render from the last confirmed server state on rejection.
+      if (activePrivacyKey === key) {
+        updatePrivacyEditor();
+        renderExceptionSelected();
+      }
+      showStatus(error.message || "Не удалось сохранить конфиденциальность.", true);
+      return false;
+    } finally {
+      privacyRuleSaving = false;
+      setPrivacyRuleSaving(false);
     }
   }
 
@@ -477,10 +502,13 @@
     selected.forEach((person) => {
       privacyExceptionSelected.appendChild(
         personRow(person, "Убрать", async () => {
+          if (privacyRuleSaving) return;
           const rule = privacyRules[activePrivacyKey];
-          rule[activeExceptionKind] = rule[activeExceptionKind].filter((item) => item.id !== person.id);
-          renderExceptionSelected();
-          await savePrivacyRule();
+          const nextRule = {
+            ...rule,
+            [activeExceptionKind]: (rule[activeExceptionKind] || []).filter((item) => item.id !== person.id),
+          };
+          await savePrivacyRule(nextRule);
         }),
       );
     });
@@ -532,13 +560,20 @@
       if (selectedIds.has(person.id)) return;
       privacyExceptionResults.appendChild(
         personRow(person, "Добавить", async () => {
-          rule[otherKind] = (rule[otherKind] || []).filter((item) => item.id !== person.id);
-          rule[activeExceptionKind] = [...(rule[activeExceptionKind] || []), person];
-          renderExceptionSelected();
-          await savePrivacyRule();
-          privacyExceptionSearch.value = "";
-          privacyExceptionResults.replaceChildren();
-          if (privacyExceptionEmpty) privacyExceptionEmpty.hidden = false;
+          if (privacyRuleSaving) return;
+          const nextRule = {
+            ...rule,
+            [otherKind]: (rule[otherKind] || []).filter((item) => item.id !== person.id),
+            [activeExceptionKind]: [...(rule[activeExceptionKind] || []), person],
+          };
+          if (await savePrivacyRule(nextRule)) {
+            privacyExceptionSearch.value = "";
+            privacyExceptionResults.replaceChildren();
+            if (privacyExceptionEmpty) {
+              privacyExceptionEmpty.textContent = "Введите имя или @username.";
+              privacyExceptionEmpty.hidden = false;
+            }
+          }
         }),
       );
     });
@@ -808,9 +843,9 @@
 
   root.querySelectorAll('input[name="privacy-rule-option"]').forEach((radio) => {
     radio.addEventListener("change", async () => {
-      if (!radio.checked || !privacyRules[activePrivacyKey]) return;
-      privacyRules[activePrivacyKey].option = radio.value;
-      await savePrivacyRule();
+      const current = privacyRules[activePrivacyKey];
+      if (!radio.checked || !current || privacyRuleSaving) return;
+      await savePrivacyRule({ ...current, option: radio.value });
     });
   });
 
