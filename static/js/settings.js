@@ -629,6 +629,13 @@
     window.setTimeout(() => privacyExceptionSearch?.focus(), 0);
   }
 
+  function syncBlockedSearchVisibility() {
+    const searching = Boolean(blockedUserSearch?.value.trim());
+    if (blockedUsersList) blockedUsersList.hidden = searching;
+    if (blockedUsersEmpty) blockedUsersEmpty.hidden = searching || blockedUsers.length > 0;
+    if (!searching && blockedSearchEmpty) blockedSearchEmpty.hidden = true;
+  }
+
   function renderBlocked() {
     if (!blockedUsersList || !blockedUsersEmpty) return;
     blockedUsersList.replaceChildren();
@@ -646,7 +653,7 @@
         }),
       );
     });
-    blockedUsersEmpty.hidden = blockedUsers.length > 0;
+    syncBlockedSearchVisibility();
     const count = document.getElementById("privacyBlockedCount");
     if (count) count.textContent = blockedUsers.length ? String(blockedUsers.length) : "Нет";
   }
@@ -683,9 +690,9 @@
           try {
             const payload = await post({ action: "block", username: person.username });
             blockedUsers = payload.blocked || [];
-            renderBlocked();
             blockedUserSearch.value = "";
             blockedSearchResults.replaceChildren();
+            renderBlocked();
             if (blockedSearchEmpty) blockedSearchEmpty.hidden = true;
             showStatus("Пользователь заблокирован");
           } catch (error) {
@@ -925,6 +932,7 @@
     blockSearchController?.abort();
     blockSearchController = null;
     const query = blockedUserSearch.value;
+    syncBlockedSearchVisibility();
     if (!query.trim()) {
       blockedSearchResults?.replaceChildren();
       if (blockedSearchEmpty) blockedSearchEmpty.hidden = true;
