@@ -361,7 +361,9 @@ def visible_forward_username(message, viewer):
     origin = message.forwarded_from
     if origin is None or not privacy_allows(origin.sender, viewer, "forwards"):
         return ""
-    return username
+    # Resolve the origin's current username: a recycled old username must
+    # never link a forwarded message to a different account.
+    return origin.sender.username
 
 
 def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=None):
