@@ -627,6 +627,10 @@
   font-weight: 400;
 }
 
+.tg-settings-radio-row__control {
+  justify-self: center;
+}
+
 .tg-settings-radio-row {
   min-height: 44px;
   display: grid;
