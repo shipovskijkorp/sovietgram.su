@@ -48,11 +48,25 @@ class ProfileAvatarPrivacyTests(TestCase):
         )
 
     def test_avatar_url_uses_protected_view_not_storage_path(self):
-        self.assertEqual(
-            self.alice.avatar_url,
-            reverse("accounts:profile_avatar", args=[self.alice.username]),
+        self.assertTrue(
+            self.alice.avatar_url.startswith(
+                reverse("accounts:profile_avatar", args=[self.alice.username]) + "?v="
+            )
         )
+        self.assertIn(self.alice.avatar.name.replace("/", "%2F"), self.alice.avatar_url)
         self.assertNotIn("/media/avatars/", self.alice.avatar_url)
+
+    def test_replacing_user_avatar_changes_its_versioned_url(self):
+        previous_url = self.alice.avatar_url
+        self.alice.avatar.save(
+            "new-avatar.png",
+            SimpleUploadedFile(
+                "new-avatar.png", b"new-avatar-bytes", content_type="image/png",
+            ),
+            save=True,
+        )
+        self.assertNotEqual(self.alice.avatar_url, previous_url)
+        self.assertIn("?v=", self.alice.avatar_url)
 
     def test_profile_photo_privacy_is_enforced_when_file_is_requested(self):
         set_privacy_rule(self.alice, "profile_photo", "nobody")

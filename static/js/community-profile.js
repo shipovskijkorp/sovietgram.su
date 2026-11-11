@@ -57,6 +57,8 @@
 
   let opened = null;
   let activeTab = "media";
+  let profileRefreshTimer = 0;
+  let profileRefreshBusy = false;
   let pickerTimer = 0;
   let pickerController = null;
   let avatarPreviewUrl = "";
@@ -116,6 +118,8 @@
     backdrop.hidden = !open;
     root.setAttribute("aria-hidden", String(!open));
     if (!open) {
+      if (profileRefreshTimer) window.clearInterval(profileRefreshTimer);
+      profileRefreshTimer = 0;
       closePicker();
       showEditor(false);
     }
@@ -228,6 +232,7 @@
       identity.addEventListener("click", () => openMemberProfile(member));
       const picture = document.createElement(member.avatar_url ? "img" : "span");
       picture.className = "community-profile-member__avatar";
+      picture.dataset.avatarUserId = String(member.user_id);
       if (member.avatar_url) { picture.src = member.avatar_url; picture.alt = ""; }
       else picture.textContent = member.initials;
       const copy = document.createElement("span");
@@ -313,21 +318,36 @@
     setTab(activeTab === "members" && membersTab.hidden ? "media" : activeTab);
   }
 
-  async function refreshProfile() {
+  async function refreshProfile(silent = false) {
+    if (profileRefreshBusy || root.hidden || document.hidden) return null;
+    profileRefreshBusy = true;
     try {
-      const payload = await fetchJson(root.dataset.profileUrl);
+      const payload = await fetchJson(root.dataset.profileUrl, { cache: "no-store" });
+      if (root.hidden) return null;
       renderProfile(payload.profile);
       return payload.profile;
     } catch (error) {
-      toast(error.message || "Не удалось открыть информацию.");
-      setOpen(false);
+      if (!silent) {
+        toast(error.message || "Не удалось открыть информацию.");
+        setOpen(false);
+      }
       return null;
+    } finally {
+      profileRefreshBusy = false;
     }
   }
   async function openCommunityProfile() {
     setOpen(true);
     showEditor(false);
-    await refreshProfile();
+    const profile = await refreshProfile();
+    if (profile && !profileRefreshTimer) {
+      profileRefreshTimer = window.setInterval(() => {
+        // Do not overwrite fields or an avatar preview while the editor is open.
+        if (!root.hidden && editor.hidden && !document.hidden) {
+          void refreshProfile(true);
+        }
+      }, 15000);
+    }
   }
   window.openCommunityProfile = openCommunityProfile;
   document.querySelectorAll("[data-community-profile-open]").forEach((button) => {
@@ -378,6 +398,7 @@
       const payload = await fetchJson(opened.urls.update, { method: "POST", body: data });
       renderProfile(payload.profile);
       showEditor(false);
+      window.SovietgramChat?.syncNow?.();
       const headerName = document.querySelector(".conversation-header__identity--community strong");
       if (headerName) headerName.textContent = payload.profile.title;
       toast("Информация обновлена.");
@@ -443,6 +464,7 @@
       button.className = "community-member-candidate";
       const picture = document.createElement(person.avatar_url ? "img" : "span");
       picture.className = "community-member-candidate__avatar";
+      picture.dataset.avatarUserId = String(person.id);
       if (person.avatar_url) { picture.src = person.avatar_url; picture.alt = ""; }
       else picture.textContent = person.initials;
       const copy = document.createElement("span");

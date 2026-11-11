@@ -45,6 +45,11 @@
   function avatarNode(item) {
     const node = document.createElement(item.avatar_url ? "img" : "span");
     node.className = "global-search-result__avatar";
+    if (item.avatar_kind === "user" && item.avatar_id != null) {
+      node.dataset.avatarUserId = String(item.avatar_id);
+    } else if (item.avatar_kind === "chat" && item.avatar_id != null) {
+      node.dataset.avatarChatId = String(item.avatar_id);
+    }
     if (item.avatar_url) {
       node.src = item.avatar_url;
       node.alt = "";
@@ -298,6 +303,23 @@
         if (sidebarInput.value.trim()) return;
         const next = new DOMParser().parseFromString(html, "text/html").getElementById("chatList");
         if (!next) return;
+        // The sidebar snapshot is also the lightweight avatar directory for
+        // visible conversations. Reuse it to refresh open search/forward
+        // results and other mounted surfaces, not only the sidebar itself.
+        next.querySelectorAll("[data-avatar-user-id]").forEach((node) => {
+          window.SovietgramAvatarSync?.updateUser(
+            node.dataset.avatarUserId,
+            node.tagName === "IMG" ? node.getAttribute("src") || "" : "",
+            node.textContent || "?",
+          );
+        });
+        next.querySelectorAll("[data-avatar-chat-id]").forEach((node) => {
+          window.SovietgramAvatarSync?.updateChat(
+            node.dataset.avatarChatId,
+            node.tagName === "IMG" ? node.getAttribute("src") || "" : "",
+            node.textContent || "?",
+          );
+        });
         next.querySelectorAll("[data-chat-row]").forEach((row) => {
           if (new URL(row.href).pathname === window.location.pathname) row.classList.add("is-active");
         });

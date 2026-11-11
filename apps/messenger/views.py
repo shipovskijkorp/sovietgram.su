@@ -1221,6 +1221,8 @@ def global_search(request):
             {
                 "id": chat.pk,
                 "type": chat.type,
+                "avatar_kind": "user" if chat.type == Chat.Type.PRIVATE and not chat.is_saved_ui else "chat",
+                "avatar_id": chat.other_user.pk if chat.type == Chat.Type.PRIVATE and not chat.is_saved_ui else chat.pk,
                 "title": chat.display_name_ui,
                 "username": chat.username_ui,
                 "status": chat.status_ui,
@@ -1256,6 +1258,8 @@ def global_search(request):
     people_results = [
         {
             "id": user.pk,
+            "avatar_kind": "user",
+            "avatar_id": user.pk,
             "display_name": user.display_name,
             "username": user.username,
             "avatar_url": (
@@ -1291,6 +1295,8 @@ def global_search(request):
         {
             "id": chat.pk,
             "type": chat.type,
+            "avatar_kind": "chat",
+            "avatar_id": chat.pk,
             "title": chat.title or (
                 "Канал" if chat.type == Chat.Type.CHANNEL else "Группа"
             ),
@@ -2854,6 +2860,28 @@ def poll_messages(request, chat_id):
     other_last_seen_exact = False
     other_last_seen_at = ""
     other_is_online = False
+    other_user_id = None
+    other_user_avatar_url = ""
+    other_user_initials = ""
+    other_user_display_name = ""
+    other_user_username = ""
+    other_user_profile_url = ""
+    is_saved_chat = (
+        chat.type == Chat.Type.PRIVATE
+        and chat.direct_key == f"self:{request.user.pk}"
+    )
+    chat_avatar_url = chat.avatar.url if chat.type != Chat.Type.PRIVATE and chat.avatar else ""
+    chat_avatar_text = (
+        "★" if is_saved_chat
+        else "К" if chat.type == Chat.Type.CHANNEL
+        else "Г" if chat.type == Chat.Type.GROUP
+        else ""
+    )
+    chat_title = (
+        "Избранное" if is_saved_chat
+        else chat.title or ("Канал" if chat.type == Chat.Type.CHANNEL else "Группа")
+    )
+    chat_username = chat.username or "" if chat.type != Chat.Type.PRIVATE else ""
     if chat.type == Chat.Type.PRIVATE:
         other_membership = _other_membership(chat, request.user)
         other_user = other_user_for_chat(chat, request.user)
@@ -2872,6 +2900,19 @@ def poll_messages(request, chat_id):
         )
         is_saved = chat.direct_key == f"self:{request.user.pk}"
         other_status = "Личное облако" if is_saved else _presence_text(other_user, request.user)
+        if not is_saved:
+            other_user_id = other_user.pk
+            other_user_display_name = other_user.display_name
+            other_user_username = other_user.username
+            other_user_initials = other_user.initials
+            other_user_profile_url = reverse(
+                "accounts:public_profile", args=[other_user.username],
+            )
+            chat_title = other_user.display_name
+            chat_username = other_user.username
+            chat_avatar_text = other_user.initials
+            if other_user.avatar and privacy_allows(other_user, request.user, "profile_photo"):
+                other_user_avatar_url = other_user.avatar_url
         if not is_saved and privacy_allows(other_user, request.user, "last_seen"):
             other_last_seen_exact = True
             other_last_seen_at = (
@@ -2913,6 +2954,18 @@ def poll_messages(request, chat_id):
             "other_last_seen_exact": other_last_seen_exact,
             "other_last_seen_at": other_last_seen_at,
             "other_is_online": other_is_online,
+            "other_user_id": other_user_id,
+            "other_user_avatar_url": other_user_avatar_url,
+            "other_user_initials": other_user_initials,
+            "other_user_display_name": other_user_display_name,
+            "other_user_username": other_user_username,
+            "other_user_profile_url": other_user_profile_url,
+            "chat_id": chat.pk,
+            "chat_type": chat.type,
+            "chat_title": chat_title,
+            "chat_username": chat_username,
+            "chat_avatar_url": chat_avatar_url,
+            "chat_avatar_text": chat_avatar_text,
             "pins": _serialize_visible_pins(chat, request.user),
             "server_time": now.isoformat(),
         }

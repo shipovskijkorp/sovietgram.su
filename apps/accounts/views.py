@@ -356,6 +356,7 @@ def profile(request):
         return JsonResponse(
             {
                 "ok": True,
+                "user_id": user.pk,
                 "display_name": user.display_name,
                 "first_name": user.first_name,
                 "last_name": user.last_name,
@@ -654,6 +655,7 @@ def remove_avatar(request):
         return JsonResponse(
             {
                 "ok": True,
+                "user_id": request.user.pk,
                 "avatar_url": "",
                 "initials": request.user.initials,
             }
@@ -749,6 +751,7 @@ def public_profile(request, username):
         return JsonResponse(
             {
                 "ok": True,
+                "id": profile_user.pk,
                 "display_name": profile_user.display_name,
                 "username": profile_user.username,
                 "bio": profile_user.bio if bio_visible else "",

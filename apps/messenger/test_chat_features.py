@@ -289,6 +289,65 @@ class ChatFeatureTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(msg.pk, [item["id"] for item in response.json()["messages"]])
 
+    def test_private_chat_poll_refreshes_peer_avatar_and_respects_photo_privacy(self):
+        def upload(name, color):
+            output = BytesIO()
+            Image.new("RGB", (4, 4), color).save(output, "PNG")
+            return SimpleUploadedFile(name, output.getvalue(), content_type="image/png")
+
+        self.bob.avatar.save("first.png", upload("first.png", "red"), save=True)
+        poll_url = reverse("messenger:poll_messages", args=[self.chat.pk])
+        first = self.client.get(poll_url, {"after": 0}).json()
+        self.assertEqual(first["other_user_id"], self.bob.pk)
+        self.assertEqual(first["other_user_avatar_url"], self.bob.avatar_url)
+        self.assertIn("?v=", first["other_user_avatar_url"])
+
+        set_privacy_rule(self.bob, "profile_photo", "nobody")
+        hidden = self.client.get(poll_url, {"after": 0}).json()
+        self.assertEqual(hidden["other_user_avatar_url"], "")
+        self.assertEqual(hidden["other_user_initials"], self.bob.initials)
+
+        set_privacy_rule(self.bob, "profile_photo", "everyone")
+        previous_url = self.bob.avatar_url
+        self.bob.avatar.save("second.png", upload("second.png", "blue"), save=True)
+        self.bob.refresh_from_db()
+        updated = self.client.get(poll_url, {"after": 0}).json()
+        self.assertNotEqual(self.bob.avatar_url, previous_url)
+        self.assertEqual(updated["other_user_avatar_url"], self.bob.avatar_url)
+
+    def test_group_chat_poll_and_sidebar_return_latest_avatar(self):
+        def upload(name, color):
+            output = BytesIO()
+            Image.new("RGB", (4, 4), color).save(output, "PNG")
+            return SimpleUploadedFile(name, output.getvalue(), content_type="image/png")
+
+        group = Chat.objects.create(type=Chat.Type.GROUP, title="Аватарная группа")
+        ChatParticipant.objects.create(
+            chat=group, user=self.alice, role=ChatParticipant.Role.OWNER,
+        )
+        ChatParticipant.objects.create(
+            chat=group, user=self.bob, role=ChatParticipant.Role.MEMBER,
+        )
+        group.avatar.save("first.png", upload("first.png", "red"), save=True)
+        poll_url = reverse("messenger:poll_messages", args=[group.pk])
+        first = self.client.get(poll_url, {"after": 0}).json()
+        self.assertEqual(first["chat_id"], group.pk)
+        self.assertEqual(first["chat_type"], Chat.Type.GROUP)
+        self.assertEqual(first["chat_title"], group.title)
+        self.assertEqual(first["chat_avatar_url"], group.avatar.url)
+
+        previous_url = group.avatar.url
+        group.avatar.save("second.png", upload("second.png", "blue"), save=True)
+        group.refresh_from_db()
+        updated = self.client.get(poll_url, {"after": 0}).json()
+        self.assertNotEqual(group.avatar.url, previous_url)
+        self.assertEqual(updated["chat_avatar_url"], group.avatar.url)
+
+        sidebar = self.client.get(reverse("messenger:sidebar_snapshot"))
+        self.assertEqual(sidebar.status_code, 200)
+        self.assertContains(sidebar, group.avatar.url)
+        self.assertContains(sidebar, f'data-avatar-chat-id="{group.pk}"')
+
     def test_chat_header_presence_updates_with_exact_timestamp_and_privacy(self):
         from datetime import timedelta
 
