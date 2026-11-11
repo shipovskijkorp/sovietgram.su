@@ -2859,6 +2859,7 @@ def poll_messages(request, chat_id):
     other_user_initials = ""
     other_user_display_name = ""
     other_user_username = ""
+    other_user_profile_url = ""
     is_saved_chat = (
         chat.type == Chat.Type.PRIVATE
         and chat.direct_key == f"self:{request.user.pk}"
@@ -2898,6 +2899,9 @@ def poll_messages(request, chat_id):
             other_user_display_name = other_user.display_name
             other_user_username = other_user.username
             other_user_initials = other_user.initials
+            other_user_profile_url = reverse(
+                "accounts:public_profile", args=[other_user.username],
+            )
             chat_title = other_user.display_name
             chat_username = other_user.username
             chat_avatar_text = other_user.initials
@@ -2949,6 +2953,7 @@ def poll_messages(request, chat_id):
             "other_user_initials": other_user_initials,
             "other_user_display_name": other_user_display_name,
             "other_user_username": other_user_username,
+            "other_user_profile_url": other_user_profile_url,
             "chat_id": chat.pk,
             "chat_type": chat.type,
             "chat_title": chat_title,
