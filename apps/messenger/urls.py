@@ -18,6 +18,7 @@ urlpatterns = [
     path("calls/", views.calls, name="calls"),
     path("chat/start/<str:username>/", views.start_chat, name="start_chat"),
     path("chat/<int:chat_id>/", views.chat_detail, name="chat"),
+    path("chat/<int:chat_id>/export/", views.export_chat_history, name="export_chat_history"),
     path("chat/<int:chat_id>/profile/", community_profiles.community_profile, name="community_profile"),
     path("chat/<int:chat_id>/profile/settings/", community_profiles.community_settings, name="community_settings"),
     path("chat/<int:chat_id>/profile/invites/", community_profiles.community_invite_action, name="community_invite_action"),
