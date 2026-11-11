@@ -50,9 +50,9 @@
     <footer class="sidebar__footer">
       <a class="account-mini" href="{% url 'accounts:public_profile' request.user.username %}" data-user-profile data-self-profile title="Открыть профиль">
         {% if request.user.avatar %}
-          <img class="account-mini__avatar account-mini__avatar--image" src="{{ request.user.avatar_url }}" alt="">
+          <img class="account-mini__avatar account-mini__avatar--image" data-avatar-user-id="{{ request.user.pk }}" src="{{ request.user.avatar_url }}" alt="">
         {% else %}
-          <span class="account-mini__avatar">{{ request.user.initials }}</span>
+          <span class="account-mini__avatar" data-avatar-user-id="{{ request.user.pk }}">{{ request.user.initials }}</span>
         {% endif %}
         <span class="account-mini__name">{{ request.user.display_name }}</span>
       </a>
@@ -80,9 +80,9 @@
         {% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}
           <a class="conversation-header__identity" href="{% url 'accounts:public_profile' selected_chat.other_user.username %}" data-user-profile>
             {% if selected_chat.other_user_avatar_url_ui %}
-              <img class="conversation-header__avatar" src="{{ selected_chat.other_user_avatar_url_ui }}" alt="">
+              <img class="conversation-header__avatar" data-avatar-user-id="{{ selected_chat.other_user.pk }}" src="{{ selected_chat.other_user_avatar_url_ui }}" alt="">
             {% else %}
-              <span class="conversation-header__avatar conversation-header__avatar--fallback">{{ selected_chat.avatar_text_ui }}</span>
+              <span class="conversation-header__avatar conversation-header__avatar--fallback"{% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %} data-avatar-user-id="{{ selected_chat.other_user.pk }}"{% else %} data-avatar-chat-id="{{ selected_chat.pk }}"{% endif %}>{{ selected_chat.avatar_text_ui }}</span>
             {% endif %}
             <span class="conversation-header__text">
               <strong>{{ selected_chat.display_name_ui }}</strong>
@@ -92,9 +92,9 @@
         {% elif selected_chat.type != 'private' %}
           <button class="conversation-header__identity conversation-header__identity--community" type="button" data-community-profile-open aria-label="Открыть информацию">
             {% if selected_chat.avatar %}
-              <img class="conversation-header__avatar" src="{{ selected_chat.avatar.url }}" alt="">
+              <img class="conversation-header__avatar" data-avatar-chat-id="{{ selected_chat.pk }}" src="{{ selected_chat.avatar.url }}" alt="">
             {% else %}
-              <span class="conversation-header__avatar conversation-header__avatar--fallback">{{ selected_chat.avatar_text_ui }}</span>
+              <span class="conversation-header__avatar conversation-header__avatar--fallback"{% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %} data-avatar-user-id="{{ selected_chat.other_user.pk }}"{% else %} data-avatar-chat-id="{{ selected_chat.pk }}"{% endif %}>{{ selected_chat.avatar_text_ui }}</span>
             {% endif %}
             <span class="conversation-header__text">
               <strong>{{ selected_chat.display_name_ui }}</strong>
@@ -104,9 +104,9 @@
         {% else %}
           <span class="conversation-header__identity conversation-header__identity--saved">
             {% if selected_chat.avatar %}
-              <img class="conversation-header__avatar" src="{{ selected_chat.avatar.url }}" alt="">
+              <img class="conversation-header__avatar" data-avatar-chat-id="{{ selected_chat.pk }}" src="{{ selected_chat.avatar.url }}" alt="">
             {% else %}
-              <span class="conversation-header__avatar conversation-header__avatar--fallback">{{ selected_chat.avatar_text_ui }}</span>
+              <span class="conversation-header__avatar conversation-header__avatar--fallback"{% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %} data-avatar-user-id="{{ selected_chat.other_user.pk }}"{% else %} data-avatar-chat-id="{{ selected_chat.pk }}"{% endif %}>{{ selected_chat.avatar_text_ui }}</span>
             {% endif %}
             <span class="conversation-header__text">
               <strong>{{ selected_chat.display_name_ui }}</strong>
@@ -205,7 +205,7 @@
           <div class="dialog-start">
             {% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}
               {% if selected_chat.other_user_avatar_url_ui %}
-                <img src="{{ selected_chat.other_user_avatar_url_ui }}" alt="">
+                <img data-avatar-user-id="{{ selected_chat.other_user.pk }}" src="{{ selected_chat.other_user_avatar_url_ui }}" alt="">
               {% else %}
                 <span>{{ selected_chat.avatar_text_ui }}</span>
               {% endif %}
@@ -214,7 +214,7 @@
               <p>Начало вашей переписки. Архивы пока чисты.</p>
             {% else %}
               {% if selected_chat.avatar %}
-                <img src="{{ selected_chat.avatar.url }}" alt="">
+                <img data-avatar-chat-id="{{ selected_chat.pk }}" src="{{ selected_chat.avatar.url }}" alt="">
               {% else %}
                 <span>{{ selected_chat.avatar_text_ui }}</span>
               {% endif %}
@@ -735,7 +735,7 @@
                   data-forward-can-text="{{ target.can_forward_text_ui|yesno:'true,false' }}"
                   data-forward-can-media="{{ target.can_forward_media_ui|yesno:'true,false' }}"
                   data-forward-can-voice="{{ target.can_forward_voice_ui|yesno:'true,false' }}">
-            {% if target.type == 'private' and target.other_user_avatar_url_ui %}<img class="forward-target__avatar" src="{{ target.other_user_avatar_url_ui }}" alt="">{% else %}<span class="forward-target__avatar forward-target__avatar--fallback">{{ target.avatar_text_ui }}</span>{% endif %}
+            {% if target.type == 'private' and target.other_user_avatar_url_ui %}<img class="forward-target__avatar" data-avatar-user-id="{{ target.other_user.pk }}" src="{{ target.other_user_avatar_url_ui }}" alt="">{% else %}<span class="forward-target__avatar forward-target__avatar--fallback"{% if target.type == 'private' %} data-avatar-user-id="{{ target.other_user.pk }}"{% else %} data-avatar-chat-id="{{ target.pk }}"{% endif %}>{{ target.avatar_text_ui }}</span>{% endif %}
             <span><strong>{{ target.display_name_ui }}</strong><small>{% if target.username_ui %}@{{ target.username_ui }}{% else %}{{ target.status_ui }}{% endif %}</small></span>
           </button>
         {% endif %}
@@ -749,14 +749,14 @@
   <header class="chat-info-header"><strong>Информация</strong><button id="chatInfoClose" type="button"><span class="tg-native-icon tg-native-icon--close tg-native-icon--compact" aria-hidden="true"></span></button></header>
   <section class="chat-info-identity">
     {% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}
-      {% if selected_chat.other_user_avatar_url_ui %}<img class="chat-info-avatar" src="{{ selected_chat.other_user_avatar_url_ui }}" alt="">{% else %}<span class="chat-info-avatar chat-info-avatar--fallback">{{ selected_chat.avatar_text_ui }}</span>{% endif %}
+      {% if selected_chat.other_user_avatar_url_ui %}<img class="chat-info-avatar" data-avatar-user-id="{{ selected_chat.other_user.pk }}" src="{{ selected_chat.other_user_avatar_url_ui }}" alt="">{% else %}<span class="chat-info-avatar chat-info-avatar--fallback" data-avatar-chat-id="{{ selected_chat.pk }}">{{ selected_chat.avatar_text_ui }}</span>{% endif %}
       <h2>{{ selected_chat.display_name_ui }}</h2><p>@{{ selected_chat.username_ui }}</p>
       <a href="{% url 'accounts:public_profile' selected_chat.other_user.username %}" data-user-profile>Открыть профиль</a>
     {% else %}
       {% if selected_chat.avatar %}
-        <img class="chat-info-avatar" src="{{ selected_chat.avatar.url }}" alt="">
+        <img class="chat-info-avatar" data-avatar-chat-id="{{ selected_chat.pk }}" src="{{ selected_chat.avatar.url }}" alt="">
       {% else %}
-        <span class="chat-info-avatar chat-info-avatar--fallback">{{ selected_chat.avatar_text_ui }}</span>
+        <span class="chat-info-avatar chat-info-avatar--fallback" data-avatar-chat-id="{{ selected_chat.pk }}">{{ selected_chat.avatar_text_ui }}</span>
       {% endif %}
       <h2>{{ selected_chat.display_name_ui }}</h2>
       <p>{% if selected_chat.username_ui %}@{{ selected_chat.username_ui }} · {% endif %}{{ selected_chat.status_ui }}</p>
@@ -796,9 +796,9 @@
   <button class="profile-account-header" id="profileAccountToggle" type="button" aria-expanded="false" aria-controls="profileAccountList">
     <span class="profile-account-header__avatar">
       {% if request.user.avatar %}
-        <img src="{{ request.user.avatar_url }}" alt="">
+        <img data-avatar-user-id="{{ request.user.pk }}" src="{{ request.user.avatar_url }}" alt="">
       {% else %}
-        <span>{{ request.user.initials }}</span>
+        <span data-avatar-user-id="{{ request.user.pk }}">{{ request.user.initials }}</span>
       {% endif %}
     </span>
 
@@ -816,9 +816,9 @@
         <div class="profile-account-item profile-account-item--current">
           <span class="profile-account-item__avatar">
             {% if slot.user.avatar %}
-              <img src="{{ slot.user.avatar_url }}" alt="" width="36" height="36">
+              <img data-avatar-user-id="{{ slot.user.pk }}" src="{{ slot.user.avatar_url }}" alt="" width="36" height="36">
             {% else %}
-              <span>{{ slot.user.initials }}</span>
+              <span data-avatar-user-id="{{ slot.user.pk }}">{{ slot.user.initials }}</span>
             {% endif %}
           </span>
           <strong>{{ slot.user.display_name }}</strong>
@@ -830,9 +830,9 @@
           <button class="profile-account-item" type="submit">
             <span class="profile-account-item__avatar">
               {% if slot.user.avatar %}
-                <img src="{{ slot.user.avatar_url }}" alt="" width="36" height="36">
+                <img data-avatar-user-id="{{ slot.user.pk }}" src="{{ slot.user.avatar_url }}" alt="" width="36" height="36">
               {% else %}
-                <span>{{ slot.user.initials }}</span>
+                <span data-avatar-user-id="{{ slot.user.pk }}">{{ slot.user.initials }}</span>
               {% endif %}
             </span>
             <strong>{{ slot.user.display_name }}</strong>
