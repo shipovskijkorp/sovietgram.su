@@ -86,7 +86,6 @@
   const chatTitle = conversation.dataset.chatTitle || "чат";
   const peerName = conversation.dataset.chatPeerName || chatTitle;
   const chatActionUrl = conversation.dataset.chatActionUrl || "";
-  const messageStage = document.getElementById("messageStage");
   const chatMenuMuteButton = chatMenu?.querySelector("[data-chat-menu-mute]");
   const chatMenuMuteLabel = chatMenuMuteButton?.querySelector(".chat-menu__label");
   const chatProtectionButton = chatMenu?.querySelector("[data-toggle-chat-protection]");
@@ -122,7 +121,6 @@
   const deleteChatForEveryone = document.getElementById("deleteChatForEveryone");
   const deleteChatForEveryoneLabel = document.getElementById("deleteChatForEveryoneLabel");
   const deleteChatConfirm = document.getElementById("deleteChatConfirm");
-  const chatWallpaperModal = document.getElementById("chatWallpaperModal");
 
   const editModal = document.getElementById("editMessageModal");
   const editText = document.getElementById("editMessageText");
@@ -239,48 +237,6 @@
       notify(error.message);
     } finally {
       chatProtectionButton.disabled = false;
-    }
-  }
-
-  function openChatWallpaper() {
-    if (!chatWallpaperModal) return;
-    const current = messageStage?.dataset.chatWallpaper || "";
-    chatWallpaperModal.querySelectorAll("[data-chat-wallpaper-choice]").forEach((button) => {
-      button.setAttribute(
-        "aria-pressed",
-        String((button.dataset.chatWallpaperChoice || "") === current),
-      );
-    });
-    setChatMenu(false);
-    chatWallpaperModal.hidden = false;
-  }
-
-  function closeChatWallpaper() {
-    if (chatWallpaperModal) chatWallpaperModal.hidden = true;
-  }
-
-  async function saveChatWallpaper(button) {
-    if (!button || !messageStage) return;
-    const wallpaper = button.dataset.chatWallpaperChoice || "";
-    button.disabled = true;
-    try {
-      const payload = await postForm(chatActionUrl, {
-        action: "set_wallpaper",
-        wallpaper,
-      });
-      messageStage.dataset.chatWallpaper = payload.wallpaper || "";
-      chatWallpaperModal?.querySelectorAll("[data-chat-wallpaper-choice]").forEach((option) => {
-        option.setAttribute(
-          "aria-pressed",
-          String((option.dataset.chatWallpaperChoice || "") === (payload.wallpaper || "")),
-        );
-      });
-      closeChatWallpaper();
-      notify(payload.message || "Обои переписки обновлены.");
-    } catch (error) {
-      notify(error.message);
-    } finally {
-      button.disabled = false;
     }
   }
 
@@ -822,30 +778,8 @@
       return;
     }
 
-    if (target.closest("[data-open-chat-wallpaper]")) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      openChatWallpaper();
-      return;
-    }
-
     if (target.closest("[data-chat-export]")) {
       setChatMenu(false);
-      return;
-    }
-
-    if (target.closest("[data-close-chat-wallpaper]") || target === chatWallpaperModal) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      closeChatWallpaper();
-      return;
-    }
-
-    const wallpaperChoice = target.closest("[data-chat-wallpaper-choice]");
-    if (wallpaperChoice) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      saveChatWallpaper(wallpaperChoice);
       return;
     }
 
@@ -1045,11 +979,6 @@
     }
     if (event.key !== "Escape") return;
 
-    if (chatWallpaperModal && !chatWallpaperModal.hidden) {
-      event.stopImmediatePropagation();
-      closeChatWallpaper();
-      return;
-    }
     if ((deleteMessageModal && !deleteMessageModal.hidden)
         || (clearHistoryModal && !clearHistoryModal.hidden)
         || (deleteChatModal && !deleteChatModal.hidden)) {
