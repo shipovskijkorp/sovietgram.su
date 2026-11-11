@@ -16,6 +16,7 @@ from django.db import connection, transaction
 from django.db.models import (
     BigIntegerField,
     BooleanField,
+    Case,
     Count,
     F,
     OuterRef,
@@ -24,6 +25,7 @@ from django.db.models import (
     Subquery,
     TextField,
     Value,
+    When,
 )
 from django.db.models.functions import Coalesce
 from django.http import (
@@ -606,7 +608,23 @@ def _prepare_sidebar_chats(user, archived=False):
                 membership.values("is_pinned")[:1], output_field=BooleanField()
             ),
             is_muted_ui=Subquery(
-                membership.values("is_muted")[:1], output_field=BooleanField()
+                membership.annotate(
+                    is_currently_muted=Case(
+                        When(
+                            is_muted=True,
+                            muted_until__isnull=True,
+                            then=Value(True),
+                        ),
+                        When(
+                            is_muted=True,
+                            muted_until__gt=timezone.now(),
+                            then=Value(True),
+                        ),
+                        default=Value(False),
+                        output_field=BooleanField(),
+                    )
+                ).values("is_currently_muted")[:1],
+                output_field=BooleanField(),
             ),
             draft_text_ui=Subquery(
                 membership.values("draft_text")[:1], output_field=TextField()
@@ -2488,11 +2506,41 @@ def chat_action(request, chat_id):
         membership.save(update_fields=("is_pinned",))
         messages.success(request, "Чат закреплён." if membership.is_pinned else "Чат откреплён.")
     elif action == "mute":
-        membership.is_muted = not membership.is_muted
-        membership.save(update_fields=("is_muted",))
+        duration = request.POST.get("duration")
+        if duration is None:
+            duration = "off" if membership.notifications_muted else "forever"
+
+        mute_durations = {
+            "1h": (timedelta(hours=1), "1 час"),
+            "8h": (timedelta(hours=8), "8 часов"),
+            "2d": (timedelta(days=2), "2 дня"),
+        }
+        if duration == "off":
+            membership.is_muted = False
+            membership.muted_until = None
+            message = "Уведомления включены."
+        elif duration == "forever":
+            membership.is_muted = True
+            membership.muted_until = None
+            message = "Уведомления отключены навсегда."
+        elif duration in mute_durations:
+            delta, label = mute_durations[duration]
+            membership.is_muted = True
+            membership.muted_until = timezone.now() + delta
+            message = f"Уведомления отключены на {label}."
+        else:
+            return action_error("Неизвестный срок отключения уведомлений.")
+
+        membership.save(update_fields=("is_muted", "muted_until"))
         return action_response(
-            "Уведомления выключены." if membership.is_muted else "Уведомления включены.",
-            is_muted=membership.is_muted,
+            message,
+            is_muted=membership.notifications_muted,
+            muted_until=(
+                membership.muted_until.isoformat()
+                if membership.notifications_muted and membership.muted_until
+                else ""
+            ),
+            mute_duration=duration,
         )
     elif action == "toggle_protection":
         if chat.type != Chat.Type.PRIVATE or chat.direct_key == f"self:{request.user.pk}":
@@ -2938,6 +2986,7 @@ def download_attachment(request, attachment_id):
 @require_GET
 def poll_messages(request, chat_id):
     chat = _chat_for_user(request.user, chat_id)
+    membership = _membership(chat, request.user)
     try:
         after_id = max(0, int(request.GET.get("after", "0")))
     except (TypeError, ValueError):
@@ -3103,6 +3152,12 @@ def poll_messages(request, chat_id):
             "chat_id": chat.pk,
             "chat_type": chat.type,
             "protect_content": chat.protect_content,
+            "is_muted": membership.notifications_muted,
+            "muted_until": (
+                membership.muted_until.isoformat()
+                if membership.notifications_muted and membership.muted_until
+                else ""
+            ),
             "chat_title": chat_title,
             "chat_username": chat_username,
             "chat_avatar_url": chat_avatar_url,
