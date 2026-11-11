@@ -173,6 +173,12 @@ EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "15"))
 SOVIETGRAM_REQUIRE_EMAIL_VERIFICATION = os.getenv(
     "SOVIETGRAM_REQUIRE_EMAIL_VERIFICATION", "0"
 ).lower() in {"1", "true", "yes", "on"}
+# Use the canonical public HTTPS origin for links sent by email. In production,
+# this avoids depending on proxy scheme detection when building absolute URLs.
+SOVIETGRAM_PUBLIC_URL = os.getenv(
+    "SOVIETGRAM_PUBLIC_URL",
+    "" if DEBUG else "https://sovietgram.su",
+).strip().rstrip("/")
 DEFAULT_FROM_EMAIL = os.getenv(
     "DEFAULT_FROM_EMAIL", "Sovietgram <noreply@sovietgram.su>",
 )
