@@ -176,6 +176,12 @@
   }
 
   applyChatProtection(chatProtected);
+  document.addEventListener("sovietgram:chat-protection", (event) => {
+    const enabled = event.detail?.enabled;
+    if (typeof enabled === "boolean" && enabled !== chatProtected) {
+      applyChatProtection(enabled);
+    }
+  });
 
   function setSearchPanel(open) {
     if (!searchPanel) return;
