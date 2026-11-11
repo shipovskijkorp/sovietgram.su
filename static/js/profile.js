@@ -453,9 +453,6 @@ function closeProfilePhotoViewer() {
 function openProfilePhotoViewer() {
   if (!openedProfile?.avatar_url || !userProfilePhotoViewer || !userProfilePhotoImage) return;
   userProfilePhotoImage.src = openedProfile.avatar_url;
-  if (openedProfile.id != null) {
-    userProfilePhotoImage.dataset.avatarUserId = String(openedProfile.id);
-  }
   if (userProfilePhotoRemove) {
     userProfilePhotoRemove.hidden = !(openedProfile.is_self && openedProfile.remove_avatar_url);
   }
