@@ -44,9 +44,13 @@ class OutgoingMailTests(SimpleTestCase):
         )
         self.assertEqual(delivered, 1)
         smtp_class.assert_called_once()
-        kwargs = smtp_class.call_args.kwargs
-        self.assertEqual(kwargs["host"], "smtp-relay.brevo.com")
-        self.assertEqual(kwargs["port"], 587)
+        # Django 5.2 constructs smtplib.SMTP with positional host/port,
+        # while newer implementations may use keyword arguments.
+        args, kwargs = smtp_class.call_args
+        host = kwargs.get("host", args[0] if len(args) >= 1 else None)
+        port = kwargs.get("port", args[1] if len(args) >= 2 else None)
+        self.assertEqual(host, "smtp-relay.brevo.com")
+        self.assertEqual(port, 587)
         smtp_class.return_value.starttls.assert_called_once()
         smtp_class.return_value.login.assert_called_once_with(
             "example-smtp-login", "fake-test-key"
