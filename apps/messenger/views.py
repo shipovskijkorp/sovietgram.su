@@ -1,5 +1,6 @@
 import copy
 import json
+import math
 import re
 from datetime import timedelta
 from pathlib import Path
@@ -105,7 +106,11 @@ def _clean_special_payload(special_type, raw_payload):
 
     if special_type == Message.SpecialType.POLL:
         question = str(raw_payload.get("question", "")).strip()[:255]
-        raw_options = raw_payload.get("options") or []
+        raw_options = raw_payload.get("options")
+        if not isinstance(raw_options, list):
+            raise ValueError("Варианты опроса должны быть списком.")
+        if len(raw_options) > 10:
+            raise ValueError("В опросе может быть не больше 10 вариантов.")
         options = []
         seen = set()
         for value in raw_options:
@@ -146,8 +151,13 @@ def _clean_special_payload(special_type, raw_payload):
 
     if special_type == Message.SpecialType.TODO:
         title = str(raw_payload.get("title", "")).strip()[:255]
+        raw_tasks = raw_payload.get("tasks")
+        if not isinstance(raw_tasks, list):
+            raise ValueError("Задачи должны быть списком.")
+        if len(raw_tasks) > 30:
+            raise ValueError("В списке может быть не больше 30 задач.")
         tasks = []
-        for value in raw_payload.get("tasks") or []:
+        for value in raw_tasks:
             text = str(value).strip()[:160]
             if text:
                 tasks.append({"text": text, "done": False, "done_by": None})
@@ -189,6 +199,8 @@ def _clean_special_payload(special_type, raw_payload):
             longitude = round(float(raw_payload.get("longitude")), 6)
         except (TypeError, ValueError):
             raise ValueError("Укажите корректные координаты.")
+        if not (math.isfinite(latitude) and math.isfinite(longitude)):
+            raise ValueError("Укажите конечные значения координат.")
         if latitude < -90 or latitude > 90 or longitude < -180 or longitude > 180:
             raise ValueError("Координаты находятся вне допустимого диапазона.")
         return {
@@ -1075,7 +1087,7 @@ def join_public_chat(request, username):
         username__iexact=username,
         type__in=(Chat.Type.GROUP, Chat.Type.CHANNEL),
     )
-    ChatParticipant.objects.get_or_create(
+    membership, created = ChatParticipant.objects.get_or_create(
         chat=chat,
         user=request.user,
         defaults={
@@ -1083,6 +1095,10 @@ def join_public_chat(request, username):
             "can_see_pre_join_history": chat.history_visible_to_new_members,
         },
     )
+    if not created and membership.is_hidden:
+        # Rejoining an existing but locally hidden chat must not redirect to
+        # a 404. Preserve the previous clear-history watermark.
+        ChatParticipant.objects.filter(pk=membership.pk).update(is_hidden=False)
     return redirect("messenger:chat", chat_id=chat.pk)
 
 
@@ -2524,6 +2540,8 @@ def _attachment_for_user(user, attachment_id):
     )
     chat = attachment.message.chat
     membership = ChatParticipant.objects.get(chat=chat, user=user)
+    if membership.is_hidden:
+        raise Http404
     if (
         attachment.message_id <= membership.cleared_before_message_id
         or MessageHiddenForUser.objects.filter(
