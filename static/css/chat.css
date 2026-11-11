@@ -85,6 +85,52 @@
 .chat-menu button span { color: var(--red); text-align: center; }
 .chat-menu .chat-menu__danger { color: #a52b34; }
 
+.chat-menu--telegram {
+  width: 260px;
+  padding: 5px;
+  border-radius: 7px;
+}
+.chat-menu--telegram [hidden] {
+  display: none !important;
+}
+.chat-menu--telegram button,
+.chat-menu--telegram a {
+  min-height: 35px;
+  grid-template-columns: 24px minmax(0,1fr);
+  gap: 10px;
+  padding: 0 9px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 400;
+}
+.chat-menu--telegram a {
+  display: grid;
+  align-items: center;
+  color: #4f4134;
+  text-decoration: none;
+}
+.chat-menu--telegram a:hover {
+  background: #f2e8da;
+}
+.chat-menu--telegram button:focus-visible,
+.chat-menu--telegram a:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: -2px;
+}
+.chat-menu--telegram button > .tg-native-icon,
+.chat-menu--telegram a > .tg-native-icon {
+  color: currentColor;
+  text-align: left;
+}
+.chat-menu--telegram button > .chat-menu__label,
+.chat-menu--telegram a > .chat-menu__label {
+  color: inherit;
+  text-align: left;
+}
+.chat-menu--telegram .chat-menu__danger {
+  color: #b52d37;
+}
+
 .pinned-message-bar {
   position: absolute;
   top: 66px;
@@ -1238,3 +1284,21 @@ body[data-theme="dark"] .article-viewer__header small {
     min-height: 34px;
   }
 }
+
+
+.conversation.is-content-protected .message-flow,
+.conversation.is-content-protected .message-flow * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+body[data-theme="dark"] .chat-menu--telegram a {
+  color: #ddd1c3;
+}
+body[data-theme="dark"] .chat-menu--telegram a:hover {
+  background: #2c2621;
+}
+body[data-theme="dark"] .chat-menu--telegram .chat-menu__danger {
+  color: #ef6b72;
+}
+

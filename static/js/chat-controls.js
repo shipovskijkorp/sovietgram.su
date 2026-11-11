@@ -86,6 +86,12 @@
   const chatTitle = conversation.dataset.chatTitle || "чат";
   const peerName = conversation.dataset.chatPeerName || chatTitle;
   const chatActionUrl = conversation.dataset.chatActionUrl || "";
+  const chatMenuMuteButton = chatMenu?.querySelector("[data-chat-menu-mute]");
+  const chatMenuMuteLabel = chatMenuMuteButton?.querySelector(".chat-menu__label");
+  const chatProtectionButton = chatMenu?.querySelector("[data-toggle-chat-protection]");
+  const chatProtectionLabel = chatProtectionButton?.querySelector(".chat-menu__label");
+  const chatExportLink = chatMenu?.querySelector("[data-chat-export]");
+  let chatProtected = conversation.dataset.chatProtected === "true";
 
   const selectionBar = document.getElementById("messageSelectionBar");
   const selectionCount = document.getElementById("messageSelectionCount");
@@ -142,6 +148,39 @@
     chatMenuButton.setAttribute("aria-expanded", String(open));
   }
 
+  function applyChatProtection(enabled) {
+    chatProtected = Boolean(enabled);
+    conversation.dataset.chatProtected = String(chatProtected);
+    conversation.classList.toggle("is-content-protected", chatProtected);
+
+    if (chatProtectionLabel) {
+      chatProtectionLabel.textContent = chatProtected
+        ? "Разрешить копирование"
+        : "Запретить копирование";
+    }
+    if (chatExportLink) chatExportLink.hidden = chatProtected;
+    if (selectionForward) {
+      selectionForward.hidden = chatProtected;
+      selectionForward.disabled = chatProtected || selectedArticles.size === 0;
+    }
+
+    const copyButton = contextMenu?.querySelector('[data-message-action="copy"]');
+    const forwardButton = contextMenu?.querySelector('[data-message-action="forward"]');
+    if (copyButton) {
+      copyButton.hidden = chatProtected
+        || !(contextArticle?.dataset.messageText || "").trim();
+    }
+    if (forwardButton) forwardButton.hidden = chatProtected;
+  }
+
+  applyChatProtection(chatProtected);
+  document.addEventListener("sovietgram:chat-protection", (event) => {
+    const enabled = event.detail?.enabled;
+    if (typeof enabled === "boolean" && enabled !== chatProtected) {
+      applyChatProtection(enabled);
+    }
+  });
+
   function setSearchPanel(open) {
     if (!searchPanel) return;
     searchPanel.hidden = !open;
@@ -166,6 +205,53 @@
     }
     return payload;
   }
+
+  async function toggleChatMute() {
+    if (!chatMenuMuteButton) return;
+    chatMenuMuteButton.disabled = true;
+    try {
+      const payload = await postForm(chatActionUrl, { action: "mute" });
+      const muted = Boolean(payload.is_muted);
+      conversation.dataset.chatMuted = String(muted);
+      if (chatMenuMuteLabel) {
+        chatMenuMuteLabel.textContent = muted
+          ? "Включить уведомления"
+          : "Выключить уведомления";
+      }
+      notify(payload.message || (muted ? "Уведомления выключены." : "Уведомления включены."));
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      chatMenuMuteButton.disabled = false;
+    }
+  }
+
+  async function toggleChatProtection() {
+    if (!chatProtectionButton) return;
+    chatProtectionButton.disabled = true;
+    try {
+      const payload = await postForm(chatActionUrl, { action: "toggle_protection" });
+      applyChatProtection(payload.protect_content);
+      notify(payload.message || "Настройки копирования обновлены.");
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      chatProtectionButton.disabled = false;
+    }
+  }
+
+  document.addEventListener("copy", (event) => {
+    if (!chatProtected) return;
+    const selection = window.getSelection();
+    const anchor = selection?.anchorNode;
+    const anchorElement = anchor?.nodeType === Node.ELEMENT_NODE
+      ? anchor
+      : anchor?.parentElement;
+    if (!selection?.rangeCount || !anchorElement || !conversation.contains(anchorElement)) return;
+    if (anchorElement.closest(".composer, input, textarea, [contenteditable='true']")) return;
+    event.preventDefault();
+    notify("Копирование запрещено для этой переписки.");
+  }, true);
 
   function isOwn(article) {
     return article?.dataset.messageOwn === "true";
@@ -205,11 +291,13 @@
 
     const editButton = contextMenu.querySelector('[data-message-action="edit"]');
     const copyButton = contextMenu.querySelector('[data-message-action="copy"]');
+    const forwardButton = contextMenu.querySelector('[data-message-action="forward"]');
     const deleteButton = contextMenu.querySelector('[data-message-action="delete"]');
     const pinLabel = document.getElementById("messagePinLabel");
 
     if (editButton) editButton.hidden = !isOwn(article) || Boolean(article.dataset.messageKind);
-    if (copyButton) copyButton.hidden = !(article.dataset.messageText || "").trim();
+    if (copyButton) copyButton.hidden = chatProtected || !(article.dataset.messageText || "").trim();
+    if (forwardButton) forwardButton.hidden = chatProtected;
     if (deleteButton) deleteButton.hidden = !canDeleteArticle(article);
     if (pinLabel) pinLabel.textContent = article.dataset.messagePinned === "true" ? "Открепить" : "Закрепить";
 
@@ -293,6 +381,10 @@
   }
 
   function openForwardModal(articles) {
+    if (chatProtected) {
+      notify("Пересылка запрещена для этой переписки.");
+      return;
+    }
     if (!forwardModal || !articles?.length) return;
     forwardArticles = articles.filter(Boolean);
     forwardModal.hidden = false;
@@ -312,7 +404,10 @@
     const count = selectedArticles.size;
     if (selectionCount) selectionCount.textContent = String(count);
     if (selectionBar) selectionBar.hidden = !selectionMode;
-    if (selectionForward) selectionForward.disabled = count === 0;
+    if (selectionForward) {
+      selectionForward.hidden = chatProtected;
+      selectionForward.disabled = count === 0 || chatProtected;
+    }
     if (selectionDelete) {
       const allDeletable = count > 0 && [...selectedArticles].every(canDeleteArticle);
       selectionDelete.disabled = !allDeletable;
@@ -667,6 +762,27 @@
       return;
     }
 
+    if (target.closest("[data-chat-menu-mute]")) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setChatMenu(false);
+      toggleChatMute();
+      return;
+    }
+
+    if (target.closest("[data-toggle-chat-protection]")) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setChatMenu(false);
+      toggleChatProtection();
+      return;
+    }
+
+    if (target.closest("[data-chat-export]")) {
+      setChatMenu(false);
+      return;
+    }
+
     if (target.closest("#chatSearchToggle, [data-open-chat-search]")) {
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -728,6 +844,10 @@
 
       if (action === "reply") setReply(article);
       if (action === "copy") {
+        if (chatProtected) {
+          notify("Копирование запрещено для этой переписки.");
+          return;
+        }
         copyText(article.dataset.messageText || "").then(() => notify("Текст скопирован."));
       }
       if (action === "edit") openEditModal(article);

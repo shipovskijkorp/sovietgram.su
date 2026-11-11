@@ -2,8 +2,12 @@ import copy
 import json
 import math
 import re
+import tempfile
+import zipfile
 from datetime import timedelta
+from io import StringIO
 from pathlib import Path
+from urllib.parse import quote
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -32,6 +36,7 @@ from django.http import (
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import escape
 from django.utils.dateparse import parse_datetime
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_POST
@@ -1010,6 +1015,114 @@ def chat_detail(request, chat_id):
             focus_id=focus_id,
         ),
     )
+
+
+@login_required
+@require_GET
+def export_chat_history(request, chat_id):
+    chat = _chat_for_user(request.user, chat_id)
+    if chat.protect_content:
+        return HttpResponseForbidden(
+            "Экспорт истории отключён для этой переписки."
+        )
+
+    _decorate_chat_ui(chat, request.user)
+    visible_messages = (
+        _visible_message_queryset(chat, request.user)
+        .filter(is_deleted=False)
+        .order_by("id")
+    )
+    archive = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+b")
+
+    try:
+        with zipfile.ZipFile(
+            archive,
+            mode="w",
+            compression=zipfile.ZIP_DEFLATED,
+            compresslevel=6,
+        ) as bundle:
+            html = StringIO()
+            html.write(
+                "<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\">"
+                "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+                f"<title>{escape(chat.display_name_ui)} — история Sovietgram</title>"
+                "<style>body{max-width:900px;margin:32px auto;padding:0 18px;"
+                "font:15px/1.5 system-ui,sans-serif;color:#28231f;background:#f7f2eb}"
+                "h1{font-size:24px}.message{margin:14px 0;padding:14px 16px;"
+                "background:#fff;border:1px solid #e8dfd4;border-radius:12px}"
+                ".meta{color:#887b6d;font-size:12px}.body{white-space:normal;"
+                "overflow-wrap:anywhere}.attachments{font-size:13px}</style>"
+                "</head><body>"
+                f"<h1>{escape(chat.display_name_ui)}</h1>"
+                "<p class=\"meta\">Экспортировано из Sovietgram</p>"
+            )
+
+            for message in visible_messages.iterator(chunk_size=100):
+                sender = escape(message.sender.display_name)
+                created_at = timezone.localtime(message.created_at).strftime(
+                    "%d.%m.%Y в %H:%M"
+                )
+                body_text = message.text or message.preview
+                body_html = escape(body_text).replace("\r\n", "\n").replace("\n", "<br>")
+                html.write(
+                    "<article class=\"message\">"
+                    f"<div class=\"meta\">{sender} · {created_at}</div>"
+                    f"<div class=\"body\">{body_html}</div>"
+                )
+
+                if message.special_type:
+                    special_json = escape(
+                        json.dumps(message.special_data or {}, ensure_ascii=False, indent=2)
+                    )
+                    html.write(
+                        "<details><summary>Данные вложения</summary>"
+                        f"<pre>{special_json}</pre></details>"
+                    )
+
+                attachments = list(message.attachments.all())
+                if attachments:
+                    html.write("<ul class=\"attachments\">")
+                    for index, attachment in enumerate(attachments, start=1):
+                        original_name = str(attachment.original_name or "file")
+                        safe_name = Path(original_name.replace("\\", "/")).name or f"file-{index}"
+                        media_path = f"media/{message.pk}-{index}-{safe_name}"
+                        try:
+                            attachment.file.open("rb")
+                            try:
+                                with bundle.open(media_path, "w") as media_file:
+                                    while True:
+                                        chunk = attachment.file.read(64 * 1024)
+                                        if not chunk:
+                                            break
+                                        media_file.write(chunk)
+                            finally:
+                                attachment.file.close()
+                            html.write(
+                                f"<li><a href=\"{escape(quote(media_path))}\">"
+                                f"{escape(safe_name)}</a> "
+                                f"({int(attachment.size or 0)} байт)</li>"
+                            )
+                        except (OSError, ValueError):
+                            html.write(
+                                f"<li>{escape(safe_name)} — файл недоступен</li>"
+                            )
+                    html.write("</ul>")
+
+                html.write("</article>")
+
+            html.write("</body></html>")
+            bundle.writestr("history.html", html.getvalue())
+
+        archive.seek(0)
+        return FileResponse(
+            archive,
+            as_attachment=True,
+            filename=f"sovietgram-chat-{chat.pk}-history.zip",
+            content_type="application/zip",
+        )
+    except Exception:
+        archive.close()
+        raise
 
 
 @login_required
@@ -2137,6 +2250,11 @@ def delete_message(request, chat_id, message_id):
 @rate_limit("send_message")
 def forward_message(request, chat_id, message_id):
     source_chat = _chat_for_user(request.user, chat_id)
+    if source_chat.protect_content:
+        return JsonResponse(
+            {"ok": False, "error": "Пересылка запрещена для этой переписки."},
+            status=403,
+        )
     source = get_object_or_404(
         _visible_message_queryset(source_chat, request.user),
         pk=message_id,
@@ -2343,6 +2461,12 @@ def chat_action(request, chat_id):
     action = request.POST.get("action", "")
     wants_json = _wants_json(request)
 
+    def action_error(message, status=400):
+        if wants_json:
+            return JsonResponse({"ok": False, "error": message}, status=status)
+        messages.error(request, message)
+        return redirect(reverse("messenger:chat", args=[chat.pk]))
+
     def action_response(message, redirect_url=None, **extra):
         if wants_json:
             payload = {
@@ -2366,7 +2490,19 @@ def chat_action(request, chat_id):
     elif action == "mute":
         membership.is_muted = not membership.is_muted
         membership.save(update_fields=("is_muted",))
-        messages.success(request, "Уведомления выключены." if membership.is_muted else "Уведомления включены.")
+        return action_response(
+            "Уведомления выключены." if membership.is_muted else "Уведомления включены.",
+            is_muted=membership.is_muted,
+        )
+    elif action == "toggle_protection":
+        if chat.type != Chat.Type.PRIVATE or chat.direct_key == f"self:{request.user.pk}":
+            return action_error("Защита копирования доступна только в личной переписке.")
+        chat.protect_content = not chat.protect_content
+        chat.save(update_fields=("protect_content",))
+        return action_response(
+            "Копирование запрещено." if chat.protect_content else "Копирование разрешено.",
+            protect_content=chat.protect_content,
+        )
     elif action == "archive":
         membership.is_archived = not membership.is_archived
         membership.save(update_fields=("is_archived",))
@@ -2785,6 +2921,10 @@ def mark_voice_played(request, attachment_id):
 @require_GET
 def download_attachment(request, attachment_id):
     attachment = _attachment_for_user(request.user, attachment_id)
+    if attachment.message.chat.protect_content:
+        return HttpResponseForbidden(
+            "Скачивание вложений отключено для этой переписки."
+        )
     attachment.file.open("rb")
     return FileResponse(
         attachment.file,
@@ -2962,6 +3102,7 @@ def poll_messages(request, chat_id):
             "other_user_profile_url": other_user_profile_url,
             "chat_id": chat.pk,
             "chat_type": chat.type,
+            "protect_content": chat.protect_content,
             "chat_title": chat_title,
             "chat_username": chat_username,
             "chat_avatar_url": chat_avatar_url,

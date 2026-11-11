@@ -64,6 +64,7 @@ class Chat(models.Model):
     description = models.TextField(max_length=500, blank=True, default="")
     avatar = models.ImageField(upload_to=chat_avatar_path, blank=True)
     history_visible_to_new_members = models.BooleanField(default=True)
+    protect_content = models.BooleanField(default=False)
     members_can_send_messages = models.BooleanField(default=True)
     members_can_send_media = models.BooleanField(default=True)
     members_can_send_links = models.BooleanField(default=True)

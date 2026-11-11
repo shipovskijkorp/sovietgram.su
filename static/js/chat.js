@@ -585,8 +585,11 @@ function openMessageMenu(article, x, y) {
   const hasText = Boolean((article.dataset.messageText || "").trim());
   const editButton = contextMenu.querySelector('[data-message-action="edit"]');
   const copyButton = contextMenu.querySelector('[data-message-action="copy"]');
+  const forwardButton = contextMenu.querySelector('[data-message-action="forward"]');
+  const contentProtected = document.querySelector(".conversation--chat")?.dataset.chatProtected === "true";
   if (editButton) editButton.hidden = !own || Boolean(article.dataset.messageKind);
-  if (copyButton) copyButton.hidden = !hasText;
+  if (copyButton) copyButton.hidden = contentProtected || !hasText;
+  if (forwardButton) forwardButton.hidden = contentProtected;
   if (pinLabel) pinLabel.textContent = article.dataset.messagePinned === "true" ? "Открепить" : "Закрепить";
 
   contextMenu.hidden = false;
@@ -1463,6 +1466,9 @@ async function pollMessages() {
     const response = await fetch(url, { credentials: "same-origin", cache: "no-store" });
     if (!response.ok) return;
     const payload = await response.json();
+    document.dispatchEvent(new CustomEvent("sovietgram:chat-protection", {
+      detail: { enabled: Boolean(payload.protect_content) },
+    }));
     for (const message of payload.messages || []) renderMessage(message);
     for (const message of payload.updates || []) applyMessageUpdate(message);
     newestMessageId = Math.max(newestMessageId, Number(payload.high_watermark) || 0, ...(payload.messages || []).map((item) => Number(item.id) || 0));
