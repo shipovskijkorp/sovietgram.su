@@ -147,6 +147,30 @@ LOGOUT_REDIRECT_URL = "accounts:login"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Outgoing transactional mail (Brevo SMTP relay). Never store SMTP
+# credentials in source control; production reads them from /opt/sovietgram/.env.
+# Local development prints messages to the console rather than sending them.
+EMAIL_BACKEND = os.getenv(
+    "DJANGO_EMAIL_BACKEND",
+    (
+        "django.core.mail.backends.console.EmailBackend"
+        if DEBUG
+        else "django.core.mail.backends.smtp.EmailBackend"
+    ),
+)
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp-relay.brevo.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "1").strip().lower() in {
+    "1", "true", "yes", "on",
+}
+EMAIL_USE_SSL = False
+EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "15"))
+DEFAULT_FROM_EMAIL = os.getenv(
+    "DEFAULT_FROM_EMAIL", "Sovietgram <noreply@sovietgram.su>",
+)
+
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"

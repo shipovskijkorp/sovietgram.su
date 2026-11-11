@@ -107,3 +107,55 @@ python manage.py check --deploy
 5. Установить `deploy/nginx/sovietgram.conf` и подключить HTTPS.
 
 Пользовательские вложения лежат в `var/media/messages/`, аватары — в `var/media/avatars/`. Архитектура позволяет позже заменить локальное media-хранилище на S3-совместимое.
+
+## Исходящая почта (Brevo SMTP)
+
+В Sovietgram настроен SMTP-клиент для **отправки** транзакционных писем.
+Подтверждение адреса при регистрации пока **не включено**: существующая
+регистрация остаётся без изменений до отдельного внедрения и тестирования
+механизма email-верификации.
+
+1. Аутентифицируйте домен `sovietgram.su` в Brevo (DKIM/DMARC) и создайте
+   отправителя `noreply@sovietgram.su`.
+2. Получите **SMTP login** и отдельный **SMTP key** на вкладке Brevo
+   **SMTP & API → SMTP**. Не путайте SMTP-ключ с паролем от сайта Brevo
+   или API-ключом.
+3. На VPS откройте `/opt/sovietgram/.env` и **добавьте**, не заменяя
+   существующие настройки Django и базы данных:
+
+   ```dotenv
+   EMAIL_HOST=smtp-relay.brevo.com
+   EMAIL_PORT=587
+   EMAIL_USE_TLS=1
+   EMAIL_HOST_USER=SMTP_LOGIN_FROM_BREVO
+   EMAIL_HOST_PASSWORD=SMTP_KEY_FROM_BREVO
+   DEFAULT_FROM_EMAIL="Sovietgram <noreply@sovietgram.su>"
+   EMAIL_TIMEOUT=15
+   ```
+
+   Настоящий ключ никогда не добавляйте в Git, тикеты, скриншоты или
+   системные журналы. Убедитесь, что файл `.env` читается пользователем
+   `sovietgram`, но недоступен другим пользователям.
+4. Проверьте настройки и отправьте **одно** тестовое письмо на адрес,
+   доступный вам:
+
+   ```bash
+   cd /opt/sovietgram
+   sudo -u sovietgram -H .venv/bin/python manage.py check
+   sudo -u sovietgram -H .venv/bin/python manage.py sendtestemail your-inbox@example.com
+   ```
+
+   На сервере с `DJANGO_DEBUG=0` включён SMTP-backend. При локальной
+   разработке с `DJANGO_DEBUG=1` письма выводятся в консоль (без
+   реальной отправки). Если тест не дошёл, проверьте Brevo
+   **Transactional → Logs**, папку «Спам» и доступность SMTP-порта 587
+   с VPS. Статус принятия SMTP-сервером ещё не гарантирует доставку.
+
+5. Для будущей отправки приложением перезапустите Gunicorn:
+
+   ```bash
+   sudo systemctl restart sovietgram
+   ```
+
+Изменений схемы БД нет. `EMAIL_BACKEND` можно переопределить
+переменной `DJANGO_EMAIL_BACKEND`, например в тестовом окружении.
