@@ -25,7 +25,7 @@
       {% endif %}
     </div>
     {% if valid_token %}
-      <form method="post" class="auth-form">
+      <form method="post" action="{% url 'accounts:verify_email' token=token %}" class="auth-form">
         {% csrf_token %}
         <button type="submit" class="primary-button">Подтвердить почту</button>
       </form>
