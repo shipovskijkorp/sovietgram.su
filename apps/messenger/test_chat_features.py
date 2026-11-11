@@ -1,5 +1,6 @@
 import json
 import tempfile
+from datetime import timedelta
 import zipfile
 from io import BytesIO
 
@@ -874,11 +875,91 @@ class ChatFeatureTests(TestCase):
         membership = ChatParticipant.objects.get(chat=self.chat, user=self.alice)
         self.assertTrue(membership.is_pinned)
         self.assertTrue(membership.is_muted)
+        self.assertIsNone(membership.muted_until)
+        self.assertTrue(membership.notifications_muted)
 
         self.client.post(url, {"action": "archive"})
         membership.refresh_from_db()
         self.assertTrue(membership.is_archived)
         self.assertFalse(ChatParticipant.objects.get(chat=self.chat, user=self.bob).is_archived)
+
+    def test_chat_mute_supports_telegram_durations_and_unmute(self):
+        url = reverse("messenger:chat_action", args=[self.chat.pk])
+        durations = {
+            "1h": timedelta(hours=1),
+            "8h": timedelta(hours=8),
+            "2d": timedelta(days=2),
+        }
+
+        for duration, delta in durations.items():
+            before = timezone.now()
+            response = self.client.post(
+                url,
+                {"action": "mute", "duration": duration},
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(response.json()["is_muted"])
+            membership = ChatParticipant.objects.get(chat=self.chat, user=self.alice)
+            self.assertTrue(membership.notifications_muted)
+            self.assertIsNotNone(membership.muted_until)
+            self.assertGreaterEqual(membership.muted_until, before + delta)
+            self.assertLessEqual(membership.muted_until, timezone.now() + delta)
+
+        forever = self.client.post(
+            url,
+            {"action": "mute", "duration": "forever"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(forever.status_code, 200)
+        self.assertTrue(forever.json()["is_muted"])
+        membership = ChatParticipant.objects.get(chat=self.chat, user=self.alice)
+        self.assertTrue(membership.notifications_muted)
+        self.assertIsNone(membership.muted_until)
+
+        unmuted = self.client.post(
+            url,
+            {"action": "mute", "duration": "off"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(unmuted.status_code, 200)
+        self.assertFalse(unmuted.json()["is_muted"])
+        membership.refresh_from_db()
+        self.assertFalse(membership.notifications_muted)
+        self.assertIsNone(membership.muted_until)
+
+        invalid = self.client.post(
+            url,
+            {"action": "mute", "duration": "30d"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(invalid.status_code, 400)
+        membership.refresh_from_db()
+        self.assertFalse(membership.notifications_muted)
+
+    def test_expired_mute_is_inactive_and_unarchives_on_new_message(self):
+        membership = self.chat.memberships.get(user=self.alice)
+        membership.is_archived = True
+        membership.is_muted = True
+        membership.muted_until = timezone.now() - timedelta(minutes=1)
+        membership.save(update_fields=["is_archived", "is_muted", "muted_until"])
+        self.assertFalse(membership.notifications_muted)
+
+        self.client.force_login(self.bob)
+        response = self.client.post(
+            reverse("messenger:send_message", args=[self.chat.pk]),
+            {"text": "Срок отключения уведомлений истёк"},
+        )
+        self.assertEqual(response.status_code, 302)
+
+        membership.refresh_from_db()
+        self.assertFalse(membership.notifications_muted)
+        self.assertFalse(membership.is_archived)
+        sidebar_chat = next(
+            chat for chat in _prepare_sidebar_chats(self.alice)
+            if chat.pk == self.chat.pk
+        )
+        self.assertFalse(sidebar_chat.is_muted_ui)
 
     def test_chat_action_toggles_content_protection(self):
         url = reverse("messenger:chat_action", args=[self.chat.pk])
@@ -2368,6 +2449,11 @@ class ChatFeatureTests(TestCase):
         )
         for marker in (
             "data-chat-menu-mute",
+            "data-chat-mute-options",
+            'data-chat-mute-duration="1h"',
+            'data-chat-mute-duration="8h"',
+            'data-chat-mute-duration="2d"',
+            'data-chat-mute-duration="forever"',
             "data-user-profile",
             "data-toggle-chat-protection",
             "data-chat-export",
@@ -2377,6 +2463,10 @@ class ChatFeatureTests(TestCase):
             self.assertContains(response, marker, html=False)
         for label in (
             "Выключить уведомления",
+            "На 1 час",
+            "На 8 часов",
+            "На 2 дня",
+            "Навсегда",
             "Показать профиль",
             "Запретить копирование",
             "Экспорт истории чата",
