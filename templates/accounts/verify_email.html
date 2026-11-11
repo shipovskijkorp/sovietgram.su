@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+
+{% block title %}Активация аккаунта — Sovietgram{% endblock %}
+{% block body_class %}auth-body{% endblock %}
+
+{% block content %}
+<main class="auth-shell">
+  <section class="auth-card auth-card--wide">
+    <button class="auth-theme-toggle" type="button" data-auth-theme-toggle
+            aria-label="Переключить тему" title="Переключить тему">
+      <span data-auth-theme-icon aria-hidden="true">☾</span>
+    </button>
+    <a class="auth-brand" href="{% url 'accounts:login' %}">
+      <span class="brand__mark">★</span><span>SOVIETGRAM</span>
+    </a>
+    <div class="auth-heading">
+      <p class="eyebrow">Подтверждение почты</p>
+      {% if valid_token %}
+        <h1>Подтвердить адрес?</h1>
+        <p>Нажмите кнопку, чтобы активировать учётную запись. Это дополнительное
+           действие защищает от случайной активации сканерами ссылок в почте.</p>
+      {% else %}
+        <h1>Ссылка недействительна</h1>
+        <p>Срок действия ссылки истёк, письмо уже использовано или было отправлено новое.</p>
+      {% endif %}
+    </div>
+    {% if valid_token %}
+      <form method="post" class="auth-form">
+        {% csrf_token %}
+        <button type="submit" class="primary-button">Подтвердить почту</button>
+      </form>
+    {% else %}
+      <p class="auth-switch">
+        <a href="{% url 'accounts:verification_pending' %}">Запросить новую ссылку</a>
+      </p>
+    {% endif %}
+  </section>
+</main>
+{% endblock %}

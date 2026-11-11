@@ -12,6 +12,12 @@ class User(AbstractUser):
         DARK = "dark", "Тёмная"
 
     email = models.EmailField("электронная почта", unique=True)
+    email_verified_at = models.DateTimeField(
+        "подтверждение электронной почты", null=True, blank=True,
+    )
+    email_verification_sent_at = models.DateTimeField(
+        "дата отправки подтверждения", null=True, blank=True,
+    )
     bio = models.CharField("о себе", max_length=160, blank=True, default="")
     avatar = models.ImageField(
         "фотография профиля",

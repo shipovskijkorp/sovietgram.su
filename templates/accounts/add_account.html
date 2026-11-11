@@ -17,7 +17,7 @@
     <div class="auth-heading">
       <p class="eyebrow">Мультиаккаунт</p>
       <h1>Добавить аккаунт</h1>
-      <p>{% if mode == 'register' %}Создайте новый аккаунт — текущий останется сохранён.{% else %}Войдите в существующий аккаунт — текущий останется сохранён.{% endif %}</p>
+      <p>{% if mode == 'register' %}{% if email_verification_required %}Создайте аккаунт и подтвердите почту. Текущий останется активен, а новый можно будет добавить после подтверждения.{% else %}Создайте новый аккаунт — текущий останется сохранён.{% endif %}{% else %}Войдите в существующий аккаунт — текущий останется сохранён.{% endif %}</p>
     </div>
 
     <nav class="auth-mode-switch" aria-label="Способ добавления аккаунта">
@@ -37,7 +37,7 @@
             {% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
           </label>
         {% endfor %}
-        <button class="primary-button" type="submit">Создать и переключиться</button>
+        <button class="primary-button" type="submit">{% if email_verification_required %}Создать и подтвердить почту{% else %}Создать и переключиться{% endif %}</button>
       </form>
     {% else %}
       <form method="post" class="auth-form" novalidate>

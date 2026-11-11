@@ -37,7 +37,11 @@
     </form>
 
     <p class="auth-switch">Уже зарегистрированы? <a href="{% url 'accounts:login' %}">Войти</a></p>
-    <p class="micro-copy">Подтверждение почты пока не требуется — бумажное дело № 1 отложено до лучших времён.</p>
+    {% if email_verification_required %}
+    <p class="micro-copy">После регистрации мы отправим ссылку подтверждения на вашу почту. Для входа её нужно открыть.</p>
+    {% else %}
+    <p class="micro-copy">Подтверждение почты пока не требуется.</p>
+    {% endif %}
   </section>
 </main>
 {% endblock %}
