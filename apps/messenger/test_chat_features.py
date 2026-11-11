@@ -2361,9 +2361,14 @@ class ChatFeatureTests(TestCase):
             reverse("messenger:chat", args=[self.chat.pk])
         )
         self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f'href="{reverse("accounts:public_profile", args=[self.bob.username])}" data-user-profile',
+            html=False,
+        )
         for marker in (
             "data-chat-menu-mute",
-            "data-open-chat-info",
+            "data-user-profile",
             "data-toggle-chat-protection",
             "data-chat-export",
             "data-clear-chat-history",
