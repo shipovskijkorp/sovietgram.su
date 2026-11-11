@@ -131,6 +131,22 @@
   color: #b52d37;
 }
 
+.chat-menu--telegram .chat-menu__mute-options {
+  display: grid;
+  gap: 2px;
+  margin: 2px 5px 7px 34px;
+  padding: 4px;
+  border-left: 2px solid rgba(141,30,40,.24);
+  border-radius: 0 5px 5px 0;
+  background: rgba(120,96,70,.045);
+}
+.chat-menu--telegram .chat-menu__mute-options button {
+  min-height: 29px;
+  grid-template-columns: minmax(0,1fr);
+  padding: 0 8px;
+  font-size: 11px;
+}
+
 .pinned-message-bar {
   position: absolute;
   top: 66px;
@@ -489,6 +505,7 @@ body[data-theme="dark"] .message__text a { color: #e37880; }
 
 @media (max-width: 520px) {
   .chat-menu { position: fixed; top: 58px; right: 8px; width: min(270px,calc(100vw - 16px)); }
+  .chat-menu--telegram { max-height: calc(100dvh - 70px); overflow-y: auto; }
   .pinned-message-bar { padding-left: 10px; padding-right: 10px; }
   .message-stage.has-pins .message-flow { padding-top: 68px; }
   .chat-modal-backdrop { align-items: end; padding: 0; }
@@ -1300,5 +1317,9 @@ body[data-theme="dark"] .chat-menu--telegram a:hover {
 }
 body[data-theme="dark"] .chat-menu--telegram .chat-menu__danger {
   color: #ef6b72;
+}
+body[data-theme="dark"] .chat-menu--telegram .chat-menu__mute-options {
+  border-left-color: rgba(239,107,114,.38);
+  background: rgba(255,255,255,.035);
 }
 
