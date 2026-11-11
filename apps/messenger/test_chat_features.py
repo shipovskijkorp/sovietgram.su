@@ -1053,6 +1053,36 @@ class ChatFeatureTests(TestCase):
         self.assertIn('data-forward-can-text="false"', body)
         self.assertIn('data-forward-can-media="true"', body)
 
+    def test_forwarded_link_tracks_origin_username_rename(self):
+        source = Message.objects.create(
+            chat=self.chat, sender=self.bob, text="Пересылаемое",
+        )
+        target = get_or_create_direct_chat(self.alice, self.charlie)
+        sent = self.client.post(
+            reverse("messenger:forward_message", args=[self.chat.pk, source.pk]),
+            {"target_chat_id": target.pk},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(sent.status_code, 200)
+        forwarded_id = sent.json()["message"]["id"]
+        self.bob.username = "renamed_bob"
+        self.bob.save(update_fields=["username"])
+
+        self.client.force_login(self.charlie)
+        payload = self.client.get(
+            reverse("messenger:poll_messages", args=[target.pk]),
+            {"after": 0},
+        ).json()
+        result = next(m for m in payload["messages"] if m["id"] == forwarded_id)
+        self.assertEqual(result["forwarded"]["username"], "renamed_bob")
+        self.assertEqual(
+            result["forwarded"]["profile_url"],
+            reverse("accounts:public_profile", args=["renamed_bob"]),
+        )
+        page = self.client.get(reverse("messenger:chat", args=[target.pk]))
+        self.assertContains(page, "@renamed_bob")
+        self.assertNotContains(page, "@bob")
+
     def test_existing_forwarded_link_follows_current_privacy_per_viewer(self):
         source = Message.objects.create(
             chat=self.chat, sender=self.bob, text="Пересылаемый материал",
