@@ -1091,7 +1091,10 @@ def export_chat_history(request, chat_id):
                             attachment.file.open("rb")
                             try:
                                 with bundle.open(media_path, "w") as media_file:
-                                    for chunk in attachment.file.chunks(64 * 1024):
+                                    while True:
+                                        chunk = attachment.file.read(64 * 1024)
+                                        if not chunk:
+                                            break
                                         media_file.write(chunk)
                             finally:
                                 attachment.file.close()
