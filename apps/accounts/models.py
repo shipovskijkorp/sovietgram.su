@@ -1,4 +1,5 @@
 from datetime import timedelta
+from urllib.parse import quote
 
 from django.contrib.auth.models import AbstractUser
 from django.db import models
@@ -76,7 +77,11 @@ class User(AbstractUser):
     def avatar_url(self):
         if not self.avatar:
             return ""
-        return reverse("accounts:profile_avatar", args=[self.username])
+        # The protected avatar route is intentionally stable by username.
+        # Add the stored filename as a version so a newly uploaded picture
+        # cannot be reused from an older in-memory/browser image cache.
+        version = quote(self.avatar.name, safe="")
+        return f"{reverse('accounts:profile_avatar', args=[self.username])}?v={version}"
 
     @property
     def initials(self):
