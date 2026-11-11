@@ -150,6 +150,122 @@ class ChatFeatureTests(TestCase):
                 self.assertFalse(response.json()["ok"])
                 self.assertFalse(Message.objects.filter(chat=self.chat).exists())
 
+    def test_group_link_ban_covers_structured_content_edits_and_todo_add(self):
+        group = Chat.objects.create(
+            type=Chat.Type.GROUP, title="Без ссылок",
+            members_can_send_links=False,
+        )
+        ChatParticipant.objects.create(
+            chat=group, user=self.alice, role=ChatParticipant.Role.MEMBER,
+        )
+        ChatParticipant.objects.create(
+            chat=group, user=self.bob, role=ChatParticipant.Role.OWNER,
+        )
+        send_url = reverse("messenger:send_special_message", args=[group.pk])
+
+        def special(kind, data):
+            return self.client.post(
+                send_url,
+                {"special_type": kind, "payload": json.dumps(data)},
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+
+        self.assertEqual(special("poll", {
+            "question": "Выбор", "options": ["Да", "https://example.com"],
+        }).status_code, 403)
+        self.assertEqual(special("todo", {
+            "title": "План", "tasks": ["Работа", "https://example.com"],
+        }).status_code, 403)
+        self.assertEqual(special("article", {
+            "title": "Статья", "body": "a" * 3500 + " https://example.com",
+        }).status_code, 403)
+        self.assertEqual(Message.objects.filter(chat=group).count(), 0)
+
+        allowed = special("article", {"title": "Статья", "body": "Без ссылок"})
+        self.assertEqual(allowed.status_code, 200)
+        message_id = allowed.json()["message"]["id"]
+
+        denied_edit = self.client.post(
+            reverse("messenger:special_message_action", args=[group.pk, message_id]),
+            {
+                "action": "edit",
+                "payload": json.dumps({
+                    "title": "Статья",
+                    "body": "b" * 3500 + " https://example.com",
+                }),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(denied_edit.status_code, 403)
+        original = Message.objects.get(pk=message_id)
+        self.assertNotIn("example.com", original.special_data["body"])
+
+        todo = special("todo", {
+            "title": "План", "tasks": ["Работа"], "allow_others_add": True,
+        })
+        self.assertEqual(todo.status_code, 200)
+        denied_add = self.client.post(
+            reverse("messenger:special_message_action", args=[group.pk, todo.json()["message"]["id"]]),
+            {"action": "add", "text": "https://example.com"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(denied_add.status_code, 403)
+
+    def test_forwarded_structured_message_respects_group_link_policy(self):
+        group = Chat.objects.create(
+            type=Chat.Type.GROUP, title="Без ссылок при пересылке",
+            members_can_send_links=False,
+        )
+        ChatParticipant.objects.create(chat=group, user=self.alice)
+        ChatParticipant.objects.create(
+            chat=group, user=self.bob, role=ChatParticipant.Role.OWNER,
+        )
+        source = Message.objects.create(
+            chat=self.chat,
+            sender=self.bob,
+            text="Статья",
+            special_type=Message.SpecialType.ARTICLE,
+            special_data={
+                "title": "Статья", "subtitle": "",
+                "body": "a" * 3500 + " https://example.com",
+            },
+        )
+        forwarded = self.client.post(
+            reverse("messenger:forward_message", args=[self.chat.pk, source.pk]),
+            {"target_chat_id": str(group.pk)},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(forwarded.status_code, 403)
+        self.assertFalse(Message.objects.filter(chat=group).exists())
+
+    @override_settings(SOVIETGRAM_RATE_LIMITS={"send_message": {"limit": 2, "window": 60}})
+    def test_regular_special_and_forward_sends_share_one_rate_limit(self):
+        regular = self.client.post(
+            reverse("messenger:send_message", args=[self.chat.pk]),
+            {"text": "Первое"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(regular.status_code, 200)
+        special = self.client.post(
+            reverse("messenger:send_special_message", args=[self.chat.pk]),
+            {
+                "special_type": "poll",
+                "payload": json.dumps({"question": "Вопрос", "options": ["Да", "Нет"]}),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(special.status_code, 200)
+        forwarded = self.client.post(
+            reverse(
+                "messenger:forward_message",
+                args=[self.chat.pk, regular.json()["message"]["id"]],
+            ),
+            {"target_chat_id": "saved"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(forwarded.status_code, 429)
+        self.assertTrue(forwarded.json()["rate_limited"])
+
     def test_chat_header_presence_updates_with_exact_timestamp_and_privacy(self):
         from datetime import timedelta
 
