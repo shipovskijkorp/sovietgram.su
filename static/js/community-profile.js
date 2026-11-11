@@ -232,6 +232,7 @@
       identity.addEventListener("click", () => openMemberProfile(member));
       const picture = document.createElement(member.avatar_url ? "img" : "span");
       picture.className = "community-profile-member__avatar";
+      picture.dataset.avatarUserId = String(member.user_id);
       if (member.avatar_url) { picture.src = member.avatar_url; picture.alt = ""; }
       else picture.textContent = member.initials;
       const copy = document.createElement("span");
