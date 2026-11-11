@@ -399,6 +399,16 @@ async function refreshProfilePresence() {
         });
       }
     }
+    if (Object.prototype.hasOwnProperty.call(fresh, "personal_channel")) {
+      openedProfile.personal_channel = fresh.personal_channel;
+      if (fresh.personal_channel?.id != null) {
+        window.SovietgramAvatarSync?.updateChat(
+          fresh.personal_channel.id,
+          fresh.personal_channel.avatar_url || "",
+          (fresh.personal_channel.title || fresh.personal_channel.username || "К").trim().slice(0, 2).toUpperCase(),
+        );
+      }
+    }
     updateProfilePresence(openedProfile);
   } catch (_error) {
     // The next refresh retries automatically.
