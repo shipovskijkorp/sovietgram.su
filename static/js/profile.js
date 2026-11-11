@@ -400,13 +400,24 @@ async function refreshProfilePresence() {
       }
     }
     if (Object.prototype.hasOwnProperty.call(fresh, "personal_channel")) {
-      openedProfile.personal_channel = fresh.personal_channel;
-      renderProfilePersonalChannel(fresh.personal_channel);
-      if (fresh.personal_channel?.id != null) {
+      const previousChannel = openedProfile.personal_channel;
+      const nextChannel = fresh.personal_channel;
+      const channelChanged = (
+        previousChannel?.id !== nextChannel?.id
+        || previousChannel?.avatar_url !== nextChannel?.avatar_url
+        || previousChannel?.title !== nextChannel?.title
+        || previousChannel?.username !== nextChannel?.username
+        || previousChannel?.last_message_time !== nextChannel?.last_message_time
+        || previousChannel?.last_message_preview !== nextChannel?.last_message_preview
+        || previousChannel?.subscriber_text !== nextChannel?.subscriber_text
+      );
+      openedProfile.personal_channel = nextChannel;
+      if (channelChanged) renderProfilePersonalChannel(nextChannel);
+      if (nextChannel?.id != null) {
         window.SovietgramAvatarSync?.updateChat(
-          fresh.personal_channel.id,
-          fresh.personal_channel.avatar_url || "",
-          (fresh.personal_channel.title || fresh.personal_channel.username || "К").trim().slice(0, 2).toUpperCase(),
+          nextChannel.id,
+          nextChannel.avatar_url || "",
+          (nextChannel.title || nextChannel.username || "К").trim().slice(0, 2).toUpperCase(),
         );
       }
     }
