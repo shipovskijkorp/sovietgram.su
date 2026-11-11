@@ -864,7 +864,13 @@ class ChatFeatureTests(TestCase):
     def test_chat_pin_mute_and_archive_are_per_user(self):
         url = reverse("messenger:chat_action", args=[self.chat.pk])
         self.client.post(url, {"action": "pin"})
-        self.client.post(url, {"action": "mute"})
+        mute_response = self.client.post(
+            url,
+            {"action": "mute"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(mute_response.status_code, 200)
+        self.assertTrue(mute_response.json()["is_muted"])
         membership = ChatParticipant.objects.get(chat=self.chat, user=self.alice)
         self.assertTrue(membership.is_pinned)
         self.assertTrue(membership.is_muted)
