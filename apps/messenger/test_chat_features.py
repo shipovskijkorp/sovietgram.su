@@ -1,5 +1,6 @@
 import json
 import tempfile
+import zipfile
 from io import BytesIO
 
 from django.core.cache import cache
@@ -872,6 +873,119 @@ class ChatFeatureTests(TestCase):
         membership.refresh_from_db()
         self.assertTrue(membership.is_archived)
         self.assertFalse(ChatParticipant.objects.get(chat=self.chat, user=self.bob).is_archived)
+
+    def test_chat_action_toggles_protection_and_personal_wallpaper(self):
+        url = reverse("messenger:chat_action", args=[self.chat.pk])
+
+        protection = self.client.post(
+            url,
+            {"action": "toggle_protection"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(protection.status_code, 200)
+        self.assertTrue(protection.json()["protect_content"])
+        self.chat.refresh_from_db()
+        self.assertTrue(self.chat.protect_content)
+
+        wallpaper = self.client.post(
+            url,
+            {"action": "set_wallpaper", "wallpaper": "blue"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(wallpaper.status_code, 200)
+        self.assertEqual(wallpaper.json()["wallpaper"], "blue")
+        self.assertEqual(
+            self.chat.memberships.get(user=self.alice).wallpaper,
+            "blue",
+        )
+        self.assertEqual(
+            self.chat.memberships.get(user=self.bob).wallpaper,
+            "",
+        )
+
+        invalid = self.client.post(
+            url,
+            {"action": "set_wallpaper", "wallpaper": "javascript:alert(1)"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(invalid.status_code, 400)
+
+    def test_export_chat_history_contains_visible_messages_and_media(self):
+        visible = Message.objects.create(
+            chat=self.chat,
+            sender=self.bob,
+            text="<script>alert('export')</script>",
+        )
+        MessageAttachment.objects.create(
+            message=visible,
+            file=SimpleUploadedFile(
+                "report.txt", b"exported-file", content_type="text/plain",
+            ),
+            kind=MessageAttachment.Kind.FILE,
+            original_name="report.txt",
+            mime_type="text/plain",
+            size=len(b"exported-file"),
+        )
+        hidden = Message.objects.create(
+            chat=self.chat,
+            sender=self.bob,
+            text="ЭТО СООБЩЕНИЕ НЕ ДОЛЖНО ПОПАСТЬ В ЭКСПОРТ",
+        )
+        MessageHiddenForUser.objects.create(message=hidden, user=self.alice)
+
+        response = self.client.get(
+            reverse("messenger:export_chat_history", args=[self.chat.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/zip")
+        self.assertIn("attachment;", response["Content-Disposition"])
+
+        archive_bytes = b"".join(response.streaming_content)
+        with zipfile.ZipFile(BytesIO(archive_bytes)) as archive:
+            self.assertIn("history.html", archive.namelist())
+            html = archive.read("history.html").decode("utf-8")
+            self.assertIn("&lt;script&gt;", html)
+            self.assertNotIn("ЭТО СООБЩЕНИЕ НЕ ДОЛЖНО ПОПАСТЬ В ЭКСПОРТ", html)
+            media_path = f"media/{visible.pk}-1-report.txt"
+            self.assertIn(media_path, archive.namelist())
+            self.assertEqual(archive.read(media_path), b"exported-file")
+            self.assertIn("report.txt", html)
+
+    def test_protected_chat_blocks_forward_export_and_file_download(self):
+        message = Message.objects.create(
+            chat=self.chat, sender=self.bob, text="Защищённое сообщение",
+        )
+        attachment = MessageAttachment.objects.create(
+            message=message,
+            file=SimpleUploadedFile(
+                "private.txt", b"private", content_type="text/plain",
+            ),
+            kind=MessageAttachment.Kind.FILE,
+            original_name="private.txt",
+            mime_type="text/plain",
+            size=len(b"private"),
+        )
+        self.chat.protect_content = True
+        self.chat.save(update_fields=["protect_content"])
+
+        target = get_or_create_direct_chat(self.alice, self.charlie)
+        forwarded = self.client.post(
+            reverse("messenger:forward_message", args=[self.chat.pk, message.pk]),
+            {"target_chat_id": target.pk},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(forwarded.status_code, 403)
+        self.assertFalse(Message.objects.filter(chat=target).exists())
+
+        exported = self.client.get(
+            reverse("messenger:export_chat_history", args=[self.chat.pk])
+        )
+        self.assertEqual(exported.status_code, 403)
+
+        downloaded = self.client.get(
+            reverse("messenger:download_attachment", args=[attachment.pk])
+        )
+        self.assertEqual(downloaded.status_code, 403)
 
     def test_incoming_message_unarchives_unmuted_chat_by_default(self):
         membership = self.chat.memberships.get(user=self.alice)
@@ -2259,16 +2373,47 @@ class ChatFeatureTests(TestCase):
         message.refresh_from_db()
         self.assertFalse(message.is_deleted)
 
-    def test_chat_menu_contains_telegram_style_selection_and_delete_actions(self):
+    def test_private_chat_menu_matches_telegram_actions(self):
         response = self.client.get(
             reverse("messenger:chat", args=[self.chat.pk])
         )
-        self.assertContains(response, "data-select-messages", html=False)
-        self.assertContains(response, "data-clear-chat-history", html=False)
-        self.assertContains(response, "data-delete-chat", html=False)
+        self.assertEqual(response.status_code, 200)
+        for marker in (
+            "data-chat-menu-mute",
+            "data-open-chat-info",
+            "data-open-chat-wallpaper",
+            "data-toggle-chat-protection",
+            "data-chat-export",
+            "data-clear-chat-history",
+            "data-delete-chat",
+        ):
+            self.assertContains(response, marker, html=False)
+        for label in (
+            "Выключить уведомления",
+            "Показать профиль",
+            "Установить обои",
+            "Запретить копирование",
+            "Экспорт истории чата",
+            "Очистить историю",
+            "Удалить чат",
+        ):
+            self.assertContains(response, label)
+        self.assertNotContains(response, "data-select-messages", html=False)
         self.assertContains(response, 'id="deleteMessageModal"', html=False)
         self.assertContains(response, 'id="deleteChatModal"', html=False)
+        self.assertContains(response, 'id="chatWallpaperModal"', html=False)
         self.assertContains(response, 'id="messageSelectionBar"', html=False)
+
+    def test_chat_menu_keeps_community_actions_for_groups(self):
+        group = Chat.objects.create(type=Chat.Type.GROUP, title="Командный чат")
+        ChatParticipant.objects.create(
+            chat=group, user=self.alice, role=ChatParticipant.Role.OWNER,
+        )
+        ChatParticipant.objects.create(chat=group, user=self.bob)
+        response = self.client.get(reverse("messenger:chat", args=[group.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "data-select-messages", html=False)
+        self.assertContains(response, "data-open-community-settings", html=False)
 
 
     def test_attachment_menu_matches_telegram_builtins_without_wallet(self):
