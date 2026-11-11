@@ -17,7 +17,22 @@
     }
 
     const next = document.createElement(wantsImage ? "img" : "span");
-    next.className = node.className || "";
+    const fallbackClasses = {
+      "conversation-header__avatar": "conversation-header__avatar--fallback",
+      "chat-row__avatar": "chat-row__avatar--fallback",
+      "chat-info-avatar": "chat-info-avatar--fallback",
+      "forward-target__avatar": "forward-target__avatar--fallback",
+    };
+    const classes = String(node.className || "").split(/\\s+/).filter(Boolean);
+    const normalized = classes.filter((name) => !Object.values(fallbackClasses).includes(name));
+    if (!wantsImage) {
+      Object.entries(fallbackClasses).forEach(([base, fallbackClass]) => {
+        if (normalized.includes(base) && !normalized.includes(fallbackClass)) {
+          normalized.push(fallbackClass);
+        }
+      });
+    }
+    next.className = normalized.join(" ");
     Object.entries(node.dataset || {}).forEach(([key, value]) => {
       next.dataset[key] = value;
     });
