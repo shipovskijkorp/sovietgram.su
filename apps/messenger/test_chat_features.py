@@ -1053,6 +1053,67 @@ class ChatFeatureTests(TestCase):
         self.assertIn('data-forward-can-text="false"', body)
         self.assertIn('data-forward-can-media="true"', body)
 
+    def test_existing_forwarded_link_follows_current_privacy_per_viewer(self):
+        source = Message.objects.create(
+            chat=self.chat, sender=self.bob, text="Пересылаемый материал",
+        )
+        target = get_or_create_direct_chat(self.alice, self.charlie)
+        first = self.client.post(
+            reverse("messenger:forward_message", args=[self.chat.pk, source.pk]),
+            {"target_chat_id": target.pk},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(first.status_code, 200)
+        forwarded_id = first.json()["message"]["id"]
+        self.assertEqual(first.json()["message"]["forwarded"]["username"], self.bob.username)
+
+        set_privacy_rule(self.bob, "forwards", "contacts")
+        Contact.objects.create(owner=self.bob, user=self.alice)
+
+        self.client.force_login(self.charlie)
+        poll_url = reverse("messenger:poll_messages", args=[target.pk])
+        hidden = self.client.get(poll_url, {"after": 0}).json()
+        result = next(m for m in hidden["messages"] if m["id"] == forwarded_id)
+        self.assertEqual(result["forwarded"]["username"], "")
+        self.assertEqual(result["forwarded"]["profile_url"], "")
+        page = self.client.get(reverse("messenger:chat", args=[target.pk]))
+        self.assertNotContains(page, "@" + self.bob.username)
+
+        self.client.force_login(self.alice)
+        visible = self.client.get(poll_url, {"after": 0}).json()
+        result = next(m for m in visible["messages"] if m["id"] == forwarded_id)
+        self.assertEqual(result["forwarded"]["username"], self.bob.username)
+
+        set_privacy_rule(self.bob, "forwards", "nobody")
+        hidden_again = self.client.get(poll_url, {"after": 0}).json()
+        result = next(m for m in hidden_again["messages"] if m["id"] == forwarded_id)
+        self.assertEqual(result["forwarded"]["username"], "")
+
+    def test_forwarding_hidden_origin_twice_does_not_forge_intermediate_sender(self):
+        set_privacy_rule(self.bob, "forwards", "nobody")
+        source = Message.objects.create(
+            chat=self.chat, sender=self.bob, text="Пересылай без ссылки",
+        )
+        target = get_or_create_direct_chat(self.alice, self.charlie)
+        first = self.client.post(
+            reverse("messenger:forward_message", args=[self.chat.pk, source.pk]),
+            {"target_chat_id": target.pk},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.json()["message"]["forwarded"]["username"], "")
+
+        forwarded_id = first.json()["message"]["id"]
+        second = self.client.post(
+            reverse("messenger:forward_message", args=[target.pk, forwarded_id]),
+            {"target_chat_id": "saved"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second.json()["message"]["forwarded"]["name"], self.bob.display_name)
+        self.assertEqual(second.json()["message"]["forwarded"]["username"], "")
+        self.assertEqual(second.json()["message"]["forwarded"]["profile_url"], "")
+
     def test_forwarded_identity_has_profile_link_only_when_allowed(self):
         source = Message.objects.create(
             chat=self.chat,
