@@ -645,7 +645,9 @@ def join_invite(request, token):
             return redirect("messenger:home")
 
         chat = invite.chat
-        if ChatParticipant.objects.filter(chat=chat, user=request.user).exists():
+        if ChatParticipant.objects.filter(
+            chat=chat, user=request.user, is_hidden=False,
+        ).exists():
             return redirect("messenger:chat", chat_id=chat.pk)
 
         return render(
@@ -678,6 +680,10 @@ def join_invite(request, token):
                 "can_see_pre_join_history": chat.history_visible_to_new_members,
             },
         )
+        if not created and membership.is_hidden:
+            # A previously hidden membership is still counted as existing.
+            # Re-open it without consuming another use of the invite link.
+            ChatParticipant.objects.filter(pk=membership.pk).update(is_hidden=False)
         if created:
             invite.usage_count += 1
             invite.save(update_fields=("usage_count",))
