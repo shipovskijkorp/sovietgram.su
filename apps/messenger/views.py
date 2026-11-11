@@ -212,6 +212,31 @@ def _clean_special_payload(special_type, raw_payload):
     raise ValueError("Неизвестный тип вложения.")
 
 
+def _special_restriction_text(special_type, special_data, fallback=""):
+    """Check the entire user-visible text, not just a shortened search preview.
+
+    In particular, article bodies after character 3000, poll options and task
+    descriptions must respect group policies disallowing links.
+    """
+    data = special_data if isinstance(special_data, dict) else {}
+    if special_type == Message.SpecialType.ARTICLE:
+        return "\n".join(
+            str(data.get(key, "")) for key in ("title", "subtitle", "body")
+        )
+    if special_type == Message.SpecialType.POLL:
+        return "\n".join([
+            str(data.get("question", "")),
+            *(str(item.get("text", "")) for item in data.get("options", []) if isinstance(item, dict)),
+            str(data.get("explanation", "")),
+        ])
+    if special_type == Message.SpecialType.TODO:
+        return "\n".join([
+            str(data.get("title", "")),
+            *(str(item.get("text", "")) for item in data.get("tasks", []) if isinstance(item, dict)),
+        ])
+    return fallback
+
+
 def _chat_for_user(user, chat_id):
     return get_object_or_404(
         Chat.objects.filter(
@@ -1585,6 +1610,7 @@ def send_message(request, chat_id):
 
 @login_required
 @require_POST
+@rate_limit("send_message")
 def send_special_message(request, chat_id):
     chat = _chat_for_user(request.user, chat_id)
     membership = _membership(chat, request.user)
@@ -1618,7 +1644,7 @@ def send_special_message(request, chat_id):
     restriction = _posting_restriction(
         chat,
         membership,
-        text=search_text,
+        text=_special_restriction_text(special_type, special_data, search_text),
         has_attachments=False,
     )
     if restriction:
@@ -1836,6 +1862,14 @@ def special_message_action(request, chat_id, message_id):
                         {"ok": False, "error": "Введите текст задачи."},
                         status=400,
                     )
+                restriction = _posting_restriction(
+                    chat, membership, text=text_value, check_slow_mode=False,
+                )
+                if restriction:
+                    return JsonResponse(
+                        {"ok": False, "error": restriction[0]},
+                        status=403,
+                    )
                 if len(tasks) >= 30:
                     return JsonResponse(
                         {
@@ -1891,6 +1925,18 @@ def special_message_action(request, chat_id, message_id):
                 return JsonResponse(
                     {"ok": False, "error": str(error)},
                     status=400,
+                )
+            restriction = _posting_restriction(
+                chat, membership,
+                text=_special_restriction_text(
+                    Message.SpecialType.ARTICLE, article_data, search_text,
+                ),
+                check_slow_mode=False,
+            )
+            if restriction:
+                return JsonResponse(
+                    {"ok": False, "error": restriction[0]},
+                    status=403,
                 )
             message.special_data = article_data
             message.text = search_text
@@ -2068,6 +2114,7 @@ def delete_message(request, chat_id, message_id):
 
 @login_required
 @require_POST
+@rate_limit("send_message")
 def forward_message(request, chat_id, message_id):
     source_chat = _chat_for_user(request.user, chat_id)
     source = get_object_or_404(
@@ -2116,7 +2163,9 @@ def forward_message(request, chat_id, message_id):
     restriction = _posting_restriction(
         target_chat,
         target_membership,
-        text=source.text,
+        text=_special_restriction_text(
+            source.special_type, source.special_data, source.text,
+        ),
         has_attachments=source.attachments.exists(),
     )
     if restriction:
