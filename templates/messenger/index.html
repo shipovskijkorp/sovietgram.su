@@ -130,10 +130,6 @@
                   <span class="tg-native-icon tg-native-icon--profile" aria-hidden="true"></span>
                   <span class="chat-menu__label">Показать профиль</span>
                 </button>
-                <button type="button" data-open-chat-wallpaper>
-                  <span class="tg-native-icon tg-native-icon--media" aria-hidden="true"></span>
-                  <span class="chat-menu__label">Установить обои</span>
-                </button>
                 <button type="button" data-toggle-chat-protection>
                   <span class="tg-native-icon tg-native-icon--lock" aria-hidden="true"></span>
                   <span class="chat-menu__label">{% if selected_chat.protect_content %}Разрешить копирование{% else %}Запретить копирование{% endif %}</span>
@@ -233,7 +229,7 @@
                data-server-time="{{ server_time }}"
                data-other-last-read="{{ other_last_read_id }}"
                data-focus-message="{{ message_focus_id }}"
-               data-chat-wallpaper="{{ active_membership.wallpaper }}">
+
         <div class="wallpaper" aria-hidden="true"></div>
         <div class="message-flow" id="messageFlow">
           <div class="dialog-start">
@@ -740,46 +736,6 @@
     <footer>
       <button class="telegram-confirm__cancel" id="deleteChatCancel" type="button">Отмена</button>
       <button class="telegram-confirm__danger" id="deleteChatConfirm" type="button">Удалить</button>
-    </footer>
-  </section>
-</div>
-
-<div class="chat-modal-backdrop" id="chatWallpaperModal" hidden>
-  <section class="chat-modal chat-modal--wallpaper" role="dialog" aria-modal="true" aria-labelledby="chatWallpaperTitle">
-    <header>
-      <strong id="chatWallpaperTitle">Обои переписки</strong>
-      <button type="button" data-close-chat-wallpaper aria-label="Закрыть"><span class="tg-native-icon tg-native-icon--close tg-native-icon--compact" aria-hidden="true"></span></button>
-    </header>
-    <div class="chat-modal__body">
-      <div class="chat-wallpaper-grid">
-        <button class="chat-wallpaper-option" type="button" data-chat-wallpaper-choice="" aria-pressed="{% if not active_membership.wallpaper %}true{% else %}false{% endif %}">
-          <span class="chat-wallpaper-option__preview chat-wallpaper-option__preview--default"></span>
-          <span>По умолчанию</span>
-        </button>
-        <button class="chat-wallpaper-option" type="button" data-chat-wallpaper-choice="sand" aria-pressed="{% if active_membership.wallpaper == 'sand' %}true{% else %}false{% endif %}">
-          <span class="chat-wallpaper-option__preview chat-wallpaper-option__preview--sand"></span>
-          <span>Песочные</span>
-        </button>
-        <button class="chat-wallpaper-option" type="button" data-chat-wallpaper-choice="blue" aria-pressed="{% if active_membership.wallpaper == 'blue' %}true{% else %}false{% endif %}">
-          <span class="chat-wallpaper-option__preview chat-wallpaper-option__preview--blue"></span>
-          <span>Голубые</span>
-        </button>
-        <button class="chat-wallpaper-option" type="button" data-chat-wallpaper-choice="mint" aria-pressed="{% if active_membership.wallpaper == 'mint' %}true{% else %}false{% endif %}">
-          <span class="chat-wallpaper-option__preview chat-wallpaper-option__preview--mint"></span>
-          <span>Мятные</span>
-        </button>
-        <button class="chat-wallpaper-option" type="button" data-chat-wallpaper-choice="rose" aria-pressed="{% if active_membership.wallpaper == 'rose' %}true{% else %}false{% endif %}">
-          <span class="chat-wallpaper-option__preview chat-wallpaper-option__preview--rose"></span>
-          <span>Розовые</span>
-        </button>
-        <button class="chat-wallpaper-option" type="button" data-chat-wallpaper-choice="lavender" aria-pressed="{% if active_membership.wallpaper == 'lavender' %}true{% else %}false{% endif %}">
-          <span class="chat-wallpaper-option__preview chat-wallpaper-option__preview--lavender"></span>
-          <span>Лавандовые</span>
-        </button>
-      </div>
-    </div>
-    <footer>
-      <button class="chat-modal__secondary" type="button" data-close-chat-wallpaper>Отмена</button>
     </footer>
   </section>
 </div>
