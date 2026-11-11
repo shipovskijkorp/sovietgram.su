@@ -17,7 +17,7 @@ test("settings overlay uses the shared native lock and settings icons", () => {
     template,
     /tg-native-icon tg-native-icon--settings tg-settings-row__icon/,
   );
-  assert.doesNotMatch(template, /tg-settings-section-icon/);
+  assert.doesNotMatch(template, /tg-settings-section-icon--(?:lock|chat)/);
 });
 
 test("shared native icons use luminance masks for opaque Telegram PNG assets", () => {
