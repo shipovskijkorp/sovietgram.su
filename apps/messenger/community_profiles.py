@@ -726,6 +726,7 @@ def community_member_candidates(request, chat_id):
             "ok": True,
             "results": [
                 {
+                    "id": user.pk,
                     "display_name": user.display_name,
                     "username": user.username,
                     "initials": user.initials,
