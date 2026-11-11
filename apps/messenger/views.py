@@ -2503,15 +2503,6 @@ def chat_action(request, chat_id):
             "Копирование запрещено." if chat.protect_content else "Копирование разрешено.",
             protect_content=chat.protect_content,
         )
-    elif action == "set_wallpaper":
-        if chat.type != Chat.Type.PRIVATE or chat.direct_key == f"self:{request.user.pk}":
-            return action_error("Обои можно устанавливать только в личной переписке.")
-        wallpaper = request.POST.get("wallpaper", "")
-        if wallpaper not in {"", "sand", "blue", "mint", "rose", "lavender"}:
-            return action_error("Неизвестный вариант обоев.")
-        membership.wallpaper = wallpaper
-        membership.save(update_fields=("wallpaper",))
-        return action_response("Обои переписки обновлены.", wallpaper=wallpaper)
     elif action == "archive":
         membership.is_archived = not membership.is_archived
         membership.save(update_fields=("is_archived",))
