@@ -585,8 +585,11 @@ function openMessageMenu(article, x, y) {
   const hasText = Boolean((article.dataset.messageText || "").trim());
   const editButton = contextMenu.querySelector('[data-message-action="edit"]');
   const copyButton = contextMenu.querySelector('[data-message-action="copy"]');
+  const forwardButton = contextMenu.querySelector('[data-message-action="forward"]');
+  const contentProtected = document.querySelector(".conversation--chat")?.dataset.chatProtected === "true";
   if (editButton) editButton.hidden = !own || Boolean(article.dataset.messageKind);
-  if (copyButton) copyButton.hidden = !hasText;
+  if (copyButton) copyButton.hidden = contentProtected || !hasText;
+  if (forwardButton) forwardButton.hidden = contentProtected;
   if (pinLabel) pinLabel.textContent = article.dataset.messagePinned === "true" ? "Открепить" : "Закрепить";
 
   contextMenu.hidden = false;
