@@ -1337,9 +1337,17 @@ def global_search(request):
                     None,
                 )
                 if membership is None:
+                    # Sidebar is limited to 120 chats for responsiveness,
+                    # but full-text search must still find older conversations.
+                    membership = ChatParticipant.objects.filter(
+                        chat=chat, user=request.user, is_hidden=False,
+                    ).first()
+                if membership is None:
                     continue
                 if chat.type != Chat.Type.PRIVATE:
-                    chat.member_count_ui = collective_counts.get(chat.pk, 0)
+                    chat.member_count_ui = collective_counts.get(
+                        chat.pk,
+                    ) or chat.memberships.count()
                 _decorate_chat_ui(chat, request.user)
                 decorated = chat
                 chat_by_id[chat.pk] = chat
