@@ -3112,6 +3112,7 @@ def poll_messages(request, chat_id):
             "other_user_profile_url": other_user_profile_url,
             "chat_id": chat.pk,
             "chat_type": chat.type,
+            "protect_content": chat.protect_content,
             "chat_title": chat_title,
             "chat_username": chat_username,
             "chat_avatar_url": chat_avatar_url,
