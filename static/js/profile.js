@@ -206,16 +206,26 @@ async function copyProfileText(text, successText = "Скопировано") {
 
 function updateGlobalSelfIdentity(payload) {
   if (!payload) return;
-  document.querySelectorAll(".account-mini__name").forEach((element) => {
-    element.textContent = payload.display_name;
-  });
-  document.querySelectorAll(".profile-account-header__bottom strong").forEach((element) => {
-    element.textContent = payload.display_name;
-  });
+  if (payload.display_name) {
+    document.querySelectorAll(".account-mini__name").forEach((element) => {
+      element.textContent = payload.display_name;
+    });
+    document.querySelectorAll(".profile-account-header__bottom strong").forEach((element) => {
+      element.textContent = payload.display_name;
+    });
+  }
   if (payload.profile_url) {
     document.querySelectorAll("[data-self-profile]").forEach((link) => {
       link.href = payload.profile_url;
     });
+  }
+  if (
+    payload.user_id != null
+    && Object.prototype.hasOwnProperty.call(payload, "avatar_url")
+  ) {
+    window.SovietgramAvatarSync?.updateUser(
+      payload.user_id, payload.avatar_url || "", payload.initials || "?",
+    );
   }
 }
 
@@ -267,6 +277,11 @@ async function saveSelfProfile(changes = {}, avatarFile = null) {
     edit_url: openedProfile.edit_url,
     owned_channels: openedProfile.owned_channels || [],
   };
+  renderProfileAvatar(userProfileAvatar, openedProfile);
+  renderProfileAvatar(userProfileEditAvatar, openedProfile);
+  if (userProfilePhotoImage && !userProfilePhotoViewer?.hidden) {
+    userProfilePhotoImage.src = openedProfile.avatar_url || "";
+  }
   updateGlobalSelfIdentity(payload);
   updateProfileHistory(openedProfile.username || "");
   return payload;
@@ -346,6 +361,42 @@ async function refreshProfilePresence() {
     openedProfile.last_seen_exact = fresh.last_seen_exact;
     openedProfile.last_seen_at = fresh.last_seen_at;
     openedProfile.is_contact = fresh.is_contact;
+
+    if (Object.prototype.hasOwnProperty.call(fresh, "avatar_url")) {
+      const avatarChanged = (openedProfile.avatar_url || "") !== (fresh.avatar_url || "");
+      openedProfile.avatar_url = fresh.avatar_url || "";
+      openedProfile.initials = fresh.initials || openedProfile.initials;
+      openedProfile.display_name = fresh.display_name || openedProfile.display_name;
+      if (avatarChanged) {
+        renderProfileAvatar(userProfileAvatar, openedProfile);
+        renderProfileAvatar(userProfileEditAvatar, openedProfile);
+        if (userProfileAvatar) {
+          userProfileAvatar.disabled = !openedProfile.avatar_url;
+          userProfileAvatar.classList.toggle("is-clickable", Boolean(openedProfile.avatar_url));
+        }
+        if (userProfileEditAvatarOpen) {
+          userProfileEditAvatarOpen.disabled = !openedProfile.avatar_url;
+        }
+        if (userProfilePhotoImage && userProfilePhotoViewer && !userProfilePhotoViewer.hidden) {
+          if (openedProfile.avatar_url) userProfilePhotoImage.src = openedProfile.avatar_url;
+          else closeProfilePhotoViewer();
+        }
+      }
+      if (fresh.id != null) {
+        window.SovietgramAvatarSync?.updateUser(
+          fresh.id, openedProfile.avatar_url, openedProfile.initials,
+        );
+      }
+      if (openedProfile.is_self) {
+        updateGlobalSelfIdentity({
+          user_id: fresh.id,
+          display_name: openedProfile.display_name,
+          avatar_url: openedProfile.avatar_url,
+          initials: openedProfile.initials,
+          profile_url: fresh.profile_url,
+        });
+      }
+    }
     updateProfilePresence(openedProfile);
   } catch (_error) {
     // The next refresh retries automatically.
@@ -761,6 +812,40 @@ function updateProfileHistory(username) {
   window.history.replaceState({}, "", url);
 }
 
+let selfAvatarRefreshBusy = false;
+async function refreshSelfAvatar() {
+  const url = document.body?.dataset.selfProfileUrl;
+  if (!url || document.hidden || selfAvatarRefreshBusy) return;
+  selfAvatarRefreshBusy = true;
+  try {
+    const response = await fetch(url, {
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+      credentials: "same-origin",
+      cache: "no-store",
+    });
+    if (!response.ok) return;
+    const fresh = await response.json();
+    if (!fresh.ok || fresh.id == null) return;
+    updateGlobalSelfIdentity({
+      user_id: fresh.id,
+      display_name: fresh.display_name,
+      profile_url: fresh.profile_url,
+      avatar_url: fresh.avatar_url || "",
+      initials: fresh.initials || "?",
+    });
+  } catch (_error) {
+    // Retry on the next interval or when the tab becomes visible.
+  } finally {
+    selfAvatarRefreshBusy = false;
+  }
+}
+
+window.setInterval(refreshSelfAvatar, 15000);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) void refreshSelfAvatar();
+});
+window.addEventListener?.("focus", () => { void refreshSelfAvatar(); });
+
 async function openUserProfile(url) {
   if (!userProfileOverlay || !url) {
     window.location.assign(url);
@@ -842,6 +927,7 @@ userProfilePhotoRemove?.addEventListener("click", async () => {
 
     openedProfile.avatar_url = "";
     openedProfile.initials = payload.initials || openedProfile.initials;
+    updateGlobalSelfIdentity(payload);
     renderProfileAvatar(userProfileAvatar, openedProfile);
     renderProfileAvatar(userProfileEditAvatar, openedProfile);
     if (userProfileAvatar) {
