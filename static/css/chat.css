@@ -109,6 +109,14 @@
   color: #4f4134;
   text-decoration: none;
 }
+.chat-menu--telegram a:hover {
+  background: #f2e8da;
+}
+.chat-menu--telegram button:focus-visible,
+.chat-menu--telegram a:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: -2px;
+}
 .chat-menu--telegram button > .tg-native-icon,
 .chat-menu--telegram a > .tg-native-icon {
   color: currentColor;
@@ -1297,9 +1305,6 @@ body[data-theme="dark"] .message-stage[data-chat-wallpaper="lavender"] { backgro
   user-select: none;
 }
 
-.chat-modal--wallpaper {
-  width: min(430px, 100%);
-}
 .chat-modal--wallpaper .chat-modal__body {
   padding: 14px;
 }
