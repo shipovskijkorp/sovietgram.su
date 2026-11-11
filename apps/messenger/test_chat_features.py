@@ -266,6 +266,29 @@ class ChatFeatureTests(TestCase):
         self.assertEqual(forwarded.status_code, 429)
         self.assertTrue(forwarded.json()["rate_limited"])
 
+    def test_global_search_finds_messages_outside_sidebar_window(self):
+        needle = "uniquely_searchable_history_123"
+        msg = Message.objects.create(
+            chat=self.chat, sender=self.bob, text=needle,
+        )
+        # The sidebar deliberately fetches 120 chats, but old messages
+        # must stay searchable even when their chat falls outside this slice.
+        for index in range(121):
+            newer = Chat.objects.create(
+                type=Chat.Type.GROUP, title=f"Группа {index}",
+            )
+            ChatParticipant.objects.create(
+                chat=newer, user=self.alice, role=ChatParticipant.Role.OWNER,
+            )
+
+        response = self.client.get(
+            reverse("messenger:global_search"),
+            {"q": needle},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(msg.pk, [item["id"] for item in response.json()["messages"]])
+
     def test_chat_header_presence_updates_with_exact_timestamp_and_privacy(self):
         from datetime import timedelta
 
