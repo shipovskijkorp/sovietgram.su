@@ -88,6 +88,7 @@
   const chatActionUrl = conversation.dataset.chatActionUrl || "";
   const chatMenuMuteButton = chatMenu?.querySelector("[data-chat-menu-mute]");
   const chatMenuMuteLabel = chatMenuMuteButton?.querySelector(".chat-menu__label");
+  const chatMuteOptions = chatMenu?.querySelector("[data-chat-mute-options]");
   const chatProtectionButton = chatMenu?.querySelector("[data-toggle-chat-protection]");
   const chatProtectionLabel = chatProtectionButton?.querySelector(".chat-menu__label");
   const chatExportLink = chatMenu?.querySelector("[data-chat-export]");
@@ -142,10 +143,17 @@
     if (typeof window.showToast === "function") window.showToast(text);
   }
 
+  function setChatMuteOptions(open) {
+    if (!chatMuteOptions) return;
+    chatMuteOptions.hidden = !open;
+    chatMenuMuteButton?.setAttribute("aria-expanded", String(open));
+  }
+
   function setChatMenu(open) {
     if (!chatMenu || !chatMenuButton) return;
     chatMenu.hidden = !open;
     chatMenuButton.setAttribute("aria-expanded", String(open));
+    if (!open) setChatMuteOptions(false);
   }
 
   function applyChatProtection(enabled) {
@@ -206,23 +214,41 @@
     return payload;
   }
 
-  async function toggleChatMute() {
+  function applyChatMuteState(isMuted, mutedUntil = "") {
+    const muted = Boolean(isMuted);
+    conversation.dataset.chatMuted = String(muted);
+    conversation.dataset.chatMutedUntil = mutedUntil || "";
+    if (chatMenuMuteLabel) {
+      chatMenuMuteLabel.textContent = muted
+        ? "Включить уведомления"
+        : "Выключить уведомления";
+    }
+    setChatMuteOptions(false);
+  }
+
+  document.addEventListener("sovietgram:chat-mute-state", (event) => {
+    const state = event.detail || {};
+    if (typeof state.isMuted === "boolean") {
+      applyChatMuteState(state.isMuted, state.mutedUntil || "");
+    }
+  });
+
+  async function setChatMute(duration, trigger = chatMenuMuteButton) {
     if (!chatMenuMuteButton) return;
-    chatMenuMuteButton.disabled = true;
+    if (trigger) trigger.disabled = true;
     try {
-      const payload = await postForm(chatActionUrl, { action: "mute" });
-      const muted = Boolean(payload.is_muted);
-      conversation.dataset.chatMuted = String(muted);
-      if (chatMenuMuteLabel) {
-        chatMenuMuteLabel.textContent = muted
-          ? "Включить уведомления"
-          : "Выключить уведомления";
-      }
-      notify(payload.message || (muted ? "Уведомления выключены." : "Уведомления включены."));
+      const payload = await postForm(chatActionUrl, {
+        action: "mute",
+        duration,
+      });
+      applyChatMuteState(payload.is_muted, payload.muted_until || "");
+      notify(payload.message || (
+        payload.is_muted ? "Уведомления отключены." : "Уведомления включены."
+      ));
     } catch (error) {
       notify(error.message);
     } finally {
-      chatMenuMuteButton.disabled = false;
+      if (trigger) trigger.disabled = false;
     }
   }
 
@@ -762,11 +788,25 @@
       return;
     }
 
+    const muteDurationOption = target.closest("[data-chat-mute-duration]");
+    if (muteDurationOption) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const duration = muteDurationOption.dataset.chatMuteDuration || "";
+      setChatMenu(false);
+      setChatMute(duration, muteDurationOption);
+      return;
+    }
+
     if (target.closest("[data-chat-menu-mute]")) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      setChatMenu(false);
-      toggleChatMute();
+      if (conversation.dataset.chatMuted === "true") {
+        setChatMenu(false);
+        setChatMute("off");
+      } else {
+        setChatMuteOptions(Boolean(chatMuteOptions?.hidden));
+      }
       return;
     }
 
