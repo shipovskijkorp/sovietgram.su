@@ -1,8 +1,10 @@
 import json
+import logging
 import mimetypes
 import re
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
@@ -12,8 +14,14 @@ from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
+from .email_verification import (
+    confirm_verification,
+    get_pending_verification,
+    reserve_resend,
+    send_verification_email,
+)
 from .forms import (
     IdentifierAuthenticationForm,
     OverlayProfileForm,
@@ -42,6 +50,81 @@ from .privacy import (
     set_privacy_rule,
     terminate_sessions,
 )
+
+
+logger = logging.getLogger(__name__)
+
+
+def _register_pending_user(request, form):
+    """Create an inactive account and send a confirmation link."""
+    user = form.save(commit=False)
+    user.is_active = False
+    user.email_verification_sent_at = timezone.now()
+    user.save()
+    request.session["pending_verification_email"] = user.email
+    try:
+        send_verification_email(request, user)
+        messages.success(request, "Письмо для подтверждения отправлено.")
+    except Exception:
+        logger.exception("Failed to send Sovietgram registration confirmation")
+        messages.error(
+            request,
+            "Не удалось отправить письмо. Повторите отправку на странице подтверждения.",
+        )
+    return user
+
+
+@require_GET
+def verification_pending(request):
+    response = render(
+        request, "accounts/verification_pending.html",
+        {"pending_email": request.session.get("pending_verification_email", "")},
+    )
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+@require_POST
+def resend_verification(request):
+    email = (request.POST.get("email") or "").strip().lower()
+    # Do not reveal whether the address is registered or already activated.
+    user = reserve_resend(email)
+    if user is not None:
+        try:
+            send_verification_email(request, user)
+        except Exception:
+            logger.exception("Failed to resend Sovietgram verification email")
+    messages.info(
+        request,
+        "Если адрес ожидает подтверждения, письмо будет отправлено. "
+        "Повторная отправка доступна через две минуты.",
+    )
+    return redirect("accounts:verification_pending")
+
+
+@require_http_methods(["GET", "POST"])
+def verify_email(request, token):
+    user = get_pending_verification(token)
+    if request.method == "POST" and user is not None:
+        if confirm_verification(token):
+            request.session.pop("pending_verification_email", None)
+            messages.success(
+                request,
+                "Почта подтверждена! Теперь войдите в аккаунт.",
+            )
+            if request.user.is_authenticated:
+                return redirect("accounts:add_account")
+            return redirect("accounts:login")
+        user = None
+
+    response = render(
+        request, "accounts/verify_email.html",
+        {"valid_token": user is not None, "token": token},
+        status=200 if request.method == "GET" else 400,
+    )
+    response["Cache-Control"] = "no-store"
+    response["Referrer-Policy"] = "no-referrer"
+    return response
 
 
 def _subscriber_label(count):
@@ -176,6 +259,9 @@ def register(request):
 
     form = RegisterForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
+        if settings.SOVIETGRAM_REQUIRE_EMAIL_VERIFICATION:
+            _register_pending_user(request, form)
+            return redirect("accounts:verification_pending")
         user = form.save()
         login(request, user, backend="apps.accounts.backends.EmailOrUsernameBackend")
         remember_current_account(request)
@@ -208,6 +294,11 @@ def add_account(request):
         return redirect("messenger:home")
 
     if request.method == "POST" and mode == "register" and register_form.is_valid():
+        if settings.SOVIETGRAM_REQUIRE_EMAIL_VERIFICATION:
+            _register_pending_user(request, register_form)
+            # Preserve the authenticated account; the new, inactive account
+            # must not be eligible for multi-account switching.
+            return redirect("accounts:verification_pending")
         user = register_form.save()
         add_authenticated_account(request, user, backend)
         remember_session_device(request)
