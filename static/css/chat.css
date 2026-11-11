@@ -1286,69 +1286,11 @@ body[data-theme="dark"] .article-viewer__header small {
 }
 
 
-/* Per-user Telegram-style chat wallpapers. */
-.message-stage[data-chat-wallpaper="sand"] { background: #ead5b7; }
-.message-stage[data-chat-wallpaper="blue"] { background: #dce8f4; }
-.message-stage[data-chat-wallpaper="mint"] { background: #dcebe0; }
-.message-stage[data-chat-wallpaper="rose"] { background: #f2dfdc; }
-.message-stage[data-chat-wallpaper="lavender"] { background: #e8e0f1; }
-
-body[data-theme="dark"] .message-stage[data-chat-wallpaper="sand"] { background: #392d23; }
-body[data-theme="dark"] .message-stage[data-chat-wallpaper="blue"] { background: #253242; }
-body[data-theme="dark"] .message-stage[data-chat-wallpaper="mint"] { background: #25352f; }
-body[data-theme="dark"] .message-stage[data-chat-wallpaper="rose"] { background: #3b292b; }
-body[data-theme="dark"] .message-stage[data-chat-wallpaper="lavender"] { background: #332b3d; }
-
 .conversation.is-content-protected .message-flow,
 .conversation.is-content-protected .message-flow * {
   -webkit-user-select: none;
   user-select: none;
 }
-
-.chat-modal--wallpaper .chat-modal__body {
-  padding: 14px;
-}
-.chat-wallpaper-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-.chat-wallpaper-option {
-  min-width: 0;
-  display: grid;
-  gap: 7px;
-  padding: 7px;
-  border: 1px solid rgba(84,58,35,.14);
-  border-radius: 10px;
-  background: transparent;
-  color: var(--ink);
-  cursor: pointer;
-  font: inherit;
-  font-size: 11px;
-  text-align: left;
-}
-.chat-wallpaper-option:hover {
-  background: rgba(120,96,70,.06);
-}
-.chat-wallpaper-option[aria-pressed="true"] {
-  border-color: var(--red);
-  box-shadow: inset 0 0 0 1px var(--red);
-}
-.chat-wallpaper-option__preview {
-  height: 52px;
-  display: block;
-  border-radius: 6px;
-  background-image:
-    radial-gradient(circle at 15px 15px, rgba(112,57,46,.38) 0 1px, transparent 1.5px),
-    radial-gradient(circle at 42px 32px, rgba(112,57,46,.24) 0 1px, transparent 1.5px);
-  background-size: 58px 48px;
-}
-.chat-wallpaper-option__preview--default { background-color: #e7dbc9; }
-.chat-wallpaper-option__preview--sand { background-color: #ead5b7; }
-.chat-wallpaper-option__preview--blue { background-color: #dce8f4; }
-.chat-wallpaper-option__preview--mint { background-color: #dcebe0; }
-.chat-wallpaper-option__preview--rose { background-color: #f2dfdc; }
-.chat-wallpaper-option__preview--lavender { background-color: #e8e0f1; }
 
 body[data-theme="dark"] .chat-menu--telegram a {
   color: #ddd1c3;
@@ -1359,16 +1301,4 @@ body[data-theme="dark"] .chat-menu--telegram a:hover {
 body[data-theme="dark"] .chat-menu--telegram .chat-menu__danger {
   color: #ef6b72;
 }
-body[data-theme="dark"] .chat-wallpaper-option {
-  border-color: rgba(255,255,255,.09);
-  color: #ddd1c3;
-}
-body[data-theme="dark"] .chat-wallpaper-option:hover {
-  background: #2c2621;
-}
 
-@media (max-width: 520px) {
-  .chat-wallpaper-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
