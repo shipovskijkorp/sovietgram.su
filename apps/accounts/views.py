@@ -302,6 +302,7 @@ def add_account(request):
 
     if request.method == "POST" and mode == "register" and register_form.is_valid():
         if settings.SOVIETGRAM_REQUIRE_EMAIL_VERIFICATION:
+            remember_current_account(request)
             _register_pending_user(request, register_form)
             # Preserve the authenticated account; the new, inactive account
             # must not be eligible for multi-account switching.
