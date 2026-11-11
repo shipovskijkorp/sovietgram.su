@@ -226,13 +226,13 @@ def _special_restriction_text(special_type, special_data, fallback=""):
     if special_type == Message.SpecialType.POLL:
         return "\n".join([
             str(data.get("question", "")),
-            *(str(item.get("text", "")) for item in data.get("options", []) if isinstance(item, dict)),
+            *(str(item.get("text", "")) for item in (data.get("options") or []) if isinstance(item, dict)),
             str(data.get("explanation", "")),
         ])
     if special_type == Message.SpecialType.TODO:
         return "\n".join([
             str(data.get("title", "")),
-            *(str(item.get("text", "")) for item in data.get("tasks", []) if isinstance(item, dict)),
+            *(str(item.get("text", "")) for item in (data.get("tasks") or []) if isinstance(item, dict)),
         ])
     return fallback
 
