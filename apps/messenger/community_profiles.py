@@ -321,7 +321,7 @@ def _profile_payload(request, chat):
         "can_manage": can_manage,
         "can_add_members": _can_add_members(chat, actor),
         "can_leave": actor.role != ChatParticipant.Role.OWNER,
-        "is_muted": actor.is_muted,
+        "is_muted": actor.notifications_muted,
         "is_archived": actor.is_archived,
         "created_at": timezone.localtime(chat.created_at).strftime("%d.%m.%Y"),
         "attachments": attachment_items,
@@ -878,8 +878,9 @@ def community_profile_action(request, chat_id):
     action = request.POST.get("action", "").strip()
 
     if action == "mute":
-        membership.is_muted = not membership.is_muted
-        membership.save(update_fields=("is_muted",))
+        membership.is_muted = not membership.notifications_muted
+        membership.muted_until = None
+        membership.save(update_fields=("is_muted", "muted_until"))
     elif action == "archive":
         membership.is_archived = not membership.is_archived
         membership.save(update_fields=("is_archived",))
