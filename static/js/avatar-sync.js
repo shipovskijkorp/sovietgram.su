@@ -35,11 +35,12 @@
   function update(kind, id, url, fallback) {
     if (id == null || id === "") return 0;
     const attribute = `data-avatar-${kind}-id`;
+    const datasetKey = kind === "user" ? "avatarUserId" : "avatarChatId";
     const selector = `[${attribute}]`;
     const expected = String(id);
     let changed = 0;
     document.querySelectorAll(selector).forEach((node) => {
-      if (node.dataset[attribute.slice(5).replace(/-([a-z])/g, (_m, char) => char.toUpperCase())] !== expected) return;
+      if (node.dataset[datasetKey] !== expected) return;
       replaceAvatar(node, url || "", fallback || "?");
       changed += 1;
     });
