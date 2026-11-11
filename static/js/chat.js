@@ -1396,6 +1396,57 @@ function updateConversationStatus(typing, status, presence = null) {
   conversationStatus.classList.toggle("is-typing", Boolean(typing));
 }
 
+function updateLiveChatIdentity(payload) {
+  if (!payload || Number(payload.chat_id) !== Number(conversation?.dataset.chatId)) return;
+  const avatarSync = window.SovietgramAvatarSync;
+  const header = document.querySelector(".conversation-header__identity");
+  const headerName = header?.querySelector(".conversation-header__text strong");
+  const info = document.getElementById("chatInfoDrawer");
+  const infoName = info?.querySelector(".chat-info-identity h2");
+
+  if (payload.chat_type === "private" && payload.other_user_id != null) {
+    avatarSync?.updateUser(
+      payload.other_user_id,
+      payload.other_user_avatar_url || "",
+      payload.other_user_initials || "?",
+    );
+    const displayName = payload.other_user_display_name || payload.chat_title || "";
+    if (headerName) headerName.textContent = displayName;
+    if (infoName) infoName.textContent = displayName;
+    if (conversation) {
+      conversation.dataset.chatPeerName = displayName;
+      conversation.dataset.chatTitle = displayName;
+    }
+    if (payload.other_user_profile_url) {
+      header?.setAttribute("href", payload.other_user_profile_url);
+      info?.querySelector("[data-user-profile]")?.setAttribute(
+        "href", payload.other_user_profile_url,
+      );
+    }
+    const infoUsername = info?.querySelector(".chat-info-identity p");
+    if (infoUsername && payload.other_user_username) {
+      infoUsername.textContent = "@" + payload.other_user_username;
+    }
+    return;
+  }
+
+  avatarSync?.updateChat(
+    payload.chat_id,
+    payload.chat_avatar_url || "",
+    payload.chat_avatar_text || "?",
+  );
+  const title = payload.chat_title || "";
+  if (headerName) headerName.textContent = title;
+  if (infoName) infoName.textContent = title;
+  if (conversation) conversation.dataset.chatTitle = title;
+  const infoMeta = info?.querySelector(".chat-info-identity p");
+  if (infoMeta && payload.chat_type !== "private") {
+    infoMeta.textContent = payload.chat_username
+      ? "@" + payload.chat_username + " · " + (payload.other_status || "")
+      : (payload.other_status || "");
+  }
+}
+
 let newestMessageId = 0;
 document.querySelectorAll("[data-message-id]").forEach((node) => { newestMessageId = Math.max(newestMessageId, Number(node.dataset.messageId) || 0); });
 let newestUpdateAt = messageStage?.dataset.serverTime || new Date().toISOString();
@@ -1416,6 +1467,7 @@ async function pollMessages() {
     for (const message of payload.updates || []) applyMessageUpdate(message);
     newestMessageId = Math.max(newestMessageId, Number(payload.high_watermark) || 0, ...(payload.messages || []).map((item) => Number(item.id) || 0));
     updateReadReceipts(payload.other_last_read_id);
+    updateLiveChatIdentity(payload);
     updateConversationStatus(payload.other_typing, payload.other_status, payload);
     renderPinnedMessages(payload.pins || []);
     newestUpdateAt = payload.updates_cursor_time || payload.server_time || newestUpdateAt;
