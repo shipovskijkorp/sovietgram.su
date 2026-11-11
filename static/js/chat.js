@@ -1466,6 +1466,9 @@ async function pollMessages() {
     const response = await fetch(url, { credentials: "same-origin", cache: "no-store" });
     if (!response.ok) return;
     const payload = await response.json();
+    document.dispatchEvent(new CustomEvent("sovietgram:chat-protection", {
+      detail: { enabled: Boolean(payload.protect_content) },
+    }));
     for (const message of payload.messages || []) renderMessage(message);
     for (const message of payload.updates || []) applyMessageUpdate(message);
     newestMessageId = Math.max(newestMessageId, Number(payload.high_watermark) || 0, ...(payload.messages || []).map((item) => Number(item.id) || 0));
