@@ -23,7 +23,7 @@
       "chat-info-avatar": "chat-info-avatar--fallback",
       "forward-target__avatar": "forward-target__avatar--fallback",
     };
-    const classes = String(node.className || "").split(/\\s+/).filter(Boolean);
+    const classes = String(node.className || "").split(/\s+/).filter(Boolean);
     const normalized = classes.filter((name) => !Object.values(fallbackClasses).includes(name));
     if (!wantsImage) {
       Object.entries(fallbackClasses).forEach(([base, fallbackClass]) => {
