@@ -216,6 +216,7 @@
 
   function applyChatMuteState(isMuted, mutedUntil = "") {
     const muted = Boolean(isMuted);
+    const wasMuted = conversation.dataset.chatMuted === "true";
     conversation.dataset.chatMuted = String(muted);
     conversation.dataset.chatMutedUntil = mutedUntil || "";
     if (chatMenuMuteLabel) {
@@ -223,7 +224,7 @@
         ? "Включить уведомления"
         : "Выключить уведомления";
     }
-    setChatMuteOptions(false);
+    if (wasMuted !== muted) setChatMuteOptions(false);
   }
 
   document.addEventListener("sovietgram:chat-mute-state", (event) => {
