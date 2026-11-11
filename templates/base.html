@@ -34,7 +34,10 @@
 </head>
 <body class="{% block body_class %}{% endblock %}"
       data-theme="{% if request.user.is_authenticated %}{{ request.user.theme }}{% else %}light{% endif %}"
-      {% if request.user.is_authenticated %}data-enter-to-send="{{ request.user.enter_to_send|yesno:'true,false' }}"{% endif %}>
+      {% if request.user.is_authenticated %}
+      data-enter-to-send="{{ request.user.enter_to_send|yesno:'true,false' }}"
+      data-self-profile-url="{% url 'accounts:public_profile' request.user.username %}"
+      {% endif %}>
   <script>
     (() => {
       const theme = document.documentElement.dataset.theme || "light";
