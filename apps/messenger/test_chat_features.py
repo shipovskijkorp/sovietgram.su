@@ -880,7 +880,7 @@ class ChatFeatureTests(TestCase):
         self.assertTrue(membership.is_archived)
         self.assertFalse(ChatParticipant.objects.get(chat=self.chat, user=self.bob).is_archived)
 
-    def test_chat_action_toggles_protection_and_personal_wallpaper(self):
+    def test_chat_action_toggles_content_protection(self):
         url = reverse("messenger:chat_action", args=[self.chat.pk])
 
         protection = self.client.post(
@@ -892,29 +892,6 @@ class ChatFeatureTests(TestCase):
         self.assertTrue(protection.json()["protect_content"])
         self.chat.refresh_from_db()
         self.assertTrue(self.chat.protect_content)
-
-        wallpaper = self.client.post(
-            url,
-            {"action": "set_wallpaper", "wallpaper": "blue"},
-            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
-        )
-        self.assertEqual(wallpaper.status_code, 200)
-        self.assertEqual(wallpaper.json()["wallpaper"], "blue")
-        self.assertEqual(
-            self.chat.memberships.get(user=self.alice).wallpaper,
-            "blue",
-        )
-        self.assertEqual(
-            self.chat.memberships.get(user=self.bob).wallpaper,
-            "",
-        )
-
-        invalid = self.client.post(
-            url,
-            {"action": "set_wallpaper", "wallpaper": "javascript:alert(1)"},
-            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
-        )
-        self.assertEqual(invalid.status_code, 400)
 
     def test_export_chat_history_contains_visible_messages_and_media(self):
         visible = Message.objects.create(
@@ -2387,7 +2364,6 @@ class ChatFeatureTests(TestCase):
         for marker in (
             "data-chat-menu-mute",
             "data-open-chat-info",
-            "data-open-chat-wallpaper",
             "data-toggle-chat-protection",
             "data-chat-export",
             "data-clear-chat-history",
@@ -2397,7 +2373,6 @@ class ChatFeatureTests(TestCase):
         for label in (
             "Выключить уведомления",
             "Показать профиль",
-            "Установить обои",
             "Запретить копирование",
             "Экспорт истории чата",
             "Очистить историю",
@@ -2405,9 +2380,9 @@ class ChatFeatureTests(TestCase):
         ):
             self.assertContains(response, label)
         self.assertNotContains(response, "data-select-messages", html=False)
+        self.assertNotContains(response, "data-open-chat-wallpaper", html=False)
         self.assertContains(response, 'id="deleteMessageModal"', html=False)
         self.assertContains(response, 'id="deleteChatModal"', html=False)
-        self.assertContains(response, 'id="chatWallpaperModal"', html=False)
         self.assertContains(response, 'id="messageSelectionBar"', html=False)
 
     def test_chat_menu_keeps_community_actions_for_groups(self):
