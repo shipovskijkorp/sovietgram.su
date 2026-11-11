@@ -90,6 +90,9 @@
   padding: 5px;
   border-radius: 7px;
 }
+.chat-menu--telegram [hidden] {
+  display: none !important;
+}
 .chat-menu--telegram button,
 .chat-menu--telegram a {
   min-height: 35px;
