@@ -735,7 +735,13 @@
                   data-forward-can-text="{{ target.can_forward_text_ui|yesno:'true,false' }}"
                   data-forward-can-media="{{ target.can_forward_media_ui|yesno:'true,false' }}"
                   data-forward-can-voice="{{ target.can_forward_voice_ui|yesno:'true,false' }}">
-            {% if target.type == 'private' and target.other_user_avatar_url_ui %}<img class="forward-target__avatar" data-avatar-user-id="{{ target.other_user.pk }}" src="{{ target.other_user_avatar_url_ui }}" alt="">{% else %}<span class="forward-target__avatar forward-target__avatar--fallback"{% if target.type == 'private' %} data-avatar-user-id="{{ target.other_user.pk }}"{% else %} data-avatar-chat-id="{{ target.pk }}"{% endif %}>{{ target.avatar_text_ui }}</span>{% endif %}
+            {% if target.type == 'private' and target.other_user_avatar_url_ui %}
+              <img class="forward-target__avatar" data-avatar-user-id="{{ target.other_user.pk }}" src="{{ target.other_user_avatar_url_ui }}" alt="">
+            {% elif target.type != 'private' and target.avatar %}
+              <img class="forward-target__avatar" data-avatar-chat-id="{{ target.pk }}" src="{{ target.avatar.url }}" alt="">
+            {% else %}
+              <span class="forward-target__avatar forward-target__avatar--fallback"{% if target.type == 'private' %} data-avatar-user-id="{{ target.other_user.pk }}"{% else %} data-avatar-chat-id="{{ target.pk }}"{% endif %}>{{ target.avatar_text_ui }}</span>
+            {% endif %}
             <span><strong>{{ target.display_name_ui }}</strong><small>{% if target.username_ui %}@{{ target.username_ui }}{% else %}{{ target.status_ui }}{% endif %}</small></span>
           </button>
         {% endif %}
