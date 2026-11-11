@@ -1007,7 +1007,6 @@ def chat_detail(request, chat_id):
     return render(
         request,
         "messenger/index.html",
-
         _messenger_context(
             request,
             chat,
