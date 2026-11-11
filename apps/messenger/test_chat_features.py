@@ -53,6 +53,103 @@ class ChatFeatureTests(TestCase):
         self.chat = get_or_create_direct_chat(self.alice, self.bob)
         self.client.force_login(self.alice)
 
+    def test_hidden_public_membership_can_rejoin_without_losing_clear_boundary(self):
+        group = Chat.objects.create(
+            type=Chat.Type.GROUP, title="Возвращаемая группа",
+            username="rejoin_public_group",
+        )
+        ChatParticipant.objects.create(
+            chat=group, user=self.bob, role=ChatParticipant.Role.OWNER,
+        )
+        membership = ChatParticipant.objects.create(
+            chat=group, user=self.alice, is_hidden=True,
+            cleared_before_message_id=42,
+        )
+        url = reverse("messenger:chat", args=[group.pk])
+        self.assertEqual(self.client.get(url).status_code, 404)
+
+        join = self.client.post(
+            reverse("messenger:join_public_chat", args=[group.username])
+        )
+        self.assertRedirects(join, url)
+        membership.refresh_from_db()
+        self.assertFalse(membership.is_hidden)
+        self.assertEqual(membership.cleared_before_message_id, 42)
+
+    def test_hidden_invite_membership_reopens_without_using_invite_twice(self):
+        group = Chat.objects.create(
+            type=Chat.Type.GROUP, title="Возвращаемая приватная группа",
+        )
+        ChatParticipant.objects.create(
+            chat=group, user=self.bob, role=ChatParticipant.Role.OWNER,
+        )
+        membership = ChatParticipant.objects.create(
+            chat=group, user=self.alice, is_hidden=True,
+            cleared_before_message_id=42,
+        )
+        invite = ChatInviteLink.objects.create(
+            chat=group, creator=self.bob, token="rejoin-test-token",
+            usage_limit=5, usage_count=1,
+        )
+        url = reverse("messenger:join_invite", args=[invite.token])
+        preview = self.client.get(url)
+        self.assertEqual(preview.status_code, 200)
+        self.assertContains(preview, group.title)
+
+        joined = self.client.post(url)
+        self.assertRedirects(joined, reverse("messenger:chat", args=[group.pk]))
+        membership.refresh_from_db()
+        invite.refresh_from_db()
+        self.assertFalse(membership.is_hidden)
+        self.assertEqual(membership.cleared_before_message_id, 42)
+        self.assertEqual(invite.usage_count, 1)
+
+    def test_locally_hidden_chat_rejects_attachment_access(self):
+        msg = Message.objects.create(
+            chat=self.chat, sender=self.bob, text="Секретное фото",
+        )
+        output = BytesIO()
+        Image.new("RGB", (2, 2), "red").save(output, "PNG")
+        attachment = MessageAttachment.objects.create(
+            message=msg,
+            file=SimpleUploadedFile("test.png", output.getvalue(), content_type="image/png"),
+            kind=MessageAttachment.Kind.IMAGE,
+            original_name="test.png",
+            mime_type="image/png",
+            size=output.tell(),
+        )
+        view = reverse("messenger:view_attachment", args=[attachment.pk])
+        download = reverse("messenger:download_attachment", args=[attachment.pk])
+        self.assertEqual(self.client.get(view).status_code, 200)
+        self.assertEqual(self.client.get(download).status_code, 200)
+
+        membership = ChatParticipant.objects.get(chat=self.chat, user=self.alice)
+        membership.is_hidden = True
+        membership.save(update_fields=["is_hidden"])
+        self.assertEqual(self.client.get(view).status_code, 404)
+        self.assertEqual(self.client.get(download).status_code, 404)
+
+    def test_invalid_special_payloads_are_rejected_without_500(self):
+        url = reverse("messenger:send_special_message", args=[self.chat.pk])
+        invalid_inputs = (
+            ("poll", {"question": "Опрос", "options": 123}),
+            ("poll", {"question": "Опрос", "options": ["a"]}),
+            ("poll", {"question": "Опрос", "options": ["x"] * 1000}),
+            ("todo", {"title": "Задачи", "tasks": 123}),
+            ("todo", {"title": "Задачи", "tasks": ["x"] * 1000}),
+            ("location", {"latitude": "NaN", "longitude": 33.3}),
+        )
+        for special_type, payload in invalid_inputs:
+            with self.subTest(special_type=special_type, payload=payload):
+                response = self.client.post(
+                    url,
+                    {"special_type": special_type, "payload": json.dumps(payload)},
+                    HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertFalse(response.json()["ok"])
+                self.assertFalse(Message.objects.filter(chat=self.chat).exists())
+
     def test_chat_header_presence_updates_with_exact_timestamp_and_privacy(self):
         from datetime import timedelta
 
