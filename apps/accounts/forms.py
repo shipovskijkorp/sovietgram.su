@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from django import forms
+from django.conf import settings
 from django.core.files.uploadedfile import UploadedFile
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 
@@ -25,6 +26,32 @@ class IdentifierAuthenticationForm(AuthenticationForm):
             attrs={"autocomplete": "current-password", "placeholder": "Пароль"}
         ),
     )
+
+
+    def clean(self):
+        try:
+            return super().clean()
+        except forms.ValidationError:
+            # Show a useful hint only to someone who knows the pending
+            # account's correct password (no email enumeration).
+            identifier = (self.cleaned_data.get("username") or "").strip()
+            password = self.cleaned_data.get("password")
+            if identifier and password:
+                user = User.objects.filter(username__iexact=identifier).first()
+                if user is None:
+                    user = User.objects.filter(email__iexact=identifier).first()
+                if (
+                    user is not None
+                    and not user.is_active
+                    and user.email_verification_sent_at is not None
+                    and user.check_password(password)
+                ):
+                    raise forms.ValidationError(
+                        "Подтвердите почту, чтобы войти. "
+                        "Если письмо не пришло, запросите новое на странице подтверждения.",
+                        code="email_not_verified",
+                    )
+            raise
 
 
 class RegisterForm(UserCreationForm):
@@ -151,6 +178,15 @@ class ProfileForm(forms.ModelForm):
             raise forms.ValidationError("Эта почта уже используется.")
         if users.filter(username__iexact=email).exists():
             raise forms.ValidationError("Эта почта совпадает с именем другого пользователя.")
+        if (
+            settings.SOVIETGRAM_REQUIRE_EMAIL_VERIFICATION
+            and self.instance.pk
+            and email.casefold() != (self.instance.email or "").casefold()
+        ):
+            raise forms.ValidationError(
+                "Изменение адреса почты временно недоступно: "
+                "новый адрес должен проходить отдельное подтверждение."
+            )
         return email
 
     def clean_avatar(self):
