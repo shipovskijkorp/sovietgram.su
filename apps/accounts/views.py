@@ -269,7 +269,14 @@ def register(request):
         messages.success(request, "Учётная запись создана.")
         return redirect("messenger:home")
 
-    return render(request, "accounts/register.html", {"form": form})
+    return render(
+        request,
+        "accounts/register.html",
+        {
+            "form": form,
+            "email_verification_required": settings.SOVIETGRAM_REQUIRE_EMAIL_VERIFICATION,
+        },
+    )
 
 
 @login_required
