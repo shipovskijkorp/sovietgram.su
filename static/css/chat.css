@@ -1276,13 +1276,13 @@ body[data-theme="dark"] .article-viewer__header small {
 
 
 /* Per-user Telegram-style chat wallpapers. */
-.message-stage[data-chat-wallpaper="sand"] { background: #e7dbc9; }
+.message-stage[data-chat-wallpaper="sand"] { background: #ead5b7; }
 .message-stage[data-chat-wallpaper="blue"] { background: #dce8f4; }
 .message-stage[data-chat-wallpaper="mint"] { background: #dcebe0; }
 .message-stage[data-chat-wallpaper="rose"] { background: #f2dfdc; }
 .message-stage[data-chat-wallpaper="lavender"] { background: #e8e0f1; }
 
-body[data-theme="dark"] .message-stage[data-chat-wallpaper="sand"] { background: #302923; }
+body[data-theme="dark"] .message-stage[data-chat-wallpaper="sand"] { background: #392d23; }
 body[data-theme="dark"] .message-stage[data-chat-wallpaper="blue"] { background: #253242; }
 body[data-theme="dark"] .message-stage[data-chat-wallpaper="mint"] { background: #25352f; }
 body[data-theme="dark"] .message-stage[data-chat-wallpaper="rose"] { background: #3b292b; }
@@ -1335,8 +1335,8 @@ body[data-theme="dark"] .message-stage[data-chat-wallpaper="lavender"] { backgro
     radial-gradient(circle at 42px 32px, rgba(112,57,46,.24) 0 1px, transparent 1.5px);
   background-size: 58px 48px;
 }
-.chat-wallpaper-option__preview--default,
-.chat-wallpaper-option__preview--sand { background-color: #e7dbc9; }
+.chat-wallpaper-option__preview--default { background-color: #e7dbc9; }
+.chat-wallpaper-option__preview--sand { background-color: #ead5b7; }
 .chat-wallpaper-option__preview--blue { background-color: #dce8f4; }
 .chat-wallpaper-option__preview--mint { background-color: #dcebe0; }
 .chat-wallpaper-option__preview--rose { background-color: #f2dfdc; }
