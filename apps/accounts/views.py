@@ -14,6 +14,7 @@ from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
 from .email_verification import (
@@ -102,6 +103,7 @@ def resend_verification(request):
     return redirect("accounts:verification_pending")
 
 
+@ensure_csrf_cookie
 @require_http_methods(["GET", "POST"])
 def verify_email(request, token):
     user = get_pending_verification(token)
@@ -123,7 +125,9 @@ def verify_email(request, token):
         status=200 if request.method == "GET" else 400,
     )
     response["Cache-Control"] = "no-store"
-    response["Referrer-Policy"] = "no-referrer"
+    # Keep same-origin Referer available for Django's HTTPS CSRF fallback,
+    # while never sending the one-time token URL to external sites.
+    response["Referrer-Policy"] = "same-origin"
     return response
 
 

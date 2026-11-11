@@ -114,6 +114,8 @@ python manage.py check --deploy
 Поддерживаются одноразовые ссылки (24 часа), повторная отправка с паузой
 120 секунд и подтверждение отдельным POST-запросом с CSRF-токеном (система
 проверки ссылок в почтовом клиенте не может случайно активировать аккаунт).
+В production ссылки строятся от канонического HTTPS-адреса
+`https://sovietgram.su`, а страница подтверждения явно выставляет CSRF-cookie.
 
 **По умолчанию функция выключена**: это позволяет сначала обновить код,
 применить миграцию, проверить доставку Brevo и только затем включить её
@@ -137,6 +139,7 @@ python manage.py check --deploy
 
    ```dotenv
    SOVIETGRAM_REQUIRE_EMAIL_VERIFICATION=1
+   SOVIETGRAM_PUBLIC_URL=https://sovietgram.su
    ```
 
 5. Перезапустите службу `sudo systemctl restart sovietgram`.

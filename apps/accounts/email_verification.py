@@ -62,8 +62,14 @@ def get_pending_verification(token):
 
 
 def send_verification_email(request, user):
-    link = request.build_absolute_uri(
-        reverse("accounts:verify_email", kwargs={"token": verification_token(user)})
+    verification_path = reverse(
+        "accounts:verify_email", kwargs={"token": verification_token(user)},
+    )
+    public_url = getattr(settings, "SOVIETGRAM_PUBLIC_URL", "").rstrip("/")
+    link = (
+        f"{public_url}{verification_path}"
+        if public_url
+        else request.build_absolute_uri(verification_path)
     )
     count = send_mail(
         "Sovietgram — подтверждение почты",

@@ -49,6 +49,41 @@ class EmailVerificationTests(TestCase):
         )
         self.assertIn("Проверьте почту", self.client.get(response.url).content.decode())
 
+    def test_verification_email_uses_canonical_https_public_url(self):
+        with override_settings(SOVIETGRAM_PUBLIC_URL="https://sovietgram.su"):
+            self.register()
+        user = User.objects.get(username="newuser")
+        expected = (
+            "https://sovietgram.su"
+            + reverse("accounts:verify_email", args=[verification_token(user)])
+        )
+        self.assertIn(expected, mail.outbox[0].body)
+        self.assertNotIn("http://testserver", mail.outbox[0].body)
+
+    def test_secure_confirmation_sets_cookie_and_allows_same_origin_referer(self):
+        self.register()
+        user = User.objects.get(username="newuser")
+        url = reverse("accounts:verify_email", args=[verification_token(user)])
+        client = Client(enforce_csrf_checks=True)
+
+        with override_settings(CSRF_COOKIE_SECURE=True):
+            preview = client.get(url, secure=True)
+            self.assertEqual(preview.status_code, 200)
+            self.assertEqual(preview["Referrer-Policy"], "same-origin")
+            self.assertIn("csrftoken", client.cookies)
+            self.assertTrue(client.cookies["csrftoken"]["secure"])
+
+            verified = client.post(
+                url,
+                {"csrfmiddlewaretoken": client.cookies["csrftoken"].value},
+                secure=True,
+                HTTP_REFERER=f"https://testserver{url}",
+            )
+
+        self.assertRedirects(verified, reverse("accounts:login"))
+        user.refresh_from_db()
+        self.assertTrue(user.is_active)
+
     def test_activation_requires_explicit_post_and_succeeds_only_once(self):
         self.register()
         user = User.objects.get(username="newuser")
