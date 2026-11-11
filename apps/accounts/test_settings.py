@@ -88,7 +88,8 @@ class SettingsTests(TestCase):
         self.assertContains(response, "tg-native-icon--settings", html=False)
         self.assertNotContains(response, "tg-settings-section-icon--lock", html=False)
         self.assertNotContains(response, "tg-settings-section-icon--chat", html=False)
-        self.assertContains(response, "tg-settings-section-icon--archive", html=False)
+        self.assertContains(response, "tg-native-icon--archive", html=False)
+        self.assertNotContains(response, "tg-settings-section-icon--archive", html=False)
         self.assertContains(response, "js/settings.js", html=False)
         self.assertNotContains(response, "Сохранить настройки")
 
