@@ -2898,6 +2898,9 @@ def poll_messages(request, chat_id):
             other_user_display_name = other_user.display_name
             other_user_username = other_user.username
             other_user_initials = other_user.initials
+            chat_title = other_user.display_name
+            chat_username = other_user.username
+            chat_avatar_text = other_user.initials
             if other_user.avatar and privacy_allows(other_user, request.user, "profile_photo"):
                 other_user_avatar_url = other_user.avatar_url
         if not is_saved and privacy_allows(other_user, request.user, "last_seen"):
