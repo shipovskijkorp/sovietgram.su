@@ -126,10 +126,10 @@
                   <span class="tg-native-icon tg-native-icon--mute" aria-hidden="true"></span>
                   <span class="chat-menu__label">{% if active_membership.is_muted %}Включить уведомления{% else %}Выключить уведомления{% endif %}</span>
                 </button>
-                <button type="button" data-open-chat-info>
+                <a href="{% url 'accounts:public_profile' selected_chat.other_user.username %}" data-user-profile>
                   <span class="tg-native-icon tg-native-icon--profile" aria-hidden="true"></span>
                   <span class="chat-menu__label">Показать профиль</span>
-                </button>
+                </a>
                 <button type="button" data-toggle-chat-protection>
                   <span class="tg-native-icon tg-native-icon--lock" aria-hidden="true"></span>
                   <span class="chat-menu__label">{% if selected_chat.protect_content %}Разрешить копирование{% else %}Запретить копирование{% endif %}</span>
