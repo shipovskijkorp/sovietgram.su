@@ -167,6 +167,12 @@ EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "1").strip().lower() in {
 }
 EMAIL_USE_SSL = False
 EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "15"))
+
+# Safe rollout: deploy and migrate first, enable after a successful live
+# email verification smoke test. Existing accounts remain usable.
+SOVIETGRAM_REQUIRE_EMAIL_VERIFICATION = os.getenv(
+    "SOVIETGRAM_REQUIRE_EMAIL_VERIFICATION", "0"
+).lower() in {"1", "true", "yes", "on"}
 DEFAULT_FROM_EMAIL = os.getenv(
     "DEFAULT_FROM_EMAIL", "Sovietgram <noreply@sovietgram.su>",
 )
