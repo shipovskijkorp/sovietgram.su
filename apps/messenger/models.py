@@ -113,7 +113,6 @@ class ChatParticipant(models.Model):
     is_pinned = models.BooleanField(default=False)
     is_archived = models.BooleanField(default=False)
     is_muted = models.BooleanField(default=False)
-    wallpaper = models.CharField(max_length=16, blank=True, default="")
     is_hidden = models.BooleanField(default=False, db_index=True)
     cleared_before_message_id = models.PositiveBigIntegerField(default=0)
     draft_text = models.TextField(blank=True, default="", max_length=4096)
