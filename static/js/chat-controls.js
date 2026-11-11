@@ -287,8 +287,12 @@
   document.addEventListener("copy", (event) => {
     if (!chatProtected) return;
     const selection = window.getSelection();
-    const messageFlow = document.getElementById("messageFlow");
-    if (!selection?.rangeCount || !messageFlow?.contains(selection.anchorNode)) return;
+    const anchor = selection?.anchorNode;
+    const anchorElement = anchor?.nodeType === Node.ELEMENT_NODE
+      ? anchor
+      : anchor?.parentElement;
+    if (!selection?.rangeCount || !anchorElement || !conversation.contains(anchorElement)) return;
+    if (anchorElement.closest(".composer, input, textarea, [contenteditable='true']")) return;
     event.preventDefault();
     notify("Копирование запрещено для этой переписки.");
   }, true);
