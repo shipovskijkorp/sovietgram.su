@@ -37,7 +37,7 @@
             {% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
           </label>
         {% endfor %}
-        <button class="primary-button" type="submit">Создать и переключиться</button>
+        <button class="primary-button" type="submit">{% if email_verification_required %}Создать и подтвердить почту{% else %}Создать и переключиться{% endif %}</button>
       </form>
     {% else %}
       <form method="post" class="auth-form" novalidate>
