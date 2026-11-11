@@ -1221,6 +1221,8 @@ def global_search(request):
             {
                 "id": chat.pk,
                 "type": chat.type,
+                "avatar_kind": "user" if chat.type == Chat.Type.PRIVATE and not chat.is_saved_ui else "chat",
+                "avatar_id": chat.other_user.pk if chat.type == Chat.Type.PRIVATE and not chat.is_saved_ui else chat.pk,
                 "title": chat.display_name_ui,
                 "username": chat.username_ui,
                 "status": chat.status_ui,
@@ -1256,6 +1258,8 @@ def global_search(request):
     people_results = [
         {
             "id": user.pk,
+            "avatar_kind": "user",
+            "avatar_id": user.pk,
             "display_name": user.display_name,
             "username": user.username,
             "avatar_url": (
@@ -1291,6 +1295,8 @@ def global_search(request):
         {
             "id": chat.pk,
             "type": chat.type,
+            "avatar_kind": "chat",
+            "avatar_id": chat.pk,
             "title": chat.title or (
                 "Канал" if chat.type == Chat.Type.CHANNEL else "Группа"
             ),
