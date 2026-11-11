@@ -74,6 +74,7 @@ from .services import (
     serialize_pins,
     serialize_special_content,
     touch_chat,
+    visible_forward_username,
 )
 
 User = get_user_model()
@@ -347,8 +348,10 @@ def _decorate_chat_ui(chat, user):
 
 def _base_message_queryset(chat):
     return (
-        chat.messages.select_related("sender", "reply_to", "reply_to__sender")
-        .prefetch_related("attachments")
+        chat.messages.select_related(
+            "sender", "reply_to", "reply_to__sender",
+            "forwarded_from", "forwarded_from__sender",
+        ).prefetch_related("attachments")
     )
 
 
@@ -992,6 +995,9 @@ def chat_detail(request, chat_id):
     _hide_inaccessible_reply_previews(chat, request.user, chat_messages)
     for message in chat_messages:
         message.special_ui = serialize_special_content(message, request.user)
+        message.forwarded_from_username_ui = visible_forward_username(
+            message, request.user,
+        )
 
     return render(
         request,
@@ -2182,11 +2188,18 @@ def forward_message(request, chat_id, message_id):
             response["Retry-After"] = str(restriction[1])
         return response
 
-    origin = source.forwarded_from or source
-    origin_name = source.forwarded_from_name or source.sender.display_name
-    origin_username = source.forwarded_from_username or source.sender.username
-    origin_owner = origin.sender
-    if not privacy_allows(origin_owner, request.user, "forwards"):
+    if source.forwarded_from_name:
+        # A second forward must not invent a new origin if the first forward
+        # deliberately concealed the original sender.
+        origin = source.forwarded_from
+        origin_name = source.forwarded_from_name
+        origin_username = source.forwarded_from_username
+    else:
+        origin = source
+        origin_name = source.sender.display_name
+        origin_username = source.sender.username
+
+    if origin is None or not privacy_allows(origin.sender, request.user, "forwards"):
         origin_username = ""
 
     with transaction.atomic():
