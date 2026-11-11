@@ -69,7 +69,7 @@
           data-chat-type="{{ selected_chat.type }}"
           data-chat-role="{{ active_membership.role }}"
           data-chat-saved="{{ selected_chat.is_saved_ui|yesno:'true,false' }}"
-          data-chat-muted="{{ active_membership.is_muted|yesno:'true,false' }}"
+          data-chat-muted="{{ active_membership.notifications_muted|yesno:'true,false' }}"
           data-chat-protected="{{ selected_chat.protect_content|yesno:'true,false' }}"
           data-chat-title="{{ selected_chat.display_name_ui|escape }}"
           data-chat-peer-name="{% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}{{ selected_chat.other_user.display_name|escape }}{% else %}{{ selected_chat.display_name_ui|escape }}{% endif %}"
@@ -122,10 +122,16 @@
             <button class="icon-button conversation-header__profile" id="chatMenuButton" type="button" title="Меню чата" aria-label="Меню чата" aria-expanded="false">⋮</button>
             <div class="chat-menu{% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %} chat-menu--telegram{% endif %}" id="chatMenu" hidden>
               {% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}
-                <button type="button" data-chat-menu-mute>
+                <button type="button" data-chat-menu-mute aria-expanded="false" aria-controls="chatMuteOptions">
                   <span class="tg-native-icon tg-native-icon--mute" aria-hidden="true"></span>
-                  <span class="chat-menu__label">{% if active_membership.is_muted %}Включить уведомления{% else %}Выключить уведомления{% endif %}</span>
+                  <span class="chat-menu__label">{% if active_membership.notifications_muted %}Включить уведомления{% else %}Выключить уведомления{% endif %}</span>
                 </button>
+                <div class="chat-menu__mute-options" id="chatMuteOptions" data-chat-mute-options hidden>
+                  <button type="button" data-chat-mute-duration="1h">На 1 час</button>
+                  <button type="button" data-chat-mute-duration="8h">На 8 часов</button>
+                  <button type="button" data-chat-mute-duration="2d">На 2 дня</button>
+                  <button type="button" data-chat-mute-duration="forever">Навсегда</button>
+                </div>
                 <a href="{% url 'accounts:public_profile' selected_chat.other_user.username %}" data-user-profile>
                   <span class="tg-native-icon tg-native-icon--profile" aria-hidden="true"></span>
                   <span class="chat-menu__label">Показать профиль</span>
@@ -154,7 +160,7 @@
                 {% endif %}
                 <form method="post" action="{% url 'messenger:chat_action' selected_chat.pk %}">
                   {% csrf_token %}<input type="hidden" name="action" value="mute">
-                  <button type="submit"><span class="tg-native-icon tg-native-icon--mute" aria-hidden="true"></span>{% if active_membership.is_muted %}Включить уведомления{% else %}Выключить уведомления{% endif %}</button>
+                  <button type="submit"><span class="tg-native-icon tg-native-icon--mute" aria-hidden="true"></span>{% if active_membership.notifications_muted %}Включить уведомления{% else %}Выключить уведомления{% endif %}</button>
                 </form>
                 <form method="post" action="{% url 'messenger:chat_action' selected_chat.pk %}">
                   {% csrf_token %}<input type="hidden" name="action" value="pin">
