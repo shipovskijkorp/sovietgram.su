@@ -63,6 +63,13 @@ class VoiceMessageTests(TestCase):
             HTTP_X_REQUESTED_WITH="XMLHttpRequest",
         )
 
+    def test_extreme_waveform_sample_does_not_crash_upload(self):
+        response = self._send_voice(waveform=["Infinity", 20, 40])
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ok"])
+        attachment = MessageAttachment.objects.get()
+        self.assertEqual(attachment.waveform, [20, 40])
+
     def test_voice_message_saves_recording_metadata(self):
         response = self._send_voice()
         self.assertEqual(response.status_code, 200)
