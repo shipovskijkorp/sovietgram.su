@@ -464,6 +464,7 @@
       button.className = "community-member-candidate";
       const picture = document.createElement(person.avatar_url ? "img" : "span");
       picture.className = "community-member-candidate__avatar";
+      picture.dataset.avatarUserId = String(person.id);
       if (person.avatar_url) { picture.src = person.avatar_url; picture.alt = ""; }
       else picture.textContent = person.initials;
       const copy = document.createElement("span");
