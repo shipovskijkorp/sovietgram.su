@@ -210,7 +210,8 @@ class MessageForm(forms.Form):
         for value in values[:MAX_VOICE_WAVEFORM_SAMPLES]:
             try:
                 number = int(round(float(value)))
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
+                # Extremely large/non-finite samples must not crash a send.
                 continue
             cleaned.append(max(0, min(100, number)))
         return cleaned

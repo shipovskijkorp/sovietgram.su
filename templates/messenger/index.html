@@ -240,9 +240,9 @@
               {% if message.forwarded_from_name %}
                 <div class="message-forwarded">
                   <span>Переслано от</span>
-                  {% if message.forwarded_from_username %}
-                    <a href="{% url 'accounts:public_profile' message.forwarded_from_username %}" data-user-profile>
-                      <strong>{{ message.forwarded_from_name }} · @{{ message.forwarded_from_username }}</strong>
+                  {% if message.forwarded_from_username_ui %}
+                    <a href="{% url 'accounts:public_profile' message.forwarded_from_username_ui %}" data-user-profile>
+                      <strong>{{ message.forwarded_from_name }} · @{{ message.forwarded_from_username_ui }}</strong>
                     </a>
                   {% else %}
                     <strong>{{ message.forwarded_from_name }}</strong>

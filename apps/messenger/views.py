@@ -1,5 +1,6 @@
 import copy
 import json
+import math
 import re
 from datetime import timedelta
 from pathlib import Path
@@ -73,6 +74,7 @@ from .services import (
     serialize_pins,
     serialize_special_content,
     touch_chat,
+    visible_forward_username,
 )
 
 User = get_user_model()
@@ -105,7 +107,11 @@ def _clean_special_payload(special_type, raw_payload):
 
     if special_type == Message.SpecialType.POLL:
         question = str(raw_payload.get("question", "")).strip()[:255]
-        raw_options = raw_payload.get("options") or []
+        raw_options = raw_payload.get("options")
+        if not isinstance(raw_options, list):
+            raise ValueError("Варианты опроса должны быть списком.")
+        if len(raw_options) > 10:
+            raise ValueError("В опросе может быть не больше 10 вариантов.")
         options = []
         seen = set()
         for value in raw_options:
@@ -146,8 +152,13 @@ def _clean_special_payload(special_type, raw_payload):
 
     if special_type == Message.SpecialType.TODO:
         title = str(raw_payload.get("title", "")).strip()[:255]
+        raw_tasks = raw_payload.get("tasks")
+        if not isinstance(raw_tasks, list):
+            raise ValueError("Задачи должны быть списком.")
+        if len(raw_tasks) > 30:
+            raise ValueError("В списке может быть не больше 30 задач.")
         tasks = []
-        for value in raw_payload.get("tasks") or []:
+        for value in raw_tasks:
             text = str(value).strip()[:160]
             if text:
                 tasks.append({"text": text, "done": False, "done_by": None})
@@ -189,6 +200,8 @@ def _clean_special_payload(special_type, raw_payload):
             longitude = round(float(raw_payload.get("longitude")), 6)
         except (TypeError, ValueError):
             raise ValueError("Укажите корректные координаты.")
+        if not (math.isfinite(latitude) and math.isfinite(longitude)):
+            raise ValueError("Укажите конечные значения координат.")
         if latitude < -90 or latitude > 90 or longitude < -180 or longitude > 180:
             raise ValueError("Координаты находятся вне допустимого диапазона.")
         return {
@@ -198,6 +211,31 @@ def _clean_special_payload(special_type, raw_payload):
         }, label or "Геопозиция"
 
     raise ValueError("Неизвестный тип вложения.")
+
+
+def _special_restriction_text(special_type, special_data, fallback=""):
+    """Check the entire user-visible text, not just a shortened search preview.
+
+    In particular, article bodies after character 3000, poll options and task
+    descriptions must respect group policies disallowing links.
+    """
+    data = special_data if isinstance(special_data, dict) else {}
+    if special_type == Message.SpecialType.ARTICLE:
+        return "\n".join(
+            str(data.get(key, "")) for key in ("title", "subtitle", "body")
+        )
+    if special_type == Message.SpecialType.POLL:
+        return "\n".join([
+            str(data.get("question", "")),
+            *(str(item.get("text", "")) for item in (data.get("options") or []) if isinstance(item, dict)),
+            str(data.get("explanation", "")),
+        ])
+    if special_type == Message.SpecialType.TODO:
+        return "\n".join([
+            str(data.get("title", "")),
+            *(str(item.get("text", "")) for item in (data.get("tasks") or []) if isinstance(item, dict)),
+        ])
+    return fallback
 
 
 def _chat_for_user(user, chat_id):
@@ -310,8 +348,10 @@ def _decorate_chat_ui(chat, user):
 
 def _base_message_queryset(chat):
     return (
-        chat.messages.select_related("sender", "reply_to", "reply_to__sender")
-        .prefetch_related("attachments")
+        chat.messages.select_related(
+            "sender", "reply_to", "reply_to__sender",
+            "forwarded_from", "forwarded_from__sender",
+        ).prefetch_related("attachments")
     )
 
 
@@ -955,6 +995,9 @@ def chat_detail(request, chat_id):
     _hide_inaccessible_reply_previews(chat, request.user, chat_messages)
     for message in chat_messages:
         message.special_ui = serialize_special_content(message, request.user)
+        message.forwarded_from_username_ui = visible_forward_username(
+            message, request.user,
+        )
 
     return render(
         request,
@@ -1075,7 +1118,7 @@ def join_public_chat(request, username):
         username__iexact=username,
         type__in=(Chat.Type.GROUP, Chat.Type.CHANNEL),
     )
-    ChatParticipant.objects.get_or_create(
+    membership, created = ChatParticipant.objects.get_or_create(
         chat=chat,
         user=request.user,
         defaults={
@@ -1083,6 +1126,10 @@ def join_public_chat(request, username):
             "can_see_pre_join_history": chat.history_visible_to_new_members,
         },
     )
+    if not created and membership.is_hidden:
+        # Rejoining an existing but locally hidden chat must not redirect to
+        # a 404. Preserve the previous clear-history watermark.
+        ChatParticipant.objects.filter(pk=membership.pk).update(is_hidden=False)
     return redirect("messenger:chat", chat_id=chat.pk)
 
 
@@ -1296,9 +1343,17 @@ def global_search(request):
                     None,
                 )
                 if membership is None:
+                    # Sidebar is limited to 120 chats for responsiveness,
+                    # but full-text search must still find older conversations.
+                    membership = ChatParticipant.objects.filter(
+                        chat=chat, user=request.user, is_hidden=False,
+                    ).first()
+                if membership is None:
                     continue
                 if chat.type != Chat.Type.PRIVATE:
-                    chat.member_count_ui = collective_counts.get(chat.pk, 0)
+                    chat.member_count_ui = collective_counts.get(
+                        chat.pk,
+                    ) or chat.memberships.count()
                 _decorate_chat_ui(chat, request.user)
                 decorated = chat
                 chat_by_id[chat.pk] = chat
@@ -1569,6 +1624,7 @@ def send_message(request, chat_id):
 
 @login_required
 @require_POST
+@rate_limit("send_message")
 def send_special_message(request, chat_id):
     chat = _chat_for_user(request.user, chat_id)
     membership = _membership(chat, request.user)
@@ -1602,7 +1658,7 @@ def send_special_message(request, chat_id):
     restriction = _posting_restriction(
         chat,
         membership,
-        text=search_text,
+        text=_special_restriction_text(special_type, special_data, search_text),
         has_attachments=False,
     )
     if restriction:
@@ -1820,6 +1876,14 @@ def special_message_action(request, chat_id, message_id):
                         {"ok": False, "error": "Введите текст задачи."},
                         status=400,
                     )
+                restriction = _posting_restriction(
+                    chat, membership, text=text_value, check_slow_mode=False,
+                )
+                if restriction:
+                    return JsonResponse(
+                        {"ok": False, "error": restriction[0]},
+                        status=403,
+                    )
                 if len(tasks) >= 30:
                     return JsonResponse(
                         {
@@ -1875,6 +1939,18 @@ def special_message_action(request, chat_id, message_id):
                 return JsonResponse(
                     {"ok": False, "error": str(error)},
                     status=400,
+                )
+            restriction = _posting_restriction(
+                chat, membership,
+                text=_special_restriction_text(
+                    Message.SpecialType.ARTICLE, article_data, search_text,
+                ),
+                check_slow_mode=False,
+            )
+            if restriction:
+                return JsonResponse(
+                    {"ok": False, "error": restriction[0]},
+                    status=403,
                 )
             message.special_data = article_data
             message.text = search_text
@@ -2052,6 +2128,7 @@ def delete_message(request, chat_id, message_id):
 
 @login_required
 @require_POST
+@rate_limit("send_message")
 def forward_message(request, chat_id, message_id):
     source_chat = _chat_for_user(request.user, chat_id)
     source = get_object_or_404(
@@ -2100,7 +2177,9 @@ def forward_message(request, chat_id, message_id):
     restriction = _posting_restriction(
         target_chat,
         target_membership,
-        text=source.text,
+        text=_special_restriction_text(
+            source.special_type, source.special_data, source.text,
+        ),
         has_attachments=source.attachments.exists(),
     )
     if restriction:
@@ -2109,11 +2188,18 @@ def forward_message(request, chat_id, message_id):
             response["Retry-After"] = str(restriction[1])
         return response
 
-    origin = source.forwarded_from or source
-    origin_name = source.forwarded_from_name or source.sender.display_name
-    origin_username = source.forwarded_from_username or source.sender.username
-    origin_owner = origin.sender
-    if not privacy_allows(origin_owner, request.user, "forwards"):
+    if source.forwarded_from_name:
+        # A second forward must not invent a new origin if the first forward
+        # deliberately concealed the original sender.
+        origin = source.forwarded_from
+        origin_name = source.forwarded_from_name
+        origin_username = source.forwarded_from_username
+    else:
+        origin = source
+        origin_name = source.sender.display_name
+        origin_username = source.sender.username
+
+    if origin is None or not privacy_allows(origin.sender, request.user, "forwards"):
         origin_username = ""
 
     with transaction.atomic():
@@ -2524,6 +2610,8 @@ def _attachment_for_user(user, attachment_id):
     )
     chat = attachment.message.chat
     membership = ChatParticipant.objects.get(chat=chat, user=user)
+    if membership.is_hidden:
+        raise Http404
     if (
         attachment.message_id <= membership.cleared_before_message_id
         or MessageHiddenForUser.objects.filter(

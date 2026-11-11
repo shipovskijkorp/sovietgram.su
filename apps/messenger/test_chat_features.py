@@ -53,6 +53,242 @@ class ChatFeatureTests(TestCase):
         self.chat = get_or_create_direct_chat(self.alice, self.bob)
         self.client.force_login(self.alice)
 
+    def test_hidden_public_membership_can_rejoin_without_losing_clear_boundary(self):
+        group = Chat.objects.create(
+            type=Chat.Type.GROUP, title="Возвращаемая группа",
+            username="rejoin_public_group",
+        )
+        ChatParticipant.objects.create(
+            chat=group, user=self.bob, role=ChatParticipant.Role.OWNER,
+        )
+        membership = ChatParticipant.objects.create(
+            chat=group, user=self.alice, is_hidden=True,
+            cleared_before_message_id=42,
+        )
+        url = reverse("messenger:chat", args=[group.pk])
+        self.assertEqual(self.client.get(url).status_code, 404)
+
+        join = self.client.post(
+            reverse("messenger:join_public_chat", args=[group.username])
+        )
+        self.assertRedirects(join, url)
+        membership.refresh_from_db()
+        self.assertFalse(membership.is_hidden)
+        self.assertEqual(membership.cleared_before_message_id, 42)
+
+    def test_hidden_invite_membership_reopens_without_using_invite_twice(self):
+        group = Chat.objects.create(
+            type=Chat.Type.GROUP, title="Возвращаемая приватная группа",
+        )
+        ChatParticipant.objects.create(
+            chat=group, user=self.bob, role=ChatParticipant.Role.OWNER,
+        )
+        membership = ChatParticipant.objects.create(
+            chat=group, user=self.alice, is_hidden=True,
+            cleared_before_message_id=42,
+        )
+        invite = ChatInviteLink.objects.create(
+            chat=group, creator=self.bob, token="rejoin-test-token",
+            usage_limit=5, usage_count=1,
+        )
+        url = reverse("messenger:join_invite", args=[invite.token])
+        preview = self.client.get(url)
+        self.assertEqual(preview.status_code, 200)
+        self.assertContains(preview, group.title)
+
+        joined = self.client.post(url)
+        self.assertRedirects(joined, reverse("messenger:chat", args=[group.pk]))
+        membership.refresh_from_db()
+        invite.refresh_from_db()
+        self.assertFalse(membership.is_hidden)
+        self.assertEqual(membership.cleared_before_message_id, 42)
+        self.assertEqual(invite.usage_count, 1)
+
+    def test_locally_hidden_chat_rejects_attachment_access(self):
+        msg = Message.objects.create(
+            chat=self.chat, sender=self.bob, text="Секретное фото",
+        )
+        output = BytesIO()
+        Image.new("RGB", (2, 2), "red").save(output, "PNG")
+        attachment = MessageAttachment.objects.create(
+            message=msg,
+            file=SimpleUploadedFile("test.png", output.getvalue(), content_type="image/png"),
+            kind=MessageAttachment.Kind.IMAGE,
+            original_name="test.png",
+            mime_type="image/png",
+            size=output.tell(),
+        )
+        view = reverse("messenger:view_attachment", args=[attachment.pk])
+        download = reverse("messenger:download_attachment", args=[attachment.pk])
+        self.assertEqual(self.client.get(view).status_code, 200)
+        self.assertEqual(self.client.get(download).status_code, 200)
+
+        membership = ChatParticipant.objects.get(chat=self.chat, user=self.alice)
+        membership.is_hidden = True
+        membership.save(update_fields=["is_hidden"])
+        self.assertEqual(self.client.get(view).status_code, 404)
+        self.assertEqual(self.client.get(download).status_code, 404)
+
+    def test_invalid_special_payloads_are_rejected_without_500(self):
+        url = reverse("messenger:send_special_message", args=[self.chat.pk])
+        invalid_inputs = (
+            ("poll", {"question": "Опрос", "options": 123}),
+            ("poll", {"question": "Опрос", "options": ["a"]}),
+            ("poll", {"question": "Опрос", "options": ["x"] * 1000}),
+            ("todo", {"title": "Задачи", "tasks": 123}),
+            ("todo", {"title": "Задачи", "tasks": ["x"] * 1000}),
+            ("location", {"latitude": "NaN", "longitude": 33.3}),
+        )
+        for special_type, payload in invalid_inputs:
+            with self.subTest(special_type=special_type, payload=payload):
+                response = self.client.post(
+                    url,
+                    {"special_type": special_type, "payload": json.dumps(payload)},
+                    HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertFalse(response.json()["ok"])
+                self.assertFalse(Message.objects.filter(chat=self.chat).exists())
+
+    def test_group_link_ban_covers_structured_content_edits_and_todo_add(self):
+        group = Chat.objects.create(
+            type=Chat.Type.GROUP, title="Без ссылок",
+            members_can_send_links=False,
+        )
+        ChatParticipant.objects.create(
+            chat=group, user=self.alice, role=ChatParticipant.Role.MEMBER,
+        )
+        ChatParticipant.objects.create(
+            chat=group, user=self.bob, role=ChatParticipant.Role.OWNER,
+        )
+        send_url = reverse("messenger:send_special_message", args=[group.pk])
+
+        def special(kind, data):
+            return self.client.post(
+                send_url,
+                {"special_type": kind, "payload": json.dumps(data)},
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+
+        self.assertEqual(special("poll", {
+            "question": "Выбор", "options": ["Да", "https://example.com"],
+        }).status_code, 403)
+        self.assertEqual(special("todo", {
+            "title": "План", "tasks": ["Работа", "https://example.com"],
+        }).status_code, 403)
+        self.assertEqual(special("article", {
+            "title": "Статья", "body": "a" * 3500 + " https://example.com",
+        }).status_code, 403)
+        self.assertEqual(Message.objects.filter(chat=group).count(), 0)
+
+        allowed = special("article", {"title": "Статья", "body": "Без ссылок"})
+        self.assertEqual(allowed.status_code, 200)
+        message_id = allowed.json()["message"]["id"]
+
+        denied_edit = self.client.post(
+            reverse("messenger:special_message_action", args=[group.pk, message_id]),
+            {
+                "action": "edit",
+                "payload": json.dumps({
+                    "title": "Статья",
+                    "body": "b" * 3500 + " https://example.com",
+                }),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(denied_edit.status_code, 403)
+        original = Message.objects.get(pk=message_id)
+        self.assertNotIn("example.com", original.special_data["body"])
+
+        todo = special("todo", {
+            "title": "План", "tasks": ["Работа"], "allow_others_add": True,
+        })
+        self.assertEqual(todo.status_code, 200)
+        denied_add = self.client.post(
+            reverse("messenger:special_message_action", args=[group.pk, todo.json()["message"]["id"]]),
+            {"action": "add", "text": "https://example.com"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(denied_add.status_code, 403)
+
+    def test_forwarded_structured_message_respects_group_link_policy(self):
+        group = Chat.objects.create(
+            type=Chat.Type.GROUP, title="Без ссылок при пересылке",
+            members_can_send_links=False,
+        )
+        ChatParticipant.objects.create(chat=group, user=self.alice)
+        ChatParticipant.objects.create(
+            chat=group, user=self.bob, role=ChatParticipant.Role.OWNER,
+        )
+        source = Message.objects.create(
+            chat=self.chat,
+            sender=self.bob,
+            text="Статья",
+            special_type=Message.SpecialType.ARTICLE,
+            special_data={
+                "title": "Статья", "subtitle": "",
+                "body": "a" * 3500 + " https://example.com",
+            },
+        )
+        forwarded = self.client.post(
+            reverse("messenger:forward_message", args=[self.chat.pk, source.pk]),
+            {"target_chat_id": str(group.pk)},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(forwarded.status_code, 403)
+        self.assertFalse(Message.objects.filter(chat=group).exists())
+
+    @override_settings(SOVIETGRAM_RATE_LIMITS={"send_message": {"limit": 2, "window": 60}})
+    def test_regular_special_and_forward_sends_share_one_rate_limit(self):
+        regular = self.client.post(
+            reverse("messenger:send_message", args=[self.chat.pk]),
+            {"text": "Первое"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(regular.status_code, 200)
+        special = self.client.post(
+            reverse("messenger:send_special_message", args=[self.chat.pk]),
+            {
+                "special_type": "poll",
+                "payload": json.dumps({"question": "Вопрос", "options": ["Да", "Нет"]}),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(special.status_code, 200)
+        forwarded = self.client.post(
+            reverse(
+                "messenger:forward_message",
+                args=[self.chat.pk, regular.json()["message"]["id"]],
+            ),
+            {"target_chat_id": "saved"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(forwarded.status_code, 429)
+        self.assertTrue(forwarded.json()["rate_limited"])
+
+    def test_global_search_finds_messages_outside_sidebar_window(self):
+        needle = "uniquely_searchable_history_123"
+        msg = Message.objects.create(
+            chat=self.chat, sender=self.bob, text=needle,
+        )
+        # The sidebar deliberately fetches 120 chats, but old messages
+        # must stay searchable even when their chat falls outside this slice.
+        for index in range(121):
+            newer = Chat.objects.create(
+                type=Chat.Type.GROUP, title=f"Группа {index}",
+            )
+            ChatParticipant.objects.create(
+                chat=newer, user=self.alice, role=ChatParticipant.Role.OWNER,
+            )
+
+        response = self.client.get(
+            reverse("messenger:global_search"),
+            {"q": needle},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(msg.pk, [item["id"] for item in response.json()["messages"]])
+
     def test_chat_header_presence_updates_with_exact_timestamp_and_privacy(self):
         from datetime import timedelta
 
@@ -816,6 +1052,97 @@ class ChatFeatureTests(TestCase):
         self.assertIn(f'data-forward-target="{group.pk}"', body)
         self.assertIn('data-forward-can-text="false"', body)
         self.assertIn('data-forward-can-media="true"', body)
+
+    def test_forwarded_link_tracks_origin_username_rename(self):
+        source = Message.objects.create(
+            chat=self.chat, sender=self.bob, text="Пересылаемое",
+        )
+        target = get_or_create_direct_chat(self.alice, self.charlie)
+        sent = self.client.post(
+            reverse("messenger:forward_message", args=[self.chat.pk, source.pk]),
+            {"target_chat_id": target.pk},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(sent.status_code, 200)
+        forwarded_id = sent.json()["message"]["id"]
+        self.bob.username = "renamed_bob"
+        self.bob.save(update_fields=["username"])
+
+        self.client.force_login(self.charlie)
+        payload = self.client.get(
+            reverse("messenger:poll_messages", args=[target.pk]),
+            {"after": 0},
+        ).json()
+        result = next(m for m in payload["messages"] if m["id"] == forwarded_id)
+        self.assertEqual(result["forwarded"]["username"], "renamed_bob")
+        self.assertEqual(
+            result["forwarded"]["profile_url"],
+            reverse("accounts:public_profile", args=["renamed_bob"]),
+        )
+        page = self.client.get(reverse("messenger:chat", args=[target.pk]))
+        self.assertContains(page, "@renamed_bob")
+        self.assertNotContains(page, "@bob")
+
+    def test_existing_forwarded_link_follows_current_privacy_per_viewer(self):
+        source = Message.objects.create(
+            chat=self.chat, sender=self.bob, text="Пересылаемый материал",
+        )
+        target = get_or_create_direct_chat(self.alice, self.charlie)
+        first = self.client.post(
+            reverse("messenger:forward_message", args=[self.chat.pk, source.pk]),
+            {"target_chat_id": target.pk},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(first.status_code, 200)
+        forwarded_id = first.json()["message"]["id"]
+        self.assertEqual(first.json()["message"]["forwarded"]["username"], self.bob.username)
+
+        set_privacy_rule(self.bob, "forwards", "contacts")
+        Contact.objects.create(owner=self.bob, user=self.alice)
+
+        self.client.force_login(self.charlie)
+        poll_url = reverse("messenger:poll_messages", args=[target.pk])
+        hidden = self.client.get(poll_url, {"after": 0}).json()
+        result = next(m for m in hidden["messages"] if m["id"] == forwarded_id)
+        self.assertEqual(result["forwarded"]["username"], "")
+        self.assertEqual(result["forwarded"]["profile_url"], "")
+        page = self.client.get(reverse("messenger:chat", args=[target.pk]))
+        self.assertNotContains(page, "@" + self.bob.username)
+
+        self.client.force_login(self.alice)
+        visible = self.client.get(poll_url, {"after": 0}).json()
+        result = next(m for m in visible["messages"] if m["id"] == forwarded_id)
+        self.assertEqual(result["forwarded"]["username"], self.bob.username)
+
+        set_privacy_rule(self.bob, "forwards", "nobody")
+        hidden_again = self.client.get(poll_url, {"after": 0}).json()
+        result = next(m for m in hidden_again["messages"] if m["id"] == forwarded_id)
+        self.assertEqual(result["forwarded"]["username"], "")
+
+    def test_forwarding_hidden_origin_twice_does_not_forge_intermediate_sender(self):
+        set_privacy_rule(self.bob, "forwards", "nobody")
+        source = Message.objects.create(
+            chat=self.chat, sender=self.bob, text="Пересылай без ссылки",
+        )
+        target = get_or_create_direct_chat(self.alice, self.charlie)
+        first = self.client.post(
+            reverse("messenger:forward_message", args=[self.chat.pk, source.pk]),
+            {"target_chat_id": target.pk},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.json()["message"]["forwarded"]["username"], "")
+
+        forwarded_id = first.json()["message"]["id"]
+        second = self.client.post(
+            reverse("messenger:forward_message", args=[target.pk, forwarded_id]),
+            {"target_chat_id": "saved"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second.json()["message"]["forwarded"]["name"], self.bob.display_name)
+        self.assertEqual(second.json()["message"]["forwarded"]["username"], "")
+        self.assertEqual(second.json()["message"]["forwarded"]["profile_url"], "")
 
     def test_forwarded_identity_has_profile_link_only_when_allowed(self):
         source = Message.objects.create(
