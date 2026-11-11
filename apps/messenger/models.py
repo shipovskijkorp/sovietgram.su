@@ -113,6 +113,7 @@ class ChatParticipant(models.Model):
     is_pinned = models.BooleanField(default=False)
     is_archived = models.BooleanField(default=False)
     is_muted = models.BooleanField(default=False)
+    muted_until = models.DateTimeField(null=True, blank=True)
     is_hidden = models.BooleanField(default=False, db_index=True)
     cleared_before_message_id = models.PositiveBigIntegerField(default=0)
     draft_text = models.TextField(blank=True, default="", max_length=4096)
@@ -123,6 +124,13 @@ class ChatParticipant(models.Model):
         constraints = [
             models.UniqueConstraint(fields=("chat", "user"), name="unique_chat_participant"),
         ]
+
+    @property
+    def notifications_muted(self):
+        return bool(
+            self.is_muted
+            and (self.muted_until is None or self.muted_until > timezone.now())
+        )
 
     def __str__(self):
         return f"{self.user} in {self.chat}"
