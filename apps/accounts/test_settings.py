@@ -84,9 +84,26 @@ class SettingsTests(TestCase):
         self.assertNotContains(response, 'data-privacy-open="calls"', html=False)
         self.assertContains(response, "Конфиденциальность и безопасность")
         self.assertContains(response, "Настройки чатов")
-        self.assertContains(response, "tg-settings-section-icon--lock", html=False)
-        self.assertContains(response, "tg-settings-section-icon--chat", html=False)
-        self.assertContains(response, "tg-settings-section-icon--archive", html=False)
+        # Settings icons must use the native luminance-mask pipeline.
+        # The previous custom classes rendered opaque PNGs as solid squares.
+        self.assertContains(
+            response,
+            'tg-native-icon tg-native-icon--lock tg-settings-row__native-icon',
+            html=False,
+        )
+        self.assertContains(
+            response,
+            'tg-native-icon tg-native-icon--settings tg-settings-row__native-icon',
+            html=False,
+        )
+        self.assertContains(
+            response,
+            'tg-native-icon tg-native-icon--archive tg-settings-row__native-icon',
+            html=False,
+        )
+        self.assertNotContains(response, "tg-settings-section-icon--lock", html=False)
+        self.assertNotContains(response, "tg-settings-section-icon--chat", html=False)
+        self.assertNotContains(response, "tg-settings-section-icon--archive", html=False)
         self.assertContains(response, "js/settings.js", html=False)
         self.assertNotContains(response, "Сохранить настройки")
 
