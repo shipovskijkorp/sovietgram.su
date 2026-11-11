@@ -4,6 +4,8 @@ from django.db import transaction
 from django.urls import reverse
 from django.utils import timezone
 
+from apps.accounts.privacy import privacy_allows
+
 from .models import (
     Chat,
     ChatParticipant,
@@ -351,6 +353,17 @@ def serialize_special_content(message, current_user):
     return None
 
 
+def visible_forward_username(message, viewer):
+    """Honor the original sender's *current* privacy rules for every viewer."""
+    username = message.forwarded_from_username
+    if not username or not message.forwarded_from_id:
+        return ""
+    origin = message.forwarded_from
+    if origin is None or not privacy_allows(origin.sender, viewer, "forwards"):
+        return ""
+    return username
+
+
 def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=None):
     pinned_ids = pinned_ids or set()
     reply = message.reply_to
@@ -404,6 +417,7 @@ def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=No
         ]
 
     is_own = message.sender_id == current_user.pk
+    forwarded_username = visible_forward_username(message, current_user)
     return {
         "id": message.pk,
         "text": "" if message.is_deleted else message.text,
@@ -421,13 +435,13 @@ def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=No
         "reply": reply_data,
         "forwarded": {
             "name": message.forwarded_from_name,
-            "username": message.forwarded_from_username,
+            "username": forwarded_username,
             "profile_url": (
                 reverse(
                     "accounts:public_profile",
-                    args=[message.forwarded_from_username],
+                    args=[forwarded_username],
                 )
-                if message.forwarded_from_username
+                if forwarded_username
                 else ""
             ),
         } if message.forwarded_from_name else None,
