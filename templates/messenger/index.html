@@ -61,7 +61,7 @@
   </aside>
 
   {% if selected_chat %}
-    <main class="conversation conversation--chat"
+    <main class="conversation conversation--chat{% if selected_chat.protect_content %} is-content-protected{% endif %}"
           data-chat-id="{{ selected_chat.pk }}"
           data-chat-url="{% url 'messenger:chat' selected_chat.pk %}"
           data-chat-action-url="{% url 'messenger:chat_action' selected_chat.pk %}"
@@ -69,6 +69,8 @@
           data-chat-type="{{ selected_chat.type }}"
           data-chat-role="{{ active_membership.role }}"
           data-chat-saved="{{ selected_chat.is_saved_ui|yesno:'true,false' }}"
+          data-chat-muted="{{ active_membership.is_muted|yesno:'true,false' }}"
+          data-chat-protected="{{ selected_chat.protect_content|yesno:'true,false' }}"
           data-chat-title="{{ selected_chat.display_name_ui|escape }}"
           data-chat-peer-name="{% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}{{ selected_chat.other_user.display_name|escape }}{% else %}{{ selected_chat.display_name_ui|escape }}{% endif %}"
           data-channel-signatures="{{ selected_chat.signatures_enabled|yesno:'true,false' }}"
@@ -118,46 +120,77 @@
           <button class="icon-button conversation-header__search" id="chatSearchToggle" type="button" title="Поиск в чате" aria-label="Поиск"><span class="tg-native-icon tg-native-icon--search" aria-hidden="true"></span></button>
           <div class="chat-menu-control">
             <button class="icon-button conversation-header__profile" id="chatMenuButton" type="button" title="Меню чата" aria-label="Меню чата" aria-expanded="false">⋮</button>
-            <div class="chat-menu" id="chatMenu" hidden>
-              <button type="button" data-open-chat-search><span class="tg-native-icon tg-native-icon--search" aria-hidden="true"></span>Поиск</button>
-              <button type="button" {% if selected_chat.type == 'private' %}data-open-chat-info{% else %}data-community-profile-open{% endif %}><span class="tg-native-icon tg-native-icon--info" aria-hidden="true"></span>{% if selected_chat.type == 'private' %}Информация{% else %}Профиль сообщества{% endif %}</button>
-              {% if selected_chat.type != 'private' and active_membership.role != 'member' %}
-              <button type="button" data-open-community-settings><span class="tg-native-icon tg-native-icon--settings" aria-hidden="true"></span>Управление</button>
-              {% endif %}
-              <form method="post" action="{% url 'messenger:chat_action' selected_chat.pk %}">
-                {% csrf_token %}<input type="hidden" name="action" value="mute">
-                <button type="submit"><span class="tg-native-icon tg-native-icon--mute" aria-hidden="true"></span>{% if active_membership.is_muted %}Включить уведомления{% else %}Выключить уведомления{% endif %}</button>
-              </form>
-              <form method="post" action="{% url 'messenger:chat_action' selected_chat.pk %}">
-                {% csrf_token %}<input type="hidden" name="action" value="pin">
-                <button type="submit"><span class="tg-native-icon tg-native-icon--pin" aria-hidden="true"></span>{% if active_membership.is_pinned %}Открепить чат{% else %}Закрепить чат{% endif %}</button>
-              </form>
-              {% if not selected_chat.is_saved_ui %}
-                <form method="post" action="{% url 'messenger:chat_action' selected_chat.pk %}">
-                  {% csrf_token %}
-                  <input type="hidden" name="action" value="archive">
-                  <input type="hidden" name="next" value="{% if active_membership.is_archived %}{% url 'messenger:home' %}?archived=1{% else %}{% url 'messenger:home' %}{% endif %}">
-                  <button type="submit"><span class="tg-native-icon {% if active_membership.is_archived %}tg-native-icon--unarchive{% else %}tg-native-icon--archive{% endif %}" aria-hidden="true"></span>{% if active_membership.is_archived %}Вернуть из архива{% else %}В архив{% endif %}</button>
-                </form>
-              {% endif %}
-              <button type="button" data-select-messages><span class="chat-menu__select-icon" aria-hidden="true">✓</span>Выбрать сообщения</button>
-              <div class="chat-menu__separator"></div>
-              <button type="button" data-clear-chat-history><span class="tg-native-icon tg-native-icon--clear" aria-hidden="true"></span>Очистить историю</button>
-              {% if not selected_chat.is_saved_ui %}
-              <button class="chat-menu__danger" type="button" data-delete-chat>
-                <span class="tg-native-icon {% if selected_chat.type == 'private' %}tg-native-icon--clear{% else %}tg-native-icon--leave{% endif %}" aria-hidden="true"></span>
-                {% if selected_chat.type == 'private' %}
-                  Удалить чат
-                {% elif active_membership.role == 'owner' and selected_chat.type == 'channel' %}
-                  Удалить канал
-                {% elif active_membership.role == 'owner' %}
-                  Удалить группу
-                {% elif selected_chat.type == 'channel' %}
-                  Покинуть канал
-                {% else %}
-                  Покинуть группу
+            <div class="chat-menu{% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %} chat-menu--telegram{% endif %}" id="chatMenu" hidden>
+              {% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}
+                <button type="button" data-chat-menu-mute>
+                  <span class="tg-native-icon tg-native-icon--mute" aria-hidden="true"></span>
+                  <span class="chat-menu__label">{% if active_membership.is_muted %}Включить уведомления{% else %}Выключить уведомления{% endif %}</span>
+                </button>
+                <button type="button" data-open-chat-info>
+                  <span class="tg-native-icon tg-native-icon--profile" aria-hidden="true"></span>
+                  <span class="chat-menu__label">Показать профиль</span>
+                </button>
+                <button type="button" data-open-chat-wallpaper>
+                  <span class="tg-native-icon tg-native-icon--media" aria-hidden="true"></span>
+                  <span class="chat-menu__label">Установить обои</span>
+                </button>
+                <button type="button" data-toggle-chat-protection>
+                  <span class="tg-native-icon tg-native-icon--lock" aria-hidden="true"></span>
+                  <span class="chat-menu__label">{% if selected_chat.protect_content %}Разрешить копирование{% else %}Запретить копирование{% endif %}</span>
+                </button>
+                <a href="{% url 'messenger:export_chat_history' selected_chat.pk %}" data-chat-export{% if selected_chat.protect_content %} hidden{% endif %}>
+                  <span class="tg-native-icon tg-native-icon--file" aria-hidden="true"></span>
+                  <span class="chat-menu__label">Экспорт истории чата</span>
+                </a>
+                <button type="button" data-clear-chat-history>
+                  <span class="tg-native-icon tg-native-icon--clear" aria-hidden="true"></span>
+                  <span class="chat-menu__label">Очистить историю</span>
+                </button>
+                <button class="chat-menu__danger" type="button" data-delete-chat>
+                  <span class="tg-native-icon tg-native-icon--clear" aria-hidden="true"></span>
+                  <span class="chat-menu__label">Удалить чат</span>
+                </button>
+              {% else %}
+                <button type="button" data-open-chat-search><span class="tg-native-icon tg-native-icon--search" aria-hidden="true"></span>Поиск</button>
+                <button type="button" {% if selected_chat.type == 'private' %}data-open-chat-info{% else %}data-community-profile-open{% endif %}><span class="tg-native-icon tg-native-icon--info" aria-hidden="true"></span>{% if selected_chat.type == 'private' %}Информация{% else %}Профиль сообщества{% endif %}</button>
+                {% if selected_chat.type != 'private' and active_membership.role != 'member' %}
+                <button type="button" data-open-community-settings><span class="tg-native-icon tg-native-icon--settings" aria-hidden="true"></span>Управление</button>
                 {% endif %}
-              </button>
+                <form method="post" action="{% url 'messenger:chat_action' selected_chat.pk %}">
+                  {% csrf_token %}<input type="hidden" name="action" value="mute">
+                  <button type="submit"><span class="tg-native-icon tg-native-icon--mute" aria-hidden="true"></span>{% if active_membership.is_muted %}Включить уведомления{% else %}Выключить уведомления{% endif %}</button>
+                </form>
+                <form method="post" action="{% url 'messenger:chat_action' selected_chat.pk %}">
+                  {% csrf_token %}<input type="hidden" name="action" value="pin">
+                  <button type="submit"><span class="tg-native-icon tg-native-icon--pin" aria-hidden="true"></span>{% if active_membership.is_pinned %}Открепить чат{% else %}Закрепить чат{% endif %}</button>
+                </form>
+                {% if not selected_chat.is_saved_ui %}
+                  <form method="post" action="{% url 'messenger:chat_action' selected_chat.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="archive">
+                    <input type="hidden" name="next" value="{% if active_membership.is_archived %}{% url 'messenger:home' %}?archived=1{% else %}{% url 'messenger:home' %}{% endif %}">
+                    <button type="submit"><span class="tg-native-icon {% if active_membership.is_archived %}tg-native-icon--unarchive{% else %}tg-native-icon--archive{% endif %}" aria-hidden="true"></span>{% if active_membership.is_archived %}Вернуть из архива{% else %}В архив{% endif %}</button>
+                  </form>
+                {% endif %}
+                <button type="button" data-select-messages><span class="chat-menu__select-icon" aria-hidden="true">✓</span>Выбрать сообщения</button>
+                <div class="chat-menu__separator"></div>
+                <button type="button" data-clear-chat-history><span class="tg-native-icon tg-native-icon--clear" aria-hidden="true"></span>Очистить историю</button>
+                {% if not selected_chat.is_saved_ui %}
+                <button class="chat-menu__danger" type="button" data-delete-chat>
+                  <span class="tg-native-icon {% if selected_chat.type == 'private' %}tg-native-icon--clear{% else %}tg-native-icon--leave{% endif %}" aria-hidden="true"></span>
+                  {% if selected_chat.type == 'private' %}
+                    Удалить чат
+                  {% elif active_membership.role == 'owner' and selected_chat.type == 'channel' %}
+                    Удалить канал
+                  {% elif active_membership.role == 'owner' %}
+                    Удалить группу
+                  {% elif selected_chat.type == 'channel' %}
+                    Покинуть канал
+                  {% else %}
+                    Покинуть группу
+                  {% endif %}
+                </button>
+                {% endif %}
               {% endif %}
             </div>
           </div>
@@ -199,7 +232,8 @@
                data-typing-url="{{ typing_url }}"
                data-server-time="{{ server_time }}"
                data-other-last-read="{{ other_last_read_id }}"
-               data-focus-message="{{ message_focus_id }}">
+               data-focus-message="{{ message_focus_id }}"
+               data-chat-wallpaper="{{ active_membership.wallpaper }}">
         <div class="wallpaper" aria-hidden="true"></div>
         <div class="message-flow" id="messageFlow">
           <div class="dialog-start">
@@ -706,6 +740,46 @@
     <footer>
       <button class="telegram-confirm__cancel" id="deleteChatCancel" type="button">Отмена</button>
       <button class="telegram-confirm__danger" id="deleteChatConfirm" type="button">Удалить</button>
+    </footer>
+  </section>
+</div>
+
+<div class="chat-modal-backdrop" id="chatWallpaperModal" hidden>
+  <section class="chat-modal chat-modal--wallpaper" role="dialog" aria-modal="true" aria-labelledby="chatWallpaperTitle">
+    <header>
+      <strong id="chatWallpaperTitle">Обои переписки</strong>
+      <button type="button" data-close-chat-wallpaper aria-label="Закрыть"><span class="tg-native-icon tg-native-icon--close tg-native-icon--compact" aria-hidden="true"></span></button>
+    </header>
+    <div class="chat-modal__body">
+      <div class="chat-wallpaper-grid">
+        <button class="chat-wallpaper-option" type="button" data-chat-wallpaper-choice="" aria-pressed="{% if not active_membership.wallpaper %}true{% else %}false{% endif %}">
+          <span class="chat-wallpaper-option__preview chat-wallpaper-option__preview--default"></span>
+          <span>По умолчанию</span>
+        </button>
+        <button class="chat-wallpaper-option" type="button" data-chat-wallpaper-choice="sand" aria-pressed="{% if active_membership.wallpaper == 'sand' %}true{% else %}false{% endif %}">
+          <span class="chat-wallpaper-option__preview chat-wallpaper-option__preview--sand"></span>
+          <span>Песочные</span>
+        </button>
+        <button class="chat-wallpaper-option" type="button" data-chat-wallpaper-choice="blue" aria-pressed="{% if active_membership.wallpaper == 'blue' %}true{% else %}false{% endif %}">
+          <span class="chat-wallpaper-option__preview chat-wallpaper-option__preview--blue"></span>
+          <span>Голубые</span>
+        </button>
+        <button class="chat-wallpaper-option" type="button" data-chat-wallpaper-choice="mint" aria-pressed="{% if active_membership.wallpaper == 'mint' %}true{% else %}false{% endif %}">
+          <span class="chat-wallpaper-option__preview chat-wallpaper-option__preview--mint"></span>
+          <span>Мятные</span>
+        </button>
+        <button class="chat-wallpaper-option" type="button" data-chat-wallpaper-choice="rose" aria-pressed="{% if active_membership.wallpaper == 'rose' %}true{% else %}false{% endif %}">
+          <span class="chat-wallpaper-option__preview chat-wallpaper-option__preview--rose"></span>
+          <span>Розовые</span>
+        </button>
+        <button class="chat-wallpaper-option" type="button" data-chat-wallpaper-choice="lavender" aria-pressed="{% if active_membership.wallpaper == 'lavender' %}true{% else %}false{% endif %}">
+          <span class="chat-wallpaper-option__preview chat-wallpaper-option__preview--lavender"></span>
+          <span>Лавандовые</span>
+        </button>
+      </div>
+    </div>
+    <footer>
+      <button class="chat-modal__secondary" type="button" data-close-chat-wallpaper>Отмена</button>
     </footer>
   </section>
 </div>
