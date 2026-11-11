@@ -56,7 +56,7 @@ test("user avatar URL updates all matching nodes and leaves other users alone", 
   assert.equal(nodes[0].src, "/u/ivan/avatar/?v=new");
   assert.equal(nodes[1].tagName, "IMG");
   assert.equal(nodes[1].src, "/u/ivan/avatar/?v=new");
-  assert.equal(nodes[1].className, "chat-info-avatar chat-info-avatar--fallback");
+  assert.equal(nodes[1].className, "chat-info-avatar");
   assert.equal(nodes[1].dataset.avatarUserId, "12");
   assert.equal(nodes[2].src, "");
 });
@@ -69,7 +69,7 @@ test("removing a photo replaces image with initials without reloading", () => {
   assert.equal(sync.updateUser("12", "", "ИВ"), 1);
   assert.equal(nodes[0].tagName, "SPAN");
   assert.equal(nodes[0].textContent, "ИВ");
-  assert.equal(nodes[0].className, "conversation-header__avatar");
+  assert.equal(nodes[0].className, "conversation-header__avatar conversation-header__avatar--fallback");
   assert.equal(nodes[0].dataset.avatarUserId, "12");
 });
 
