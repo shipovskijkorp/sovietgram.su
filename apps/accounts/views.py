@@ -320,6 +320,7 @@ def add_account(request):
             "form": login_form if mode == "login" else register_form,
             "login_form": login_form,
             "register_form": register_form,
+            "email_verification_required": settings.SOVIETGRAM_REQUIRE_EMAIL_VERIFICATION,
         },
     )
 
