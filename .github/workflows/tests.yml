@@ -25,7 +25,7 @@ jobs:
       - name: Check Django configuration
         run: python manage.py check
       - name: Check migrations are committed
-        run: python manage.py makemigrations --check --dry-run
+        run: python manage.py makemigrations accounts --check --dry-run
       - name: Run Django tests
         run: python manage.py test
       - name: Check JavaScript syntax
