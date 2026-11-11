@@ -1469,6 +1469,12 @@ async function pollMessages() {
     document.dispatchEvent(new CustomEvent("sovietgram:chat-protection", {
       detail: { enabled: Boolean(payload.protect_content) },
     }));
+    document.dispatchEvent(new CustomEvent("sovietgram:chat-mute-state", {
+      detail: {
+        isMuted: Boolean(payload.is_muted),
+        mutedUntil: payload.muted_until || "",
+      },
+    }));
     for (const message of payload.messages || []) renderMessage(message);
     for (const message of payload.updates || []) applyMessageUpdate(message);
     newestMessageId = Math.max(newestMessageId, Number(payload.high_watermark) || 0, ...(payload.messages || []).map((item) => Number(item.id) || 0));
