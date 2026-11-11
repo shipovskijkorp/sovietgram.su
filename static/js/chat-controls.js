@@ -86,6 +86,13 @@
   const chatTitle = conversation.dataset.chatTitle || "чат";
   const peerName = conversation.dataset.chatPeerName || chatTitle;
   const chatActionUrl = conversation.dataset.chatActionUrl || "";
+  const messageStage = document.getElementById("messageStage");
+  const chatMenuMuteButton = chatMenu?.querySelector("[data-chat-menu-mute]");
+  const chatMenuMuteLabel = chatMenuMuteButton?.querySelector(".chat-menu__label");
+  const chatProtectionButton = chatMenu?.querySelector("[data-toggle-chat-protection]");
+  const chatProtectionLabel = chatProtectionButton?.querySelector(".chat-menu__label");
+  const chatExportLink = chatMenu?.querySelector("[data-chat-export]");
+  let chatProtected = conversation.dataset.chatProtected === "true";
 
   const selectionBar = document.getElementById("messageSelectionBar");
   const selectionCount = document.getElementById("messageSelectionCount");
@@ -115,6 +122,7 @@
   const deleteChatForEveryone = document.getElementById("deleteChatForEveryone");
   const deleteChatForEveryoneLabel = document.getElementById("deleteChatForEveryoneLabel");
   const deleteChatConfirm = document.getElementById("deleteChatConfirm");
+  const chatWallpaperModal = document.getElementById("chatWallpaperModal");
 
   const editModal = document.getElementById("editMessageModal");
   const editText = document.getElementById("editMessageText");
@@ -142,6 +150,33 @@
     chatMenuButton.setAttribute("aria-expanded", String(open));
   }
 
+  function applyChatProtection(enabled) {
+    chatProtected = Boolean(enabled);
+    conversation.dataset.chatProtected = String(chatProtected);
+    conversation.classList.toggle("is-content-protected", chatProtected);
+
+    if (chatProtectionLabel) {
+      chatProtectionLabel.textContent = chatProtected
+        ? "Разрешить копирование"
+        : "Запретить копирование";
+    }
+    if (chatExportLink) chatExportLink.hidden = chatProtected;
+    if (selectionForward) {
+      selectionForward.hidden = chatProtected;
+      selectionForward.disabled = chatProtected || selectedArticles.size === 0;
+    }
+
+    const copyButton = contextMenu?.querySelector('[data-message-action="copy"]');
+    const forwardButton = contextMenu?.querySelector('[data-message-action="forward"]');
+    if (copyButton) {
+      copyButton.hidden = chatProtected
+        || !(contextArticle?.dataset.messageText || "").trim();
+    }
+    if (forwardButton) forwardButton.hidden = chatProtected;
+  }
+
+  applyChatProtection(chatProtected);
+
   function setSearchPanel(open) {
     if (!searchPanel) return;
     searchPanel.hidden = !open;
@@ -166,6 +201,91 @@
     }
     return payload;
   }
+
+  async function toggleChatMute() {
+    if (!chatMenuMuteButton) return;
+    chatMenuMuteButton.disabled = true;
+    try {
+      const payload = await postForm(chatActionUrl, { action: "mute" });
+      const muted = Boolean(payload.is_muted);
+      conversation.dataset.chatMuted = String(muted);
+      if (chatMenuMuteLabel) {
+        chatMenuMuteLabel.textContent = muted
+          ? "Включить уведомления"
+          : "Выключить уведомления";
+      }
+      notify(payload.message || (muted ? "Уведомления выключены." : "Уведомления включены."));
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      chatMenuMuteButton.disabled = false;
+    }
+  }
+
+  async function toggleChatProtection() {
+    if (!chatProtectionButton) return;
+    chatProtectionButton.disabled = true;
+    try {
+      const payload = await postForm(chatActionUrl, { action: "toggle_protection" });
+      applyChatProtection(payload.protect_content);
+      notify(payload.message || "Настройки копирования обновлены.");
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      chatProtectionButton.disabled = false;
+    }
+  }
+
+  function openChatWallpaper() {
+    if (!chatWallpaperModal) return;
+    const current = messageStage?.dataset.chatWallpaper || "";
+    chatWallpaperModal.querySelectorAll("[data-chat-wallpaper-choice]").forEach((button) => {
+      button.setAttribute(
+        "aria-pressed",
+        String((button.dataset.chatWallpaperChoice || "") === current),
+      );
+    });
+    setChatMenu(false);
+    chatWallpaperModal.hidden = false;
+  }
+
+  function closeChatWallpaper() {
+    if (chatWallpaperModal) chatWallpaperModal.hidden = true;
+  }
+
+  async function saveChatWallpaper(button) {
+    if (!button || !messageStage) return;
+    const wallpaper = button.dataset.chatWallpaperChoice || "";
+    button.disabled = true;
+    try {
+      const payload = await postForm(chatActionUrl, {
+        action: "set_wallpaper",
+        wallpaper,
+      });
+      messageStage.dataset.chatWallpaper = payload.wallpaper || "";
+      chatWallpaperModal?.querySelectorAll("[data-chat-wallpaper-choice]").forEach((option) => {
+        option.setAttribute(
+          "aria-pressed",
+          String((option.dataset.chatWallpaperChoice || "") === (payload.wallpaper || "")),
+        );
+      });
+      closeChatWallpaper();
+      notify(payload.message || "Обои переписки обновлены.");
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  document.addEventListener("copy", (event) => {
+    if (!chatProtected) return;
+    const selection = window.getSelection();
+    const messageFlow = document.getElementById("messageFlow");
+    if (!selection?.rangeCount || !messageFlow?.contains(selection.anchorNode)) return;
+    event.preventDefault();
+    notify("Копирование запрещено для этой переписки.");
+  }, true);
 
   function isOwn(article) {
     return article?.dataset.messageOwn === "true";
@@ -205,11 +325,13 @@
 
     const editButton = contextMenu.querySelector('[data-message-action="edit"]');
     const copyButton = contextMenu.querySelector('[data-message-action="copy"]');
+    const forwardButton = contextMenu.querySelector('[data-message-action="forward"]');
     const deleteButton = contextMenu.querySelector('[data-message-action="delete"]');
     const pinLabel = document.getElementById("messagePinLabel");
 
     if (editButton) editButton.hidden = !isOwn(article) || Boolean(article.dataset.messageKind);
-    if (copyButton) copyButton.hidden = !(article.dataset.messageText || "").trim();
+    if (copyButton) copyButton.hidden = chatProtected || !(article.dataset.messageText || "").trim();
+    if (forwardButton) forwardButton.hidden = chatProtected;
     if (deleteButton) deleteButton.hidden = !canDeleteArticle(article);
     if (pinLabel) pinLabel.textContent = article.dataset.messagePinned === "true" ? "Открепить" : "Закрепить";
 
@@ -293,6 +415,10 @@
   }
 
   function openForwardModal(articles) {
+    if (chatProtected) {
+      notify("Пересылка запрещена для этой переписки.");
+      return;
+    }
     if (!forwardModal || !articles?.length) return;
     forwardArticles = articles.filter(Boolean);
     forwardModal.hidden = false;
@@ -312,7 +438,10 @@
     const count = selectedArticles.size;
     if (selectionCount) selectionCount.textContent = String(count);
     if (selectionBar) selectionBar.hidden = !selectionMode;
-    if (selectionForward) selectionForward.disabled = count === 0;
+    if (selectionForward) {
+      selectionForward.hidden = chatProtected;
+      selectionForward.disabled = count === 0 || chatProtected;
+    }
     if (selectionDelete) {
       const allDeletable = count > 0 && [...selectedArticles].every(canDeleteArticle);
       selectionDelete.disabled = !allDeletable;
@@ -667,6 +796,49 @@
       return;
     }
 
+    if (target.closest("[data-chat-menu-mute]")) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setChatMenu(false);
+      toggleChatMute();
+      return;
+    }
+
+    if (target.closest("[data-toggle-chat-protection]")) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setChatMenu(false);
+      toggleChatProtection();
+      return;
+    }
+
+    if (target.closest("[data-open-chat-wallpaper]")) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      openChatWallpaper();
+      return;
+    }
+
+    if (target.closest("[data-chat-export]")) {
+      setChatMenu(false);
+      return;
+    }
+
+    if (target.closest("[data-close-chat-wallpaper]") || target === chatWallpaperModal) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      closeChatWallpaper();
+      return;
+    }
+
+    const wallpaperChoice = target.closest("[data-chat-wallpaper-choice]");
+    if (wallpaperChoice) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      saveChatWallpaper(wallpaperChoice);
+      return;
+    }
+
     if (target.closest("#chatSearchToggle, [data-open-chat-search]")) {
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -728,6 +900,10 @@
 
       if (action === "reply") setReply(article);
       if (action === "copy") {
+        if (chatProtected) {
+          notify("Копирование запрещено для этой переписки.");
+          return;
+        }
         copyText(article.dataset.messageText || "").then(() => notify("Текст скопирован."));
       }
       if (action === "edit") openEditModal(article);
@@ -859,6 +1035,11 @@
     }
     if (event.key !== "Escape") return;
 
+    if (chatWallpaperModal && !chatWallpaperModal.hidden) {
+      event.stopImmediatePropagation();
+      closeChatWallpaper();
+      return;
+    }
     if ((deleteMessageModal && !deleteMessageModal.hidden)
         || (clearHistoryModal && !clearHistoryModal.hidden)
         || (deleteChatModal && !deleteChatModal.hidden)) {
