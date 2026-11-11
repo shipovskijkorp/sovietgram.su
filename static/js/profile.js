@@ -294,10 +294,12 @@ function renderProfileAvatar(target, profile) {
     const image = document.createElement("img");
     image.src = profile.avatar_url;
     image.alt = "";
+    if (profile.id != null) image.dataset.avatarUserId = String(profile.id);
     target.appendChild(image);
     return;
   }
   const fallback = document.createElement("span");
+  if (profile.id != null) fallback.dataset.avatarUserId = String(profile.id);
   fallback.textContent = profile.initials || "?";
   target.appendChild(fallback);
 }
@@ -441,6 +443,9 @@ function closeProfilePhotoViewer() {
 function openProfilePhotoViewer() {
   if (!openedProfile?.avatar_url || !userProfilePhotoViewer || !userProfilePhotoImage) return;
   userProfilePhotoImage.src = openedProfile.avatar_url;
+  if (openedProfile.id != null) {
+    userProfilePhotoImage.dataset.avatarUserId = String(openedProfile.id);
+  }
   if (userProfilePhotoRemove) {
     userProfilePhotoRemove.hidden = !(openedProfile.is_self && openedProfile.remove_avatar_url);
   }
@@ -544,10 +549,12 @@ function renderUserProfile(profile) {
         const image = document.createElement("img");
         image.src = channel.avatar_url;
         image.alt = "";
+        image.dataset.avatarChatId = String(channel.id);
         userProfileChannelAvatar.appendChild(image);
       } else {
         const fallback = document.createElement("span");
         fallback.textContent = (channel.title || channel.username || "К").trim().slice(0, 2).toUpperCase();
+        fallback.dataset.avatarChatId = String(channel.id);
         userProfileChannelAvatar.appendChild(fallback);
       }
     }
@@ -617,10 +624,12 @@ function renderProfileChannelPicker(profile, selectedId) {
       const image = document.createElement("img");
       image.src = channel.avatar_url;
       image.alt = "";
+      image.dataset.avatarChatId = String(channel.id);
       avatar.appendChild(image);
     } else {
       const fallback = document.createElement("span");
       fallback.textContent = (channel.title || channel.username || "К").trim().slice(0, 2).toUpperCase();
+      fallback.dataset.avatarChatId = String(channel.id);
       avatar.appendChild(fallback);
     }
 
