@@ -401,6 +401,7 @@ async function refreshProfilePresence() {
     }
     if (Object.prototype.hasOwnProperty.call(fresh, "personal_channel")) {
       openedProfile.personal_channel = fresh.personal_channel;
+      renderProfilePersonalChannel(fresh.personal_channel);
       if (fresh.personal_channel?.id != null) {
         window.SovietgramAvatarSync?.updateChat(
           fresh.personal_channel.id,
@@ -527,6 +528,45 @@ async function closeUserProfile() {
   document.body.classList.remove("has-profile-overlay");
 }
 
+function renderProfilePersonalChannel(channel) {
+  const hasChannel = Boolean(channel);
+  if (userProfileChannelCard) userProfileChannelCard.hidden = !hasChannel;
+  if (!hasChannel) {
+    userProfileChannelAvatar?.replaceChildren();
+    return;
+  }
+  if (userProfileChannelAvatar) {
+    userProfileChannelAvatar.replaceChildren();
+    if (channel.avatar_url) {
+      const image = document.createElement("img");
+      image.src = channel.avatar_url;
+      image.alt = "";
+      image.dataset.avatarChatId = String(channel.id);
+      userProfileChannelAvatar.appendChild(image);
+    } else {
+      const fallback = document.createElement("span");
+      fallback.textContent = (channel.title || channel.username || "К").trim().slice(0, 2).toUpperCase();
+      fallback.dataset.avatarChatId = String(channel.id);
+      userProfileChannelAvatar.appendChild(fallback);
+    }
+  }
+  if (userProfileChannelTitle) {
+    userProfileChannelTitle.textContent = channel.title || (channel.username ? `@${channel.username}` : "Канал");
+  }
+  if (userProfileChannelTime) {
+    userProfileChannelTime.textContent = channel.last_message_time || "";
+    userProfileChannelTime.hidden = !channel.last_message_time;
+  }
+  if (userProfileChannelPreview) userProfileChannelPreview.textContent = channel.last_message_preview || "";
+  if (userProfileChannelMeta) {
+    userProfileChannelMeta.textContent = `Канал · ${channel.subscriber_text || "0 подписчиков"}`;
+  }
+  if (userProfileChannelCard) {
+    userProfileChannelCard.disabled = !channel.open_url;
+    userProfileChannelCard.classList.toggle("is-clickable", Boolean(channel.open_url));
+  }
+}
+
 function renderUserProfile(profile) {
   if (!userProfileOverlay) return;
   openedProfile = profile;
@@ -546,41 +586,7 @@ function renderUserProfile(profile) {
     userProfileBio.textContent = hasBio ? profile.bio.trim() : "";
   }
 
-  const hasChannel = Boolean(profile.personal_channel);
-  if (userProfileChannelCard) userProfileChannelCard.hidden = !hasChannel;
-  if (hasChannel) {
-    const channel = profile.personal_channel;
-    if (userProfileChannelAvatar) {
-      userProfileChannelAvatar.replaceChildren();
-      if (channel.avatar_url) {
-        const image = document.createElement("img");
-        image.src = channel.avatar_url;
-        image.alt = "";
-        image.dataset.avatarChatId = String(channel.id);
-        userProfileChannelAvatar.appendChild(image);
-      } else {
-        const fallback = document.createElement("span");
-        fallback.textContent = (channel.title || channel.username || "К").trim().slice(0, 2).toUpperCase();
-        fallback.dataset.avatarChatId = String(channel.id);
-        userProfileChannelAvatar.appendChild(fallback);
-      }
-    }
-    if (userProfileChannelTitle) {
-      userProfileChannelTitle.textContent = channel.title || (channel.username ? `@${channel.username}` : "Канал");
-    }
-    if (userProfileChannelTime) {
-      userProfileChannelTime.textContent = channel.last_message_time || "";
-      userProfileChannelTime.hidden = !channel.last_message_time;
-    }
-    if (userProfileChannelPreview) userProfileChannelPreview.textContent = channel.last_message_preview || "";
-    if (userProfileChannelMeta) {
-      userProfileChannelMeta.textContent = `Канал · ${channel.subscriber_text || "0 подписчиков"}`;
-    }
-    if (userProfileChannelCard) {
-      userProfileChannelCard.disabled = !channel.open_url;
-      userProfileChannelCard.classList.toggle("is-clickable", Boolean(channel.open_url));
-    }
-  }
+  renderProfilePersonalChannel(profile.personal_channel);
 
   const hasBirthday = Boolean(profile.birthday_display);
   if (userProfileBirthdayRow) userProfileBirthdayRow.hidden = !hasBirthday;
