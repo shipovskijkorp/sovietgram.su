@@ -338,11 +338,15 @@
   white-space: nowrap;
 }
 
+/* Legacy settings masks: these PNGs have opaque grayscale pixels.
+   Treat their brightness as the mask, never the alpha channel (solid square).
+   New settings rows use tg-native-icon, kept for older markup compatibility. */
 .tg-settings-section-icon {
   width: 24px;
   height: 24px;
   justify-self: start;
   background: var(--settings-icon);
+  mask-mode: luminance;
   mask-repeat: no-repeat;
   mask-position: center;
   mask-size: 24px 24px;
