@@ -125,6 +125,7 @@ def apply_archive_rules_on_new_message(chat, message):
             ChatParticipant.objects.filter(pk=membership.pk).update(
                 is_archived=True,
                 is_muted=True,
+                muted_until=None,
             )
             continue
 
@@ -132,7 +133,7 @@ def apply_archive_rules_on_new_message(chat, message):
         # incoming messages unless "Always Keep Archived" is enabled.
         if (
             membership.is_archived
-            and not membership.is_muted
+            and not membership.notifications_muted
             and not user.keep_archived_chats
         ):
             ChatParticipant.objects.filter(pk=membership.pk).update(
