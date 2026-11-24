@@ -150,6 +150,8 @@
             <span class="tg-settings-row__value" id="privacyInactiveValue">{{ settings_inactivity_label }}</span>
           </button>
           <p class="tg-settings-about">Если не заходить в Sovietgram дольше выбранного срока, аккаунт и связанные с ним данные будут удалены.</p>
+          <a class="tg-settings-danger-action" href="{% url 'accounts:delete_account' %}">Удалить аккаунт сейчас</a>
+          <p class="tg-settings-about">Требуется текущий пароль. Удаление необратимо.</p>
         </div>
       </section>
 

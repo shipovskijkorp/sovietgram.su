@@ -230,20 +230,58 @@
     contactsCard.classList.add("contacts-card--live-search");
   }
 
+  const chatTools = document.getElementById("sidebarChatTools");
+  const filterControls = Array.from(document.querySelectorAll("[data-chat-filter]"));
+  const filterOptions = new Set(["all", "unread", "group", "channel"]);
+  const filterStorage = "sovietgram.chat-filter." + (chatTools?.dataset.accountId || "") +
+    "." + (chatTools?.dataset.archived || "false");
+  let activeChatFilter = "all";
+  if (chatTools) {
+    try {
+      const saved = sessionStorage.getItem(filterStorage);
+      if (filterOptions.has(saved)) activeChatFilter = saved;
+    } catch (_error) {}
+  }
+
+  function matchesChatFilter(row) {
+    if (activeChatFilter === "all") return true;
+    if (activeChatFilter === "unread") return row.dataset.chatUnread === "true";
+    return row.dataset.chatType === activeChatFilter;
+  }
+
   function applyLocalChatFilter() {
     if (!sidebarInput) return;
     const query = sidebarInput.value.trim().toLowerCase().replace(/^@/, "");
     let visible = 0;
-    chatRows().forEach((row) => {
-      const matches = !query || (row.dataset.search || "").includes(query);
+    const rows = chatRows();
+    rows.forEach((row) => {
+      const matches = matchesChatFilter(row) && (!query || (row.dataset.search || "").includes(query));
       row.hidden = !matches;
       if (matches) visible += 1;
     });
     const empty = chatFilterEmpty();
     if (empty) {
-      empty.hidden = Boolean(query) || visible !== 0 || chatRows().length === 0;
+      empty.textContent = activeChatFilter === "unread"
+        ? "Нет непрочитанных чатов."
+        : activeChatFilter === "group" ? "Нет групп."
+          : activeChatFilter === "channel" ? "Нет каналов." : "Ничего не найдено.";
+      empty.hidden = Boolean(query) || visible !== 0 || rows.length === 0;
     }
+    filterControls.forEach(control =>
+      control.setAttribute("aria-pressed", String(control.dataset.chatFilter === activeChatFilter))
+    );
   }
+
+  filterControls.forEach(control => {
+    control.addEventListener("click", () => {
+      const filter = control.dataset.chatFilter;
+      if (!filterOptions.has(filter)) return;
+      activeChatFilter = filter;
+      try { sessionStorage.setItem(filterStorage, filter); } catch (_error) {}
+      applyLocalChatFilter();
+    });
+  });
+  applyLocalChatFilter();
 
   function resetSidebarSearch() {
     if (sidebarController) sidebarController.abort();
@@ -252,9 +290,7 @@
       sidebarResults.hidden = true;
       sidebarResults.replaceChildren();
     }
-    chatRows().forEach((row) => { row.hidden = false; });
-    const empty = chatFilterEmpty();
-    if (empty) empty.hidden = true;
+    applyLocalChatFilter();
   }
 
   if (sidebarInput) {
@@ -325,6 +361,7 @@
         });
         chatList.replaceChildren(...next.childNodes);
         chatList.classList.toggle("chat-list--empty", next.classList.contains("chat-list--empty"));
+        applyLocalChatFilter();
       } catch (_error) {
         // Transient connection failures must not interrupt the conversation.
       } finally {
@@ -336,6 +373,75 @@
       if (!document.hidden) refreshSidebar();
     });
   }
+
+  const rowMenu = document.getElementById("sidebarChatContext");
+  const rowForm = document.getElementById("sidebarChatReadForm");
+  const rowAction = document.getElementById("sidebarChatReadAction");
+  const rowNext = document.getElementById("sidebarChatReadNext");
+  const rowLabel = document.getElementById("sidebarChatReadLabel");
+  const rowButton = document.getElementById("sidebarChatReadButton");
+  let menuAnchor = null;
+
+  function closeRowMenu(restoreFocus = false) {
+    if (rowMenu) rowMenu.hidden = true;
+    if (restoreFocus && menuAnchor?.isConnected) menuAnchor.focus();
+    menuAnchor = null;
+  }
+
+  function openRowMenu(row, x, y) {
+    if (!rowMenu || !rowForm || !rowAction || !rowNext || !rowLabel || !rowButton || !row.dataset.readActionUrl) return;
+    menuAnchor = row;
+    const unread = row.dataset.chatUnread === "true";
+    rowForm.action = row.dataset.readActionUrl;
+    rowAction.value = unread ? "mark_read" : "mark_unread";
+    rowLabel.textContent = unread ? "Отметить прочитанным" : "Отметить непрочитанным";
+    rowMenu.querySelector('[data-read-menu-icon="read"]').hidden = !unread;
+    rowMenu.querySelector('[data-read-menu-icon="unread"]').hidden = unread;
+    // Marking the open chat unread leaves it, preventing its visible read
+    // acknowledgement from immediately removing the personal reminder.
+    const current = window.location.pathname;
+    const selected = new URL(row.href, window.location.origin).pathname === current;
+    rowNext.value = !unread && selected ? "" : current + window.location.search;
+    rowMenu.hidden = false;
+    const rect = rowMenu.getBoundingClientRect();
+    rowMenu.style.left = Math.max(6, Math.min(x, window.innerWidth - rect.width - 6)) + "px";
+    rowMenu.style.top = Math.max(6, Math.min(y, window.innerHeight - rect.height - 6)) + "px";
+    rowButton.focus({ preventScroll: true });
+  }
+
+  if (chatList && rowMenu) {
+    chatList.addEventListener("contextmenu", event => {
+      const row = event.target.closest?.("[data-chat-row]");
+      if (!row) return;
+      event.preventDefault();
+      const rect = row.getBoundingClientRect();
+      openRowMenu(row, event.clientX || rect.left + 12, event.clientY || rect.bottom);
+    });
+    chatList.addEventListener("keydown", event => {
+      if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+      const row = event.target.closest?.("[data-chat-row]");
+      if (!row) return;
+      event.preventDefault();
+      const rect = row.getBoundingClientRect();
+      openRowMenu(row, rect.left + 12, rect.bottom);
+    });
+    chatList.addEventListener("scroll", () => closeRowMenu(), { passive: true });
+    window.addEventListener("resize", () => closeRowMenu());
+    document.addEventListener("pointerdown", event => {
+      if (!rowMenu.hidden && !rowMenu.contains(event.target)) closeRowMenu();
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape" && !rowMenu.hidden) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        closeRowMenu(true);
+      }
+    }, true);
+  }
+
+  document.getElementById("markAllChatsReadForm")?.addEventListener("submit", event => {
+    if (!window.confirm("Отметить все чаты, включая архив, прочитанными?")) event.preventDefault();
+  });
 
   document.addEventListener("click", (event) => {
     if (!sidebarResults || sidebarResults.hidden) return;

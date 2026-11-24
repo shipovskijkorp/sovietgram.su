@@ -101,8 +101,10 @@ def delete_user_account(user):
     # direct-chat invariant, so remove the whole chat and its stored media.
     private_chats = list(
         Chat.objects.select_for_update()
-        .filter(type=Chat.Type.PRIVATE, memberships__user=user)
-        .distinct()
+        .filter(
+            type=Chat.Type.PRIVATE,
+            pk__in=ChatParticipant.objects.filter(user=user).values("chat_id"),
+        )
         .order_by("id")
     )
     for chat in private_chats:

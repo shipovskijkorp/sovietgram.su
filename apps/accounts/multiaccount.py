@@ -139,6 +139,15 @@ def remove_current_account(request):
         if str(item.get("user_id")) != current_id
     ]
     _save_accounts(request, accounts)
-    if accounts:
-        return activate_account(request, accounts[0]["user_id"])
+    # Expired/deleted slots must not prevent another valid saved account
+    # from surviving logout or explicit account deletion.
+    for item in list(accounts):
+        user = activate_account(request, item["user_id"])
+        if user is not None:
+            return user
+        accounts = [
+            entry for entry in accounts
+            if str(entry.get("user_id")) != str(item.get("user_id"))
+        ]
+        _save_accounts(request, accounts)
     return None

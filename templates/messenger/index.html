@@ -45,6 +45,22 @@
       </div>
     {% endif %}
 
+    <div class="sidebar-chat-tools" id="sidebarChatTools" data-account-id="{{ request.user.pk }}" data-archived="{{ show_archived|yesno:'true,false' }}">
+      <div class="sidebar-chat-filters" id="sidebarChatFilters" aria-label="Фильтры чатов">
+        <button type="button" data-chat-filter="all" aria-pressed="true">Все</button>
+        <button type="button" data-chat-filter="unread" aria-pressed="false">Непрочитанные</button>
+        <button type="button" data-chat-filter="group" aria-pressed="false">Группы</button>
+        <button type="button" data-chat-filter="channel" aria-pressed="false">Каналы</button>
+      </div>
+      <form method="post" action="{% url 'messenger:mark_all_chats_read' %}" id="markAllChatsReadForm">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <button type="submit" class="sidebar-mark-read" aria-label="Прочитать все чаты, включая архив" title="Прочитать все чаты, включая архив">
+          <svg viewBox="0 0 18 14" aria-hidden="true"><path d="M1.9 7.2 5.2 10.5 12 3.7M8.1 8.9l1.6 1.6 6.8-6.8"/></svg>
+        </button>
+      </form>
+    </div>
+
     {% include 'messenger/_chat_list.html' %}
 
     <footer class="sidebar__footer">
@@ -121,6 +137,22 @@
           <div class="chat-menu-control">
             <button class="icon-button conversation-header__profile" id="chatMenuButton" type="button" title="Меню чата" aria-label="Меню чата" aria-expanded="false">⋮</button>
             <div class="chat-menu{% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %} chat-menu--telegram{% endif %}" id="chatMenu" hidden>
+              <form method="post" action="{% url 'messenger:chat_action' selected_chat.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button type="submit" name="action" value="mark_read">
+                  <span class="chat-read-menu-icon" aria-hidden="true"><svg viewBox="0 0 18 14"><path d="M1.9 7.2 5.2 10.5 12 3.7M8.1 8.9l1.6 1.6 6.8-6.8"/></svg></span>
+                  <span class="chat-menu__label">Отметить прочитанным</span>
+                </button>
+              </form>
+              <form method="post" action="{% url 'messenger:chat_action' selected_chat.pk %}">
+                {% csrf_token %}
+                <button type="submit" name="action" value="mark_unread">
+                  <span class="chat-read-menu-icon" aria-hidden="true"><svg viewBox="0 0 18 18"><circle cx="9" cy="9" r="6"/></svg></span>
+                  <span class="chat-menu__label">Отметить непрочитанным</span>
+                </button>
+              </form>
+              <div class="chat-menu__separator"></div>
               {% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}
                 <button type="button" data-chat-menu-mute aria-expanded="false" aria-controls="chatMuteOptions">
                   <span class="tg-native-icon tg-native-icon--mute" aria-hidden="true"></span>
@@ -234,6 +266,7 @@
                data-read-url="{% url 'messenger:read_messages' selected_chat.pk %}"
                data-account-id="{{ request.user.pk }}"
                data-own-last-read="{{ own_last_read_id }}"
+               data-opened-marker="{{ marked_unread_token }}"
                data-history-older="{{ history_has_older|yesno:'true,false' }}"
                data-history-newer="{{ history_has_newer|yesno:'true,false' }}"
                data-unread-anchor="{{ unread_anchor_id }}"
@@ -1038,6 +1071,20 @@
 {% include 'accounts/_profile_overlay.html' %}
 {% include 'accounts/_settings_overlay.html' %}
 
+<div class="sidebar-chat-context chat-menu chat-menu--telegram" id="sidebarChatContext" hidden>
+  <form method="post" id="sidebarChatReadForm">
+    {% csrf_token %}
+    <input type="hidden" name="action" id="sidebarChatReadAction">
+    <input type="hidden" name="next" id="sidebarChatReadNext">
+    <button type="submit" id="sidebarChatReadButton">
+      <span class="chat-read-menu-icon" aria-hidden="true">
+        <svg viewBox="0 0 18 14" data-read-menu-icon="read"><path d="M1.9 7.2 5.2 10.5 12 3.7M8.1 8.9l1.6 1.6 6.8-6.8"/></svg>
+        <svg viewBox="0 0 18 18" data-read-menu-icon="unread" hidden><circle cx="9" cy="9" r="6"/></svg>
+      </span>
+      <span class="chat-menu__label" id="sidebarChatReadLabel"></span>
+    </button>
+  </form>
+</div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 {% endblock %}
 

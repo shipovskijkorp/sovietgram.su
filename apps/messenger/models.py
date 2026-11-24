@@ -112,6 +112,8 @@ class ChatParticipant(models.Model):
     )
     # A durable read cursor survives deletion/expiry of the referenced message.
     read_through_id = models.PositiveBigIntegerField(default=0)
+    # A personal reminder, independent of the real read receipt cursor.
+    marked_unread_at = models.DateTimeField(null=True, blank=True)
     is_pinned = models.BooleanField(default=False)
     is_archived = models.BooleanField(default=False)
     is_muted = models.BooleanField(default=False)

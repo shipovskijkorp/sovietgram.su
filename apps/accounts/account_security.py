@@ -14,6 +14,7 @@ from ipaddress import ip_address
 from django import forms
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import SetPasswordForm
 from django.core.cache import cache
@@ -29,6 +30,8 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods
 
 from .models import AccountSecurityRequest, User
+from .lifecycle import delete_user_account
+from .multiaccount import remove_current_account
 from .privacy import account_expired_for_inactivity
 
 logger = logging.getLogger(__name__)
@@ -350,3 +353,71 @@ def _invalid(request, purpose):
                  description="Ссылка уже использована, устарела или настройки аккаунта изменились. "
                  "Запросите новую ссылку.", back=back, back_label="Запросить новую ссылку",
                  status=400 if request.method == "POST" else 200)
+
+
+class DeleteAccountForm(forms.Form):
+    account_id = forms.IntegerField(widget=forms.HiddenInput())
+    username = forms.CharField(
+        label="Введите имя пользователя для подтверждения", max_length=150,
+        widget=forms.TextInput(attrs={"autocomplete": "off", "spellcheck": "false"}),
+    )
+    password = forms.CharField(
+        label="Текущий пароль", strip=False,
+        widget=forms.PasswordInput(attrs={"autocomplete": "current-password"}),
+    )
+    confirm = forms.BooleanField(
+        label="Я понимаю, что удаление необратимо.", required=True,
+    )
+
+
+@login_required
+@never_cache
+@ensure_csrf_cookie
+@require_http_methods(["GET", "POST"])
+def delete_account(request):
+    """Explicit, password-confirmed use of the existing account lifecycle."""
+    form = DeleteAccountForm(
+        request.POST if request.method == "POST" else None,
+        initial={"account_id": request.user.pk},
+    )
+    if request.method == "POST" and form.is_valid():
+        if form.cleaned_data["account_id"] != request.user.pk:
+            form.add_error(None, "Аккаунт изменился. Откройте настройки заново.")
+        elif _limited("delete-account", request.user.pk, 5):
+            form.add_error(None, "Слишком много попыток. Повторите через пять минут.")
+        else:
+            deleted = False
+            with transaction.atomic():
+                user = User.objects.select_for_update().filter(pk=request.user.pk).first()
+                if not user or not user.is_active:
+                    form.add_error(None, "Аккаунт недоступен.")
+                elif form.cleaned_data["username"] != user.username:
+                    form.add_error("username", "Имя пользователя не совпадает.")
+                elif not user.check_password(form.cleaned_data["password"]):
+                    form.add_error("password", "Неверный пароль.")
+                else:
+                    delete_user_account(user)
+                    deleted = True
+            if deleted:
+                # Keep other valid accounts in this browser, but remove the
+                # deleted account's slot. Other sessions cannot authenticate.
+                switched = remove_current_account(request)
+                if switched is not None:
+                    messages.success(request, "Аккаунт удалён. Выполнено переключение на другой аккаунт.")
+                    return redirect("messenger:home")
+                logout(request)
+                messages.success(request, "Аккаунт удалён.")
+                return redirect("accounts:login")
+    return _page(
+        request, title="Удаление аккаунта", heading="Удалить аккаунт навсегда?",
+        description=(
+            f"@{request.user.username}: профиль, избранное, личные переписки "
+            "и их вложения будут удалены у обоих собеседников. Ваши сообщения "
+            "в группах и каналах будут удалены. Если в вашем сообществе есть "
+            "другие участники, права владельца будут переданы им; пустые "
+            "сообщества будут удалены. Восстановить данные нельзя."
+        ),
+        form=form, submit="Удалить аккаунт навсегда",
+        back=f"{reverse('messenger:home')}?settings=privacy",
+        back_label="Отмена — вернуться к настройкам",
+    )

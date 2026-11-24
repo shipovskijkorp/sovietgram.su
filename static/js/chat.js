@@ -1498,6 +1498,8 @@ let newestMessageId = nodeId(historyNodes().at(-1));
 let newestUpdateAt = messageStage?.dataset.serverTime || new Date().toISOString();
 let newestUpdateId = 0;
 let ownLastReadId = Number(messageStage?.dataset.ownLastRead) || 0;
+// Only acknowledge the specific manual marker present on this page's opening.
+let openedUnreadMarker = messageStage?.dataset.openedMarker || "";
 let pollBusy = false;
 let pollRendering = false;
 let readBusy = false;
@@ -1573,11 +1575,15 @@ async function reportVisibleRead() {
       candidate = nodeId(article);
     }
   }
-  if (candidate <= ownLastReadId) return;
+  if (candidate <= ownLastReadId && !openedUnreadMarker) return;
   readBusy = true;
   try {
-    const result = await postForm(messageStage.dataset.readUrl, { message_id: candidate });
+    const result = await postForm(messageStage.dataset.readUrl, {
+      message_id: candidate > ownLastReadId ? candidate : 0,
+      opened_marker: openedUnreadMarker,
+    });
     ownLastReadId = Math.max(ownLastReadId, Number(result.own_last_read_id) || 0);
+    openedUnreadMarker = "";
   } catch (_error) {
     // The next visible/focused check retries; do not assume a read on failure.
   } finally {

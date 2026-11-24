@@ -22,6 +22,7 @@ from django.db.models import (
     Case,
     Count,
     F,
+    Exists,
     OuterRef,
     Prefetch,
     Q,
@@ -425,6 +426,7 @@ def _clear_history_for_user(chat, membership):
         )
     membership.last_read_message_id = latest_id or membership.last_read_message_id
     membership.read_through_id = max(membership.read_through_id, latest_id or 0)
+    membership.marked_unread_at = None
     membership.draft_text = ""
     membership.draft_updated_at = None
     membership.last_typing_at = None
@@ -433,6 +435,7 @@ def _clear_history_for_user(chat, membership):
             "cleared_before_message_id",
             "last_read_message",
             "read_through_id",
+            "marked_unread_at",
             "draft_text",
             "draft_updated_at",
             "last_typing_at",
@@ -617,6 +620,7 @@ def _prepare_sidebar_chats(user, archived=False):
             is_pinned_ui=Subquery(
                 membership.values("is_pinned")[:1], output_field=BooleanField()
             ),
+            marked_unread_ui=Exists(membership.filter(marked_unread_at__isnull=False)),
             is_muted_ui=Subquery(
                 membership.annotate(
                     is_currently_muted=Case(
@@ -678,6 +682,8 @@ def _prepare_sidebar_chats(user, archived=False):
 
     for chat in chats:
         _decorate_chat_ui(chat, user)
+        chat.has_unread_ui = bool(chat.unread_count_ui or chat.marked_unread_ui)
+        chat.unread_badge_count_ui = max(chat.unread_count_ui or 0, int(chat.marked_unread_ui))
         preview = " ".join((chat.last_message_text_ui or "").split())
         if preview:
             chat.last_message_preview_ui = preview
@@ -817,7 +823,26 @@ def _account_slots_with_unread(request):
             .exclude(hidden_for_users__user=slot_user)
             .count()
         )
-        slot["unread_count"] = unread
+        # Manual markers add one reminder only if the chat has no real unread
+        # messages, so a marked conversation is never counted twice.
+        pending = Message.objects.filter(
+            chat_id=OuterRef("chat_id"), is_deleted=False,
+            id__gt=OuterRef("cleared_before_message_id"),
+        ).filter(
+            Q(id__gt=Greatest(
+                OuterRef("read_through_id"),
+                Coalesce(OuterRef("last_read_message_id"), Value(0, output_field=BigIntegerField()), output_field=BigIntegerField()),
+                output_field=BigIntegerField(),
+            )),
+            Q(chat__type=Chat.Type.PRIVATE)
+            | Q(chat__history_visible_to_new_members=True)
+            | Q(chat__memberships__user=slot_user, chat__memberships__can_see_pre_join_history=True)
+            | Q(created_at__gte=OuterRef("joined_at")),
+        ).exclude(sender=slot_user).exclude(hidden_for_users__user=slot_user)
+        manual_only = ChatParticipant.objects.filter(
+            user=slot_user, is_hidden=False, marked_unread_at__isnull=False,
+        ).filter(~Exists(pending)).count()
+        slot["unread_count"] = unread + manual_only
     return slots
 
 
@@ -848,7 +873,7 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
     current_chats = _prepare_sidebar_chats(user, archived=archived)
     archive_chats = current_chats if archived else _prepare_sidebar_chats(user, archived=True)
     archived_count = len(archive_chats)
-    archived_unread_count = sum(chat.unread_count_ui or 0 for chat in archive_chats)
+    archived_unread_count = sum(chat.unread_badge_count_ui for chat in archive_chats)
     archive_preview = ", ".join(chat.display_name_ui for chat in archive_chats[:3])
 
     context = {
@@ -994,7 +1019,7 @@ def sidebar_snapshot(request):
             "chats": chats,
             "show_archived": archived,
             "archived_count": len(archive_chats),
-            "archived_unread_count": sum(chat.unread_count_ui or 0 for chat in archive_chats),
+            "archived_unread_count": sum(chat.unread_badge_count_ui for chat in archive_chats),
             "archive_preview": ", ".join(chat.display_name_ui for chat in archive_chats[:3]),
         },
     )
@@ -1049,6 +1074,7 @@ def chat_detail(request, chat_id):
         "history_has_newer": bool(chat_messages and base.filter(id__gt=chat_messages[-1].pk).exists()),
         "own_last_read_id": read_cursor,
         "unread_anchor_id": unread_anchor_id,
+        "marked_unread_token": membership.marked_unread_at.isoformat() if membership.marked_unread_at else "",
     })
     return render(request, "messenger/index.html", context)
 
@@ -1106,23 +1132,67 @@ def message_history(request, chat_id):
 @require_POST
 def read_messages(request, chat_id):
     chat = _chat_for_user(request.user, chat_id)
+    token = request.POST.get("opened_marker", "")
+    marker = None
     try:
         message_id = int(request.POST.get("message_id", "0"))
-        if not 0 < message_id <= 9223372036854775807:
+        if token:
+            marker = parse_datetime(token)
+            if marker is None or timezone.is_naive(marker):
+                raise ValueError
+        if not 0 <= message_id <= 9223372036854775807 or (not message_id and not marker):
             raise ValueError
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return JsonResponse({"ok": False, "error": "Некорректное сообщение."}, status=400)
-    message = _visible_message_queryset(chat, request.user).filter(
-        pk=message_id, is_deleted=False,
-    ).exclude(sender=request.user).first()
-    if message is None:
-        return JsonResponse({"ok": False, "error": "Сообщение недоступно."}, status=404)
-    mark_chat_read(chat, request.user, message)
-    membership = ChatParticipant.objects.get(chat=chat, user=request.user)
+    with transaction.atomic():
+        membership = ChatParticipant.objects.select_for_update().get(chat=chat, user=request.user)
+        if membership.is_hidden:
+            raise Http404
+        if message_id:
+            message = _visible_message_queryset(chat, request.user).filter(
+                pk=message_id, is_deleted=False,
+            ).exclude(sender=request.user).first()
+            if message is None:
+                return JsonResponse({"ok": False, "error": "Сообщение недоступно."}, status=404)
+            mark_chat_read(chat, request.user, message)
+        if marker:
+            # Only clear the marker that was present when this page was opened.
+            # A stale tab must not erase a newer manual mark from another tab.
+            ChatParticipant.objects.filter(pk=membership.pk, marked_unread_at=marker).update(marked_unread_at=None)
+        membership.refresh_from_db(fields=["read_through_id", "last_read_message", "marked_unread_at"])
     return JsonResponse({
         "ok": True,
         "own_last_read_id": max(membership.read_through_id, membership.last_read_message_id or 0),
+        "marked_unread": membership.marked_unread_at is not None,
     })
+
+
+def _mark_membership_read(membership, user):
+    # Explicit "mark read" may acknowledge a whole conversation, not just
+    # the visible viewport. Respect cleared/deleted/hidden/pre-join history.
+    chat = membership.chat
+    latest = _visible_message_queryset(chat, user).filter(
+        is_deleted=False,
+    ).exclude(sender=user).order_by("-id").first()
+    if latest is not None:
+        mark_chat_read(chat, user, latest)
+    ChatParticipant.objects.filter(pk=membership.pk).update(marked_unread_at=None)
+
+
+@login_required
+@require_POST
+def mark_all_chats_read(request):
+    # Include archived chats, but never touch hidden chats or other accounts.
+    with transaction.atomic():
+        memberships = ChatParticipant.objects.select_for_update().filter(
+            user=request.user, is_hidden=False,
+        ).order_by("pk")
+        for membership in memberships:
+            _mark_membership_read(membership, request.user)
+    if _wants_json(request):
+        return JsonResponse({"ok": True, "message": "Все чаты отмечены прочитанными."})
+    messages.success(request, "Все чаты, включая архив, отмечены прочитанными.")
+    return redirect(_safe_next(request, reverse("messenger:home")))
 
 
 @login_required
@@ -2663,7 +2733,25 @@ def chat_action(request, chat_id):
             redirect_url or reverse("messenger:chat", args=[chat.pk])
         )
 
-    if action == "pin":
+    if action in ("mark_read", "mark_unread"):
+        with transaction.atomic():
+            locked = ChatParticipant.objects.select_for_update().get(pk=membership.pk)
+            if locked.is_hidden:
+                raise Http404
+            if action == "mark_unread":
+                locked.marked_unread_at = timezone.now()
+                locked.save(update_fields=["marked_unread_at"])
+            else:
+                _mark_membership_read(locked, request.user)
+        fallback = reverse("messenger:home")
+        if membership.is_archived:
+            fallback += "?archived=1"
+        return action_response(
+            "Чат отмечен непрочитанным." if action == "mark_unread" else "Чат отмечен прочитанным.",
+            _safe_next(request, fallback),
+            marked_unread=action == "mark_unread",
+        )
+    elif action == "pin":
         membership.is_pinned = not membership.is_pinned
         membership.save(update_fields=("is_pinned",))
         messages.success(request, "Чат закреплён." if membership.is_pinned else "Чат откреплён.")
@@ -2781,6 +2869,7 @@ def chat_action(request, chat_id):
                 ChatParticipant.objects.filter(chat=chat).update(
                     cleared_before_message_id=latest_id,
                     last_read_message=None,
+                    marked_unread_at=None,
                     draft_text="",
                     draft_updated_at=None,
                     last_typing_at=None,
@@ -2806,6 +2895,7 @@ def chat_action(request, chat_id):
                 ChatParticipant.objects.filter(chat=chat).update(
                     cleared_before_message_id=latest_id,
                     last_read_message=None,
+                    marked_unread_at=None,
                     draft_text="",
                     draft_updated_at=None,
                     last_typing_at=None,
@@ -2856,6 +2946,7 @@ def chat_action(request, chat_id):
                         draft_updated_at=None,
                         last_typing_at=None,
                         last_read_message=None,
+                        marked_unread_at=None,
                     )
                     PinnedMessage.objects.filter(chat=chat).delete()
                 return action_response(

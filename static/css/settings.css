@@ -980,3 +980,10 @@ body[data-theme="dark"] .tg-settings-search,
 body[data-theme="dark"] .tg-settings-session__icon {
   background: #2b2622;
 }
+
+a.tg-settings-danger-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}

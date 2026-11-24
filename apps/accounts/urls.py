@@ -27,6 +27,7 @@ urlpatterns = [
     path("password/reset/", account_security.password_reset_request, name="password_reset"),
     path("password/reset/sent/", account_security.password_reset_sent, name="password_reset_sent"),
     path("password/reset/confirm/<str:token>/", account_security.password_reset_confirm, name="password_reset_confirm"),
+    path("profile/delete/", account_security.delete_account, name="delete_account"),
     path("profile/email/", account_security.email_change_request, name="email_change"),
     path("profile/email/confirm/<str:token>/", account_security.email_change_confirm, name="email_change_confirm"),
     path("register/", register, name="register"),

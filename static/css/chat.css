@@ -1340,3 +1340,18 @@ body[data-theme="dark"] .chat-menu--telegram .chat-menu__mute-options {
   padding: 5px 9px; color: var(--red-soft); border: 1px solid currentColor;
   background: transparent; border-radius: 8px; cursor: pointer; font: inherit;
 }
+
+.sidebar-chat-context.chat-menu {
+  position: fixed;
+  right: auto;
+  bottom: auto;
+  width: min(250px, calc(100vw - 12px));
+  z-index: 200;
+}
+.chat-read-menu-icon {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+}
+.chat-read-menu-icon svg[hidden] { display: none !important; }
