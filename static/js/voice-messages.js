@@ -39,8 +39,12 @@
 
   function readNumber(key, fallback, min, max) {
     try {
-      const raw = Number(localStorage.getItem(key));
-      if (Number.isFinite(raw)) return Math.max(min, Math.min(max, raw));
+      const stored = localStorage.getItem(key);
+      // Number(null) and Number("") are 0, not a missing preference.
+      // A real, explicitly saved zero volume is still a valid choice.
+      if (stored === null || stored.trim() === "") return fallback;
+      const raw = Number(stored);
+      if (Number.isFinite(raw) && raw >= min && raw <= max) return raw;
     } catch (_error) {
       // Storage is optional.
     }
@@ -595,6 +599,9 @@
       value.textContent = speedLabel(voiceSpeed);
       speedRange.value = String(voiceSpeed);
       volumeRange.value = String(voiceVolume);
+      volumeRange.setAttribute("aria-valuetext", Math.round(voiceVolume * 100) + "%");
+      speedRange.setAttribute("aria-label", "Скорость воспроизведения");
+      speedRange.setAttribute("aria-valuetext", speedLabel(voiceSpeed));
       autoplayInput.checked = autoplayNext;
       presets.querySelectorAll("[data-voice-speed-preset]").forEach((button) => {
         button.classList.toggle(
@@ -620,6 +627,7 @@
       voiceVolume = Math.max(0, Math.min(1, Number(volumeRange.value)));
       store(VOLUME_KEY, voiceVolume);
       applyAllPlaybackSettings();
+      updateControls();
     });
     autoplayInput.addEventListener("change", () => {
       autoplayNext = autoplayInput.checked;
