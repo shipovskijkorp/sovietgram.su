@@ -26,10 +26,7 @@
     return tokens;
   }
 
-  function renderText(element, text) {
-    const value = String(text || "");
-    if (element.dataset.socialText === value) return;
-    element.replaceChildren();
+  function appendSocialText(element, value) {
     for (const token of tokenize(value)) {
       if (token.kind === "text") {
         element.appendChild(document.createTextNode(token.value));
@@ -56,6 +53,14 @@
         element.appendChild(link);
       }
     }
+  }
+
+  function renderText(element, text) {
+    const value = String(text || "");
+    if (element.dataset.socialText === value) return;
+    element.replaceChildren();
+    if (window.SovietgramFormat) window.SovietgramFormat.render(element, value, appendSocialText);
+    else appendSocialText(element, value);
     element.dataset.socialText = value;
   }
 

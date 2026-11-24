@@ -1112,7 +1112,7 @@ const chatDropOverlay = document.getElementById("chatDropOverlay");
 const MAX_ATTACHMENTS = 10;
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const MAX_TOTAL_SIZE = 100 * 1024 * 1024;
-const MEDIA_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp", "mp4", "webm", "mov", "m4v"]);
+const MEDIA_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp", "gif", "mp4", "webm", "mov", "m4v"]);
 const AUDIO_EXTENSIONS = new Set(["mp3", "m4a", "aac", "ogg", "oga", "wav", "flac", "opus"]);
 let selectedFiles = [];
 let selectedMode = "media";
@@ -1126,17 +1126,16 @@ function fileExtension(file) {
   const parts = file.name.toLowerCase().split(".");
   return parts.length > 1 ? parts.pop() : "";
 }
-function isGif(file) { return fileExtension(file) === "gif" || file.type.toLowerCase() === "image/gif"; }
 function isMediaFile(file) {
-  return !isGif(file) && MEDIA_EXTENSIONS.has(fileExtension(file)) && (file.type.startsWith("image/") || file.type.startsWith("video/"));
+  const type = (file.type || "").toLowerCase();
+  return MEDIA_EXTENSIONS.has(fileExtension(file)) && (!type || type.startsWith("image/") || type.startsWith("video/"));
 }
 function validateSelection(files, mode) {
   if (!files.length) return "Файлы не выбраны.";
   if (files.length > MAX_ATTACHMENTS) return `За раз можно отправить не больше ${MAX_ATTACHMENTS} файлов.`;
   let total = 0;
   for (const file of files) {
-    if (isGif(file)) return "GIF в Sovietgram пока отключены.";
-    if (mode === "media" && !isMediaFile(file)) return "В режиме фото и видео поддерживаются PNG, JPEG, WebP, MP4, WebM и MOV.";
+    if (mode === "media" && !isMediaFile(file)) return "В режиме фото и видео поддерживаются PNG, JPEG, WebP, GIF, MP4, WebM и MOV.";
     if (mode === "audio" && !(file.type.startsWith("audio/") || AUDIO_EXTENSIONS.has(fileExtension(file)))) {
       return "В разделе «Музыка» поддерживаются MP3, M4A, AAC, OGG, WAV, FLAC и OPUS.";
     }
@@ -1214,7 +1213,7 @@ function renderMediaSelection() {
       ? "Файлы будут отправлены без обработки."
       : selectedMode === "audio"
         ? "Аудио будет отправлено как музыка с встроенным проигрывателем."
-        : "Фото и видео будут показаны прямо в переписке.";
+        : "Фото, GIF и видео будут показаны прямо в переписке.";
   }
   if (mediaComposeGroupRow) mediaComposeGroupRow.hidden = selectedMode !== "media" || selectedFiles.length < 2;
 

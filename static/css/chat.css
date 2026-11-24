@@ -1443,3 +1443,37 @@ body[data-theme="dark"] .chat-menu--telegram .chat-menu__mute-options {
   background: color-mix(in srgb, var(--red) 10%, transparent);
 }
 .mention-suggestions small { color: var(--red-soft); font-size: 11px; }
+
+/* Message formatting and compact composer utilities. */
+.message__text { white-space: pre-wrap; }
+.message__text strong { font-weight: 750; }
+.message__text code { font: 0.94em ui-monospace, SFMono-Regular, Consolas, monospace; background: color-mix(in srgb, currentColor 9%, transparent); border-radius: 4px; padding: 1px 3px; overflow-wrap: anywhere; }
+.message__text .message-code-block { display: block; margin: 4px 0; padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.message__text .message-quote { display: block; margin: 3px 0; padding: 3px 8px; border-inline-start: 3px solid var(--red-soft); background: color-mix(in srgb, var(--red) 9%, transparent); border-radius: 3px 6px 6px 3px; }
+.message-spoiler { display: inline; padding: 0 2px; border: 0; border-radius: 3px; font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; cursor: pointer; background: color-mix(in srgb, currentColor 10%, transparent); color: inherit; }
+.message-spoiler[aria-expanded="false"] { color: transparent; background: var(--red-soft); text-shadow: none; user-select: none; }
+.message-spoiler:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+.composer-tools { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 1px; }
+.composer__field .composer-tools { align-self: flex-end; padding-inline-start: 3px; }
+.composer__field #messageInput { flex: 1 1 auto; width: 0; }
+.composer-tool-button { display: grid; place-items: center; width: 28px; height: 28px; padding: 3px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); opacity: .65; cursor: pointer; }
+.composer-tool-button svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.composer-tool-button:hover, .composer-tool-button[aria-expanded="true"] { opacity: 1; color: var(--red-soft); background: color-mix(in srgb, var(--red) 10%, transparent); }
+.media-compose-caption .composer-tools, .chat-modal__body .composer-tools { justify-content: flex-end; }
+.composer-tools-popup[hidden] { display: none !important; }
+.composer-tools-popup { position: fixed; z-index: 1100; box-sizing: border-box; max-height: calc(100dvh - 16px); overflow: auto; display: grid; gap: 9px; padding: 10px; color: var(--ink); background: var(--panel, #fffaf1); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 36px #0004; }
+.composer-tools-popup > strong { font-size: 12px; }
+.composer-tools-popup > small { opacity: .72; font-size: 11px; line-height: 1.4; }
+.composer-format-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 4px; }
+.composer-format-option, .composer-emoji-option, .composer-emoji-tab { display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; font: inherit; padding: 5px 0; min-height: 32px; }
+.composer-format-option { background: color-mix(in srgb, currentColor 6%, transparent); }
+.composer-format-option[data-format-style="bold"] { font-weight: 800; }
+.composer-format-option[data-format-style="italic"] { font-style: italic; }
+.composer-format-option[data-format-style="underline"] { text-decoration: underline; }
+.composer-format-option[data-format-style="strike"] { text-decoration: line-through; }
+.composer-emoji-tabs { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 2px; border-bottom: 1px solid var(--line); padding-bottom: 5px; }
+.composer-emoji-grid { display: grid; grid-template-columns: repeat(8,minmax(0,1fr)); gap: 2px; max-height: min(220px, 42vh); overflow-y: auto; }
+.composer-emoji-option { font-size: 22px; }
+.composer-emoji-tab { font-size: 18px; }
+.composer-emoji-tab[aria-pressed="true"], .composer-format-option:hover, .composer-emoji-option:hover, .composer-emoji-tab:hover { background: color-mix(in srgb, var(--red) 15%, transparent); }
+.composer-emoji-empty { grid-column: 1 / -1; padding: 8px 3px; opacity: .7; }

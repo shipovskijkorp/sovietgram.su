@@ -12,7 +12,7 @@ MAX_ATTACHMENTS = 10
 MAX_FILE_SIZE = 25 * 1024 * 1024
 MAX_TOTAL_SIZE = 100 * 1024 * 1024
 MEDIA_EXTENSIONS = {
-    ".png", ".jpg", ".jpeg", ".webp",
+    ".png", ".jpg", ".jpeg", ".webp", ".gif",
     ".mp4", ".webm", ".mov", ".m4v",
 }
 AUDIO_EXTENSIONS = {
@@ -49,7 +49,10 @@ IMAGE_FORMATS = {
     ".jpeg": {"JPEG"},
     ".webp": {"WEBP"},
 }
+# GIF is allowed in messages, not in profile/community avatars.
+MESSAGE_IMAGE_FORMATS = {**IMAGE_FORMATS, ".gif": {"GIF"}}
 MEDIA_CONTENT_TYPES = {
+    ".gif": {"image/gif"},
     ".png": {"image/png"},
     ".jpg": {"image/jpeg"},
     ".jpeg": {"image/jpeg"},
@@ -61,6 +64,37 @@ MEDIA_CONTENT_TYPES = {
 }
 MAX_IMAGE_DIMENSION = 12_000
 MAX_IMAGE_PIXELS = 40_000_000
+MAX_GIF_DIMENSION = 4096
+MAX_GIF_FRAME_PIXELS = 4_000_000
+MAX_GIF_FRAMES = 300
+MAX_GIF_TOTAL_PIXELS = 80_000_000
+
+
+def _validate_gif_frames(image):
+    # Decode actual frames, not just the GIF header. Cap decompressed work
+    # before loading each frame, and do not scan an unbounded n_frames.
+    total_pixels = 0
+    for index in range(MAX_GIF_FRAMES + 1):
+        try:
+            image.seek(index)
+        except EOFError:
+            if index == 0:
+                raise forms.ValidationError("GIF не содержит кадров.")
+            return
+        width, height = image.size
+        pixels = width * height
+        total_pixels += pixels
+        if (
+            index >= MAX_GIF_FRAMES
+            or width > MAX_GIF_DIMENSION or height > MAX_GIF_DIMENSION
+            or pixels > MAX_GIF_FRAME_PIXELS
+            or total_pixels > MAX_GIF_TOTAL_PIXELS
+        ):
+            raise forms.ValidationError(
+                "GIF слишком сложный: максимум 300 кадров, 4096 пикселей по стороне, "
+                "4 мегапикселя на кадр и 80 мегапикселей суммарно."
+            )
+        image.load()
 
 
 def _validate_inline_image(uploaded, extension):
@@ -77,14 +111,17 @@ def _validate_inline_image(uploaded, extension):
                 raise forms.ValidationError(
                     f"Изображение не должно превышать {MAX_IMAGE_PIXELS // 1_000_000} мегапикселей."
                 )
-            if image_format not in IMAGE_FORMATS.get(extension, set()):
+            if image_format not in MESSAGE_IMAGE_FORMATS.get(extension, set()):
                 raise forms.ValidationError(
                     "Расширение изображения не соответствует его реальному формату."
                 )
-            image.verify()
+            if extension == ".gif":
+                _validate_gif_frames(image)
+            else:
+                image.verify()
     except forms.ValidationError:
         raise
-    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError):
+    except (UnidentifiedImageError, OSError, ValueError, EOFError, SyntaxError, Image.DecompressionBombError):
         raise forms.ValidationError("Файл не является корректным поддерживаемым изображением.")
     finally:
         if hasattr(uploaded, "seek"):
@@ -152,8 +189,19 @@ class MessageForm(forms.Form):
         for uploaded in files:
             extension = Path(uploaded.name).suffix.lower()
             content_type = (getattr(uploaded, "content_type", "") or "").lower()
+            # Enforce size limits before decoding untrusted images.
+            if uploaded.size > MAX_FILE_SIZE:
+                raise forms.ValidationError("Один файл должен быть не больше 25 МБ.")
+            total_size += uploaded.size
+            if total_size > MAX_TOTAL_SIZE:
+                raise forms.ValidationError(
+                    "Общий размер вложений должен быть не больше 100 МБ."
+                )
             if extension == ".gif" or content_type == "image/gif":
-                raise forms.ValidationError("GIF в Sovietgram пока отключены.")
+                if extension != ".gif":
+                    raise forms.ValidationError("Расширение GIF не соответствует MIME-типу.")
+                if mode == self.MODE_FILE:
+                    _validate_inline_image(uploaded, extension)
             if mode == self.MODE_MEDIA:
                 if extension not in MEDIA_EXTENSIONS:
                     raise forms.ValidationError(
@@ -164,7 +212,7 @@ class MessageForm(forms.Form):
                     raise forms.ValidationError(
                         "MIME-тип файла не соответствует его расширению."
                     )
-                if extension in IMAGE_FORMATS:
+                if extension in MESSAGE_IMAGE_FORMATS:
                     _validate_inline_image(uploaded, extension)
             elif mode == self.MODE_AUDIO:
                 if extension not in AUDIO_EXTENSIONS:
@@ -185,14 +233,6 @@ class MessageForm(forms.Form):
                     raise forms.ValidationError(
                         "Файл не распознан как голосовое сообщение."
                     )
-            if uploaded.size > MAX_FILE_SIZE:
-                raise forms.ValidationError("Один файл должен быть не больше 25 МБ.")
-            total_size += uploaded.size
-
-        if total_size > MAX_TOTAL_SIZE:
-            raise forms.ValidationError(
-                "Общий размер вложений должен быть не больше 100 МБ."
-            )
         return files
 
     def clean_voice_waveform(self):

@@ -30,7 +30,7 @@
   const MAX_ATTACHMENTS = 10;
   const MAX_FILE_SIZE = 25 * 1024 * 1024;
   const MAX_TOTAL_SIZE = 100 * 1024 * 1024;
-  const MEDIA_EXTENSIONS = new Set(["png","jpg","jpeg","webp","mp4","webm","mov","m4v"]);
+  const MEDIA_EXTENSIONS = new Set(["png","jpg","jpeg","webp","gif","mp4","webm","mov","m4v"]);
   const AUDIO_EXTENSIONS = new Set(["mp3","m4a","aac","ogg","oga","wav","flac","opus"]);
 
   let selectedFiles = [];
@@ -86,11 +86,8 @@
 
     let total = 0;
     for (const file of files) {
-      if (extension(file) === "gif" || file.type === "image/gif") {
-        return "GIF в Sovietgram пока отключены.";
-      }
       if (mode === "media" && !isMedia(file)) {
-        return "Для «Фото или видео» выберите PNG, JPEG, WebP, MP4, WebM, MOV или M4V.";
+        return "Для «Фото или видео» выберите PNG, JPEG, WebP, GIF, MP4, WebM, MOV или M4V.";
       }
       if (mode === "audio" && !isAudio(file)) {
         return "Для «Музыка» выберите MP3, M4A, AAC, OGG, WAV, FLAC или OPUS.";
@@ -162,7 +159,7 @@
 
     if (hintNode) {
       hintNode.textContent = selectedMode === "media"
-        ? "Фото и видео будут показаны прямо в переписке."
+        ? "Фото, GIF и видео будут показаны прямо в переписке."
         : selectedMode === "audio"
           ? "Музыка будет отправлена со встроенным проигрывателем."
           : "Документы будут отправлены без обработки.";

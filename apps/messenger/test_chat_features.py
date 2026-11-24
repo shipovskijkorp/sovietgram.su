@@ -1529,7 +1529,7 @@ class ChatFeatureTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(Message.objects.exists())
 
-    def test_gif_upload_is_rejected(self):
+    def test_malformed_gif_upload_is_rejected(self):
         upload = SimpleUploadedFile("animation.gif", b"GIF89a", content_type="image/gif")
         response = self.client.post(
             reverse("messenger:send_message", args=[self.chat.pk]),

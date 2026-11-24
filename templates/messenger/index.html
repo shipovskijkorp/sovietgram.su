@@ -564,12 +564,13 @@
             {% endif %}
           </div>
         </div>
-        <input id="mediaAttachmentsInput" class="visually-hidden" type="file" name="attachments" multiple accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,video/quicktime,video/x-m4v">
+        <input id="mediaAttachmentsInput" class="visually-hidden" type="file" name="attachments" multiple accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime,video/x-m4v">
         <input id="fileAttachmentsInput" class="visually-hidden" type="file" name="attachments" multiple>
         <input id="audioAttachmentsInput" class="visually-hidden" type="file" name="attachments" multiple accept="audio/mpeg,audio/mp4,audio/aac,audio/ogg,audio/wav,audio/x-wav,audio/flac,audio/x-flac,audio/opus,.mp3,.m4a,.aac,.ogg,.oga,.wav,.flac,.opus">
         <input id="attachmentModeInput" type="hidden" name="attachment_mode" value="media">
         <div class="composer__field">
           <textarea id="messageInput" name="text" rows="1" maxlength="4096" placeholder="{% if not can_send_text and can_send_media %}Можно отправлять только медиа{% else %}Сообщение{% endif %}" autocomplete="off"{% if not can_send_text %} readonly{% endif %}>{{ composer_draft_text }}</textarea>
+          {% if can_send_text %}{% include 'messenger/_composer_tools.html' with editor_id="messageInput" %}{% endif %}
         </div>
         <button class="send-button composer-action-button{% if can_record_voice and not composer_draft_text %} is-voice-mode{% endif %}"
                 id="sendButton"
@@ -620,9 +621,9 @@
       <span><strong>Сгруппировать медиа</strong><small>Отправить выбранное одним альбомом</small></span>
       <span class="media-compose-switch"><input id="mediaComposeGroup" type="checkbox" checked><span><i></i></span></span>
     </label>
-    <div class="media-compose-caption"><textarea id="mediaComposeCaption" rows="1" maxlength="4096" placeholder="Добавить подпись…"></textarea></div>
+    <div class="media-compose-caption"><textarea id="mediaComposeCaption" rows="1" maxlength="4096" placeholder="Добавить подпись…"></textarea>{% if can_send_text %}{% include 'messenger/_composer_tools.html' with editor_id="mediaComposeCaption" %}{% endif %}</div>
     <div class="media-upload-progress" id="mediaUploadProgress" hidden><span id="mediaUploadProgressBar"></span></div>
-    <footer class="media-compose-footer"><small id="mediaComposeHint">Фото и видео будут отправлены как медиа.</small><button class="media-compose-send" id="mediaComposeSend" type="button">Отправить</button></footer>
+    <footer class="media-compose-footer"><small id="mediaComposeHint">Фото, GIF и видео будут отправлены как медиа.</small><button class="media-compose-send" id="mediaComposeSend" type="button">Отправить</button></footer>
   </section>
 </div>
 
@@ -811,7 +812,7 @@
 <div class="chat-modal-backdrop" id="editMessageModal" hidden>
   <section class="chat-modal" role="dialog" aria-modal="true" aria-labelledby="editMessageTitle">
     <header><strong id="editMessageTitle">Изменить сообщение</strong><button type="button" data-close-edit><span class="tg-native-icon tg-native-icon--close tg-native-icon--compact" aria-hidden="true"></span></button></header>
-    <div class="chat-modal__body"><textarea id="editMessageText" maxlength="4096" rows="6" placeholder="Сообщение"></textarea></div>
+    <div class="chat-modal__body"><textarea id="editMessageText" maxlength="4096" rows="6" placeholder="Сообщение"></textarea>{% include 'messenger/_composer_tools.html' with editor_id="editMessageText" %}</div>
     <footer><button class="chat-modal__secondary" type="button" data-close-edit>Отмена</button><button class="chat-modal__primary" id="editMessageSave" type="button">Сохранить</button></footer>
   </section>
 </div>
@@ -1102,7 +1103,9 @@
 
 {% block extra_scripts %}
 <script src="{% static 'js/send-retry.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/message-format.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/message-social.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/composer-tools.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/attachment-menu.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/attachment-files.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/chat.js' %}?v={{ static_version }}"></script>
