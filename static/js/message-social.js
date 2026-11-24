@@ -55,12 +55,21 @@
     }
   }
 
-  function renderText(element, text) {
+  function renderText(element, text, markdownHtml) {
     const value = String(text || "");
-    if (element.dataset.socialText === value) return;
-    element.replaceChildren();
-    if (window.SovietgramFormat) window.SovietgramFormat.render(element, value, appendSocialText);
-    else appendSocialText(element, value);
+    const serverRendered = typeof markdownHtml === "string";
+    if (element.dataset.socialText === value &&
+        (!serverRendered || element.dataset.markdownRendered === "true")) return;
+    if (serverRendered) {
+      // Only the server's independent Markdown renderer + sanitizer may
+      // provide HTML. Never substitute the raw message or draft here.
+      element.innerHTML = markdownHtml;
+      element.dataset.markdownRendered = "true";
+    } else {
+      element.replaceChildren();
+      appendSocialText(element, value);
+      delete element.dataset.markdownRendered;
+    }
     element.dataset.socialText = value;
   }
 
@@ -154,10 +163,41 @@
   if (!stage) return;
   document.querySelectorAll(".message[data-message-id]").forEach(article => {
     const paragraph = article.querySelector(".message__text");
-    if (paragraph) renderText(paragraph, article.dataset.messageText || "");
+    if (!paragraph) return;
+    if (paragraph.dataset.markdownRendered === "true") {
+      paragraph.dataset.socialText = article.dataset.messageText || "";
+    } else renderText(paragraph, article.dataset.messageText || "");
   });
 
   document.addEventListener("click", event => {
+    const spoiler = event.target.closest?.(".markdown-body .message-spoiler");
+    if (spoiler) {
+      event.preventDefault();
+      const expanded = spoiler.getAttribute("aria-expanded") === "true";
+      spoiler.setAttribute("aria-expanded", String(!expanded));
+      spoiler.setAttribute("aria-label", expanded ? "Показать скрытый текст" : spoiler.textContent + ". Скрыть текст");
+      return;
+    }
+    const imageButton = event.target.closest?.(".markdown-body [data-markdown-image-url]");
+    if (imageButton) {
+      event.preventDefault();
+      try {
+        const url = new URL(imageButton.dataset.markdownImageUrl);
+        if (!["https:", "http:"].includes(url.protocol)) return;
+        const image = document.createElement("img");
+        image.className = "markdown-inline-image";
+        image.alt = imageButton.dataset.markdownImageAlt || "Изображение";
+        image.referrerPolicy = "no-referrer";
+        image.loading = "lazy";
+        image.decoding = "async";
+        image.addEventListener("error", () => {
+          if (image.isConnected) image.replaceWith(imageButton);
+        }, { once: true });
+        image.src = url.href;
+        imageButton.replaceWith(image);
+      } catch (_error) { /* Invalid URLs remain inert. */ }
+      return;
+    }
     const reaction = event.target.closest?.("[data-message-reaction]");
     if (reaction) {
       event.preventDefault();

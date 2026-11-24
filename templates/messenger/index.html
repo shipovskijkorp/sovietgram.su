@@ -273,6 +273,7 @@
                data-draft-url="{{ draft_url }}"
                data-typing-url="{{ typing_url }}"
                data-mention-url="{{ mention_url }}"
+               data-markdown-preview-url="{{ markdown_preview_url }}"
                data-mention-profile-prefix="{{ mention_profile_prefix }}"
                data-server-time="{{ server_time }}"
                data-other-last-read="{{ other_last_read_id }}"
@@ -472,7 +473,7 @@
                 {% endif %}
               {% endwith %}
 
-              {% if message.text and not message.special_type %}<p class="message__text">{{ message.text|urlize|linebreaksbr }}</p>{% endif %}
+              {% if message.text and not message.special_type %}<div class="message__text markdown-body" data-markdown-rendered="true">{{ message.markdown_html_ui|safe }}</div>{% endif %}
               <div class="message-reactions" data-message-reactions {% if not message.reactions_ui %}hidden{% endif %}>
                 {% for reaction in message.reactions_ui %}
                   <button class="message-reaction" type="button" data-message-reaction="{{ reaction.emoji }}" aria-pressed="{{ reaction.selected|yesno:'true,false' }}" aria-label="{{ reaction.emoji }} · {{ reaction.count }}"><span>{{ reaction.emoji }}</span><small>{{ reaction.count }}</small></button>

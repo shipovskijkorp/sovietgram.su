@@ -3,3 +3,7 @@ python-dotenv>=1.0,<2.0
 Pillow>=11,<13
 psycopg[binary]>=3.2,<4
 tzdata>=2025.2
+markdown-it-py[linkify]==4.3.0
+mdit-py-plugins>=0.5,<0.7
+nh3>=0.2.21,<0.4
+Pygments>=2.19,<3

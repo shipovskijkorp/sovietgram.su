@@ -419,9 +419,10 @@ function renderMessage(message) {
   }
 
   if (message.text) {
-    const paragraph = document.createElement("p");
-    paragraph.className = "message__text";
-    paragraph.textContent = message.text;
+    const paragraph = document.createElement("div");
+    paragraph.className = "message__text markdown-body";
+    if (window.SovietgramSocial) window.SovietgramSocial.renderText(paragraph, message.text, message.markdown_html);
+    else paragraph.textContent = message.text;
     article.appendChild(paragraph);
   }
 
@@ -535,7 +536,7 @@ async function sendSelectedMedia() {
   }
 
   const files = [...selectedFiles];
-  const caption = mediaComposeCaption?.value.trim() || "";
+  const caption = mediaComposeCaption?.value || "";
   const sendSeparately = selectedMode === "media" && files.length > 1 && mediaComposeGroup && !mediaComposeGroup.checked;
   const totalBytes = Math.max(1, files.reduce((sum, file) => sum + file.size, 0));
   let uploadedBefore = 0;

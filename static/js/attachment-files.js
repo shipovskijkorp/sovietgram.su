@@ -367,7 +367,7 @@
     }
 
     const files = [...selectedFiles];
-    const caption = captionNode?.value.trim() || "";
+    const caption = captionNode?.value || "";
     const replyTo = replyInput?.value || "";
     const separate = selectedMode === "media"
       && files.length > 1

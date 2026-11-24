@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from apps.accounts.privacy import privacy_allows
 
+from .markdown import render_message_markdown
 from .models import (
     Chat,
     ChatParticipant,
@@ -451,6 +452,10 @@ def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=No
     return {
         "id": message.pk,
         "text": "" if message.is_deleted else message.text,
+        "markdown_html": (
+            render_message_markdown(message.text, f"message-{message.pk}")
+            if not message.is_deleted and not message.special_type else ""
+        ),
         "sender_id": message.sender_id,
         "sender_name": message.sender.display_name,
         "sender_username": message.sender.username,

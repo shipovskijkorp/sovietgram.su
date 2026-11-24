@@ -7,7 +7,7 @@ const read = name => fs.readFileSync(path.join(__dirname,"..",name),"utf8");
 
 function element(tag) {
   return {
-    tag,children:[],attributes:{},dataset:{},handlers:{},
+    tag,children:[],attributes:{},dataset:{},handlers:{},innerHTML:"",
     appendChild(child) {this.children.push(child);return child;},
     replaceChildren(...children) {this.children=children;},
     setAttribute(key,value) {this.attributes[key]=value;},
@@ -32,51 +32,52 @@ function load() {
 }
 const plain=value=>JSON.parse(JSON.stringify(value));
 
-test("each markup type is rendered as a safe DOM element",()=>{
+test("server-rendered Markdown is used instead of the raw source",()=>{
   const {SovietgramSocial:social}=load();
-  const root=element("p");
-  social.renderText(root,"**bold** *italic* __underline__ ~~strike~~ ||secret|| \x60code\x60\n> quote\n\x60\x60\x60\nx < y\n\x60\x60\x60");
-  assert.deepEqual(root.children.filter(node=>node.tag!=="#text").map(node=>node.tag),["strong","em","u","s","button","code","span","code"]);
-  const spoiler=root.children.find(node=>node.tag==="button");
-  assert.equal(spoiler.getAttribute("aria-expanded"),"false");
-  spoiler.handlers.click();
-  assert.equal(spoiler.getAttribute("aria-expanded"),"true");
-  const code=root.children.at(-1);
-  assert.equal(code.textContent,"x < y");
-  assert.equal(code.className,"message-code-block");
+  const root=element("div");
+  const source="# Heading\n\n**text**";
+  const safe="<h1>Heading</h1>\n<p><strong>text</strong></p>";
+  social.renderText(root,source,safe);
+  assert.equal(root.innerHTML,safe);
+  assert.equal(root.dataset.markdownRendered,"true");
+  assert.equal(root.dataset.socialText,source);
+  social.renderText(root,source,safe);
+  assert.equal(root.innerHTML,safe);
+  social.renderText(root,"## Updated","<h2>Updated</h2>");
+  assert.equal(root.innerHTML,"<h2>Updated</h2>");
 });
 
-test("literal HTML, URLs, escaped markers and incomplete markup remain safe",()=>{
-  const {SovietgramFormat:format,SovietgramSocial:social}=load();
-  const source="https://example.org/a__b__ @foo__bar__ #a__b__ \\*literal\\* **incomplete";
-  assert.deepEqual(plain(format.parse(source)),[{kind:"text",text:"https://example.org/a__b__ @foo__bar__ #a__b__ *literal* **incomplete"}]);
-  const root=element("p");
-  social.renderText(root,"**<img src=x onerror=alert(1)>** **@alice** \x60#notatag\x60");
-  assert.equal(root.children[0].children[0].textContent,"<img src=x onerror=alert(1)>");
-  const mention=root.children.find(node=>node.tag==="strong"&&node.children[0].tag==="a").children[0];
-  assert.equal(mention.href,"/u/alice/");
-  assert.equal(root.children.at(-1).textContent,"#notatag");
+test("plain text fallback never interprets raw HTML as markup",()=>{
+  const {SovietgramSocial:social}=load();
+  const root=element("div");
+  social.renderText(root,"<img src=x onerror=alert(1)> @alice");
+  assert.equal(root.innerHTML,"");
+  assert.equal(root.children[0].textContent,"<img src=x onerror=alert(1)> ");
+  assert.equal(root.children[1].href,"/u/alice/");
 });
 
-test("style combinations and selection formatting toggle correctly",()=>{
+test("bold and italic selection toggles preserve the other style",()=>{
   const {SovietgramFormat:format}=load();
   const first=plain(format.wrapSelection("hello world",6,11,"bold"));
   assert.deepEqual(first,{text:"hello **world**",start:8,end:13});
   assert.deepEqual(plain(format.wrapSelection(first.text,first.start,first.end,"bold")),{text:"hello world",start:6,end:11});
   const combined=plain(format.wrapSelection(first.text,first.start,first.end,"italic"));
   assert.equal(combined.text,"hello ***world***");
-  assert.equal(format.parse(combined.text)[1].kind,"boldItalic");
+  assert.deepEqual(plain(format.wrapSelection(combined.text,combined.start,combined.end,"italic")),first);
   const empty=plain(format.wrapSelection("hello",5,5,"underline"));
-  assert.deepEqual(empty,{text:"hello____",start:7,end:7});
+  assert.deepEqual(empty,{text:"hello++++",start:7,end:7});
 });
 
-test("quotes wrap selected complete lines and code preserves whitespace",()=>{
+test("block insertion adds standard Markdown syntax",()=>{
   const {SovietgramFormat:format}=load();
   const quote=plain(format.wrapSelection("one\ntwo\nthree",1,6,"quote"));
   assert.equal(quote.text,"> one\n> two\nthree");
-  assert.equal(format.parse(quote.text)[0].kind,"quote");
-  const block=plain(format.wrapSelection("  a\n b",0,6,"block"));
-  assert.equal(format.parse(block.text)[0].text,"  a\n b");
+  assert.equal(format.wrapSelection("one\ntwo",0,7,"list").text,"- one\n- two");
+  assert.equal(format.wrapSelection("one\ntwo",0,7,"ordered").text,"1. one\n2. two");
+  assert.equal(format.wrapSelection("one",0,3,"task").text,"- [ ] one");
+  assert.equal(format.wrapSelection("title",0,5,"heading").text,"## title");
+  assert.match(format.wrapSelection("",0,0,"table").text,/\| --- \| --- \|/);
+  assert.equal(format.wrapSelection("link",0,4,"link").text,"[link](https://example.com)");
 });
 
 test("emoji insertion keeps Unicode clusters and a bounded deduplicated history",()=>{
@@ -85,20 +86,18 @@ test("emoji insertion keeps Unicode clusters and a bounded deduplicated history"
   assert.deepEqual(plain(tools.insertEmoji("aXb",1,2,emoji)),{text:"a"+emoji+"b",start:1+emoji.length,end:1+emoji.length});
   const all=tools.groups.flatMap(group=>group.values);
   assert.ok(all.length>200);
-  const history=tools.addRecent(["😀","😂","bad","😀"],"😀");
-  assert.deepEqual(plain(history),["😀","😂"]);
+  assert.deepEqual(plain(tools.addRecent(["😀","😂","bad","😀"],"😀")),["😀","😂"]);
   assert.equal(tools.addRecent(all.slice(0,50),all[55]).length,24);
 });
 
-test("composer tools are loaded before chat and the GIF input is enabled",()=>{
+test("initial, dynamic, edited and preview messages use the same server HTML",()=>{
   const template=read("templates/messenger/index.html");
-  assert.ok(template.indexOf("js/message-format.js")<template.indexOf("js/message-social.js"));
-  assert.ok(template.indexOf("js/composer-tools.js")<template.indexOf("js/chat.js"));
+  assert.match(template,/message.markdown_html_ui\|safe/);
+  assert.match(template,/data-markdown-rendered="true"/);
+  assert.match(template,/data-markdown-preview-url/);
+  assert.match(read("static/js/chat.js"),/linkifyInto\(paragraph, message.text, message.markdown_html\)/);
+  assert.match(read("static/js/chat-controls.js"),/renderText\(paragraph, message.text, message.markdown_html\)/);
+  assert.match(read("static/js/composer-tools.js"),/renderText\(body,text,result.markdown_html\)/);
+  assert.match(read("static/js/message-social.js"),/image.referrerPolicy = "no-referrer"/);
   assert.match(template,/image\/webp,image\/gif,video\/mp4/);
-  const picker=read("templates/messenger/_composer_tools.html");
-  assert.match(picker,/data-compose-panel="format"/);
-  assert.match(picker,/data-compose-panel="emoji"/);
-  for (const file of ["chat.js","attachment-files.js"]) {
-    assert.doesNotMatch(read("static/js/"+file),/GIF в Sovietgram пока отключены/);
-  }
 });

@@ -61,6 +61,7 @@ from apps.accounts.privacy import (
 )
 
 from .forms import CommunityForm, EditMessageForm, MessageForm
+from .markdown import render_message_markdown
 from .models import (
     Chat,
     ChatParticipant,
@@ -936,6 +937,10 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
         message.is_pinned_ui = message.pk in pinned_ids
         message.is_read_ui = message.sender_id == user.pk and message.pk <= other_last_read_id
         message.reactions_ui = serialize_reactions(message, user)
+        message.markdown_html_ui = (
+            render_message_markdown(message.text, f"message-{message.pk}")
+            if not message.is_deleted and not message.special_type else ""
+        )
 
     voice_listened_attachment_ids = set(
         VoiceMessagePlayback.objects.filter(
@@ -975,6 +980,7 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
             "voice_listened_attachment_ids": voice_listened_attachment_ids,
             "search_url": reverse("messenger:search_messages", args=[selected_chat.pk]),
             "mention_url": reverse("messenger:mention_candidates", args=[selected_chat.pk]),
+            "markdown_preview_url": reverse("messenger:markdown_preview", args=[selected_chat.pk]),
             "reaction_choices": MessageReaction.Emoji.choices,
             "mention_profile_prefix": reverse("accounts:public_profile", args=["__mention__"]).split("__mention__")[0],
             "draft_url": reverse("messenger:save_draft", args=[selected_chat.pk]),
@@ -2667,6 +2673,22 @@ def _message_search_condition(query):
     if re.fullmatch(r"@[\w.+-]{1,119}", query):
         return Q(text__iregex=r"(^|[^\w@.+/-])" + re.escape(query) + r"(?![\w+-]|\.[\w])")
     return None
+
+
+@login_required
+@require_POST
+@rate_limit("markdown_preview")
+def markdown_preview(request, chat_id):
+    _chat_for_user(request.user, chat_id)
+    text = request.POST.get("text", "")
+    if len(text) > 4096:
+        return JsonResponse({"ok": False, "error": "Сообщение слишком длинное."}, status=400)
+    response = JsonResponse({
+        "ok": True,
+        "markdown_html": render_message_markdown(text, "composer-preview"),
+    })
+    response["Cache-Control"] = "private, no-store"
+    return response
 
 
 @login_required

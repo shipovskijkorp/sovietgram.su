@@ -151,7 +151,7 @@ class MessageForm(forms.Form):
     MODE_AUDIO = "audio"
     MODE_VOICE = "voice"
 
-    text = forms.CharField(required=False, max_length=4096)
+    text = forms.CharField(required=False, max_length=4096, strip=False)
     reply_to = forms.IntegerField(required=False, min_value=1)
     attachment_mode = forms.ChoiceField(
         required=False,
@@ -172,7 +172,9 @@ class MessageForm(forms.Form):
     voice_waveform = forms.CharField(required=False, max_length=4096)
 
     def clean_text(self):
-        return self.cleaned_data.get("text", "").strip()
+        text = self.cleaned_data.get("text", "")
+        # Preserve indentation and Markdown hard breaks, but reject whitespace-only text.
+        return text if text.strip() else ""
 
     def clean_attachment_mode(self):
         return self.cleaned_data.get("attachment_mode") or self.MODE_MEDIA
@@ -277,10 +279,12 @@ class MessageForm(forms.Form):
 
 
 class EditMessageForm(forms.Form):
-    text = forms.CharField(required=False, max_length=4096)
+    text = forms.CharField(required=False, max_length=4096, strip=False)
 
     def clean_text(self):
-        return self.cleaned_data.get("text", "").strip()
+        text = self.cleaned_data.get("text", "")
+        # Preserve indentation and Markdown hard breaks, but reject whitespace-only text.
+        return text if text.strip() else ""
 
 
 class CommunityForm(forms.Form):

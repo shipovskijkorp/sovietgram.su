@@ -738,11 +738,11 @@
       let paragraph = editArticle.querySelector(".message__text");
       if (message.text) {
         if (!paragraph) {
-          paragraph = document.createElement("p");
-          paragraph.className = "message__text";
+          paragraph = document.createElement("div");
+          paragraph.className = "message__text markdown-body";
           editArticle.insertBefore(paragraph, editArticle.querySelector("[data-message-reactions]") || editArticle.querySelector("footer"));
         }
-        window.SovietgramSocial.renderText(paragraph, message.text);
+        window.SovietgramSocial.renderText(paragraph, message.text, message.markdown_html);
       } else {
         paragraph?.remove();
       }

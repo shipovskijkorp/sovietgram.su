@@ -186,8 +186,8 @@ function clearReplyState() {
 
 composerReplyClose?.addEventListener("click", clearReplyState);
 
-function linkifyInto(element, text) {
-  window.SovietgramSocial.renderText(element, text);
+function linkifyInto(element, text, markdownHtml) {
+  window.SovietgramSocial.renderText(element, text, markdownHtml);
 }
 
 function makeFileCard(attachment) {
@@ -401,9 +401,9 @@ function buildMessageArticle(message) {
   }
 
   if (message.text && !message.special) {
-    const paragraph = document.createElement("p");
-    paragraph.className = "message__text";
-    linkifyInto(paragraph, message.text);
+    const paragraph = document.createElement("div");
+    paragraph.className = "message__text markdown-body";
+    linkifyInto(paragraph, message.text, message.markdown_html);
     article.appendChild(paragraph);
   }
 
@@ -529,11 +529,11 @@ function applyMessageUpdate(message) {
   let paragraph = article.querySelector(".message__text");
   if (message.text && !message.special) {
     if (!paragraph) {
-      paragraph = document.createElement("p");
-      paragraph.className = "message__text";
+      paragraph = document.createElement("div");
+      paragraph.className = "message__text markdown-body";
       article.insertBefore(paragraph, article.querySelector("[data-message-reactions]") || article.querySelector("footer"));
     }
-    linkifyInto(paragraph, message.text);
+    linkifyInto(paragraph, message.text, message.markdown_html);
   } else {
     paragraph?.remove();
   }
@@ -1325,7 +1325,7 @@ async function sendSelectedMedia() {
   const validationError = validateSelection(selectedFiles, selectedMode);
   if (validationError) { notify(validationError); return; }
   const files = [...selectedFiles];
-  const caption = mediaComposeCaption?.value.trim() || "";
+  const caption = mediaComposeCaption?.value || "";
   const replyId = replyToInput?.value || "";
   const separately = selectedMode === "media" && files.length > 1 && mediaComposeGroup && !mediaComposeGroup.checked;
   const totalBytes = Math.max(1, files.reduce((sum, file) => sum + file.size, 0));

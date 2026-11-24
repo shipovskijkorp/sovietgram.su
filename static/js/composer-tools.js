@@ -35,6 +35,10 @@
     ["underline","U","Подчёркнутый · Ctrl+U"],["strike","S","Зачёркнутый"],
     ["spoiler","◩","Спойлер"],["code","</>","Моноширинный"],
     ["block","{ }","Блок кода"],["quote","❞","Цитата"],
+    ["heading","H2","Заголовок"],["list","•","Маркированный список"],
+    ["ordered","1.","Нумерованный список"],["task","☑","Список задач"],
+    ["link","↗","Ссылка"],["image","▧","Изображение по URL"],
+    ["table","▦","Таблица"],["rule","—","Разделитель"],
   ];
   function close(focus=false) {
     if (trigger) trigger.setAttribute("aria-expanded","false");
@@ -90,8 +94,37 @@
       grid.appendChild(item);
     }
     const hint=document.createElement("small");
-    hint.textContent="Выделите текст или выберите стиль перед вводом. Разметка применяется при отправке.";
-    popup.replaceChildren(heading,grid,hint);
+    hint.textContent="CommonMark / GFM. Выделите текст или вставьте Markdown. Подчёркивание: ++текст++; спойлер: ||текст||.";
+    const preview=button("Предпросмотр","Предпросмотр Markdown",()=>void drawPreview(),"composer-markdown-preview-button");
+    popup.replaceChildren(heading,grid,hint,preview);
+  }
+  async function drawPreview() {
+    const editor=target;
+    const stage=document.getElementById("messageStage");
+    const url=stage?.dataset.markdownPreviewUrl;
+    if (!editor||!url) return;
+    const text=editor.value;
+    const heading=document.createElement("strong");heading.textContent="Предпросмотр Markdown";
+    const body=document.createElement("div");body.className="message__text markdown-body composer-markdown-preview";
+    body.textContent="Загрузка…";
+    const back=button("Назад","К форматированию",()=>{drawFormat();position();},"composer-markdown-preview-button");
+    popup.replaceChildren(heading,body,back);
+    position();
+    try {
+      const data=new FormData();
+      data.append("text",text);
+      data.append("csrfmiddlewaretoken",document.querySelector("[name='csrfmiddlewaretoken']")?.value||"");
+      const response=await fetch(url,{method:"POST",credentials:"same-origin",body:data,
+        headers:{"X-Requested-With":"XMLHttpRequest"}});
+      const result=await response.json();
+      if (popup.hidden||target!==editor||!body.isConnected) return;
+      if (!response.ok||!result.ok||typeof result.markdown_html!=="string") throw new Error(result.error||"Не удалось показать Markdown.");
+      if (!text.trim()) body.textContent="Нет текста для предпросмотра.";
+      else window.SovietgramSocial.renderText(body,text,result.markdown_html);
+      position();
+    } catch(error) {
+      if (body.isConnected) body.textContent=error.message||"Не удалось показать Markdown.";
+    }
   }
   function drawEmoji() {
     const tabs=document.createElement("div");tabs.className="composer-emoji-tabs";
