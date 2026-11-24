@@ -132,6 +132,8 @@
   let contextArticle = null;
   let editArticle = null;
   let forwardArticles = [];
+  const forwardSendKeys = window.SovietgramSendRetry.batch();
+  let forwardBusy = false;
   let deleteArticles = [];
   let selectedArticles = new Set();
   let selectionMode = false;
@@ -201,14 +203,15 @@
     Object.entries(values || {}).forEach(([key, value]) => {
       body.append(key, value == null ? "" : String(value));
     });
-    const response = await fetch(url, {
+    const transport = values?.client_message_id ? window.SovietgramSendRetry.fetchSend : fetch;
+    const response = await transport(url, {
       method: "POST",
       credentials: "same-origin",
       headers: { "X-Requested-With": "XMLHttpRequest" },
       body
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok || payload.ok === false) {
+    if (!response.ok || payload.ok === false || (values?.client_message_id && payload.ok !== true)) {
       throw new Error(payload.error || "Не удалось выполнить действие.");
     }
     return payload;
@@ -413,6 +416,7 @@
       return;
     }
     if (!forwardModal || !articles?.length) return;
+    forwardSendKeys.clear();
     forwardArticles = articles.filter(Boolean);
     forwardModal.hidden = false;
     if (forwardSearch) {
@@ -750,13 +754,16 @@
   }
 
   async function forwardSelectedTo(target) {
-    if (!forwardArticles.length) return;
+    if (!forwardArticles.length || forwardBusy) return;
+    forwardBusy = true;
     target.disabled = true;
     try {
       for (const article of forwardArticles) {
         if (!article.dataset.forwardUrl) continue;
+        const targetId = target.dataset.forwardTarget || "";
         await postForm(article.dataset.forwardUrl, {
-          target_chat_id: target.dataset.forwardTarget || ""
+          target_chat_id: targetId,
+          client_message_id: forwardSendKeys.key(targetId + ":" + article.dataset.messageId, article.dataset.forwardUrl),
         });
       }
       notify(forwardArticles.length === 1 ? "Сообщение переслано." : "Сообщения пересланы.");
@@ -765,6 +772,7 @@
     } catch (error) {
       notify(error.message);
     } finally {
+      forwardBusy = false;
       target.disabled = false;
     }
   }

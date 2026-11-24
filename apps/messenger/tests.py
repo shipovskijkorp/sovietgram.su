@@ -188,7 +188,7 @@ class MessengerTests(TestCase):
         self.assertRedirects(response, reverse("messenger:chat", args=[chat.pk]))
         self.assertFalse(Message.objects.exists())
 
-    def test_poll_returns_new_messages_and_marks_them_read(self):
+    def test_poll_returns_new_messages_without_marking_them_read(self):
         chat = get_or_create_direct_chat(self.alice, self.bob)
         message = Message.objects.create(chat=chat, sender=self.bob, text="Новое сообщение")
 
@@ -201,4 +201,8 @@ class MessengerTests(TestCase):
         payload = response.json()
         self.assertEqual(payload["messages"][0]["id"], message.pk)
         membership = chat.memberships.get(user=self.alice)
+        self.assertIsNone(membership.last_read_message_id)
+        self.client.post(reverse("messenger:read_messages", args=[chat.pk]), {"message_id": message.pk})
+        membership.refresh_from_db()
         self.assertEqual(membership.last_read_message_id, message.pk)
+        self.assertEqual(membership.read_through_id, message.pk)

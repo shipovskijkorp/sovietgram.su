@@ -28,6 +28,7 @@
   let viewedCard = null;
   let previewMode = false;
   let busy = false;
+  const articleSendKeys = window.SovietgramSendRetry.batch();
   let history = [];
   let historyIndex = -1;
   let historyTimer = 0;
@@ -740,10 +741,12 @@
       data.append("special_type", "article");
       const reply = document.getElementById("replyToInput")?.value;
       if (reply) data.append("reply_to", reply);
+      data.append("client_message_id", articleSendKeys.key("article", [payload, reply || ""]));
     }
 
     try {
-      const response = await fetch(url, {
+      const transport = editState?.actionUrl ? fetch : window.SovietgramSendRetry.fetchSend;
+      const response = await transport(url, {
         method: "POST",
         credentials: "same-origin",
         headers: { "X-Requested-With": "XMLHttpRequest" },
@@ -764,6 +767,7 @@
       }
 
       modal.hidden = true;
+      articleSendKeys.clear();
       editState = null;
     } catch (error) {
       notify(error.message);
@@ -779,6 +783,7 @@
   document.addEventListener("click", (event) => {
     const newArticle = event.target.closest?.("[data-attach-special='article']");
     if (newArticle) {
+      articleSendKeys.clear();
       editState = null;
       window.setTimeout(() => configureEditor(null, null), 0);
       return;

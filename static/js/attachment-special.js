@@ -208,8 +208,10 @@
     location: "Координаты будут отправлены в чат и откроются на карте.",
   };
 
+  const specialSendKeys = window.SovietgramSendRetry.batch();
   function openSpecial(type) {
     if (!modal || !titles[type]) return;
+    specialSendKeys.clear();
     activeType = type;
     resetType(type);
     panels.forEach((panel) => {
@@ -319,9 +321,10 @@
     data.append("special_type", activeType);
     data.append("payload", JSON.stringify(payload));
     if (replyInput?.value) data.append("reply_to", replyInput.value);
+    data.append("client_message_id", specialSendKeys.key("special", [activeType, payload, replyInput?.value || ""]));
 
     try {
-      const response = await fetch(url, {
+      const response = await window.SovietgramSendRetry.fetchSend(url, {
         method: "POST",
         credentials: "same-origin",
         headers: { "X-Requested-With": "XMLHttpRequest" },
@@ -346,7 +349,7 @@
       closeSpecial();
     } catch (fetchError) {
       setBusy(false);
-      notify(fetchError.message);
+      notify(fetchError.message + " Повторите отправку без изменения вложения.");
     }
   }
 

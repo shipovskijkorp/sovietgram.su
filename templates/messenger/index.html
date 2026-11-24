@@ -230,6 +230,13 @@
 
       <section class="message-stage{% if pinned_records %} has-pins{% endif %}" id="messageStage"
                data-poll-url="{% url 'messenger:poll_messages' selected_chat.pk %}"
+               data-history-url="{% url 'messenger:message_history' selected_chat.pk %}"
+               data-read-url="{% url 'messenger:read_messages' selected_chat.pk %}"
+               data-account-id="{{ request.user.pk }}"
+               data-own-last-read="{{ own_last_read_id }}"
+               data-history-older="{{ history_has_older|yesno:'true,false' }}"
+               data-history-newer="{{ history_has_newer|yesno:'true,false' }}"
+               data-unread-anchor="{{ unread_anchor_id }}"
                data-draft-url="{{ draft_url }}"
                data-typing-url="{{ typing_url }}"
                data-server-time="{{ server_time }}"
@@ -238,7 +245,8 @@
 
         <div class="wallpaper" aria-hidden="true"></div>
         <div class="message-flow" id="messageFlow">
-          <div class="dialog-start">
+          <button type="button" class="history-control" id="historyOlder" {% if not history_has_older %}hidden{% endif %}>Загрузить предыдущие сообщения</button>
+          <div class="dialog-start" {% if history_has_older %}hidden{% endif %}>
             {% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}
               {% if selected_chat.other_user_avatar_url_ui %}
                 <img data-avatar-user-id="{{ selected_chat.other_user.pk }}" src="{{ selected_chat.other_user_avatar_url_ui }}" alt="">
@@ -437,6 +445,10 @@
               <button class="message-action-trigger" type="button" aria-label="Действия с сообщением">⋮</button>
             </article>
           {% endfor %}
+          <div class="history-controls" id="historyNewerControls" {% if not history_has_newer %}hidden{% endif %}>
+            <button type="button" class="history-control" id="historyNewer">Загрузить следующие сообщения</button>
+            <button type="button" class="history-control" id="historyLatest">К последним сообщениям</button>
+          </div>
         </div>
       </section>
 
@@ -449,6 +461,11 @@
           <button id="composerReplyClose" type="button" aria-label="Отменить ответ"><span class="tg-native-icon tg-native-icon--close tg-native-icon--compact" aria-hidden="true"></span></button>
         </div>
         <input id="replyToInput" type="hidden" name="reply_to" value="">
+        <div class="voice-retry-row" id="voiceRetryRow" hidden>
+          <span>Голосовое сообщение не подтверждено сервером.</span>
+          <button type="button" id="voiceRetrySend">Повторить</button>
+          <button type="button" id="voiceRetryDiscard">Отменить</button>
+        </div>
         <div class="voice-recording-bar" id="voiceRecordingBar" hidden>
           <button class="voice-recording-bar__delete" id="voiceRecordDelete" type="button" aria-label="Удалить запись" title="Удалить запись">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 8v10m4-10v10m4-10v10M5 5h14M9 5V3h6v2m3 0-1 16H7L6 5"/></svg>
@@ -1025,6 +1042,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{% static 'js/send-retry.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/attachment-menu.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/attachment-files.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/chat.js' %}?v={{ static_version }}"></script>

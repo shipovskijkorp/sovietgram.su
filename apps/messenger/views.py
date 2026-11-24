@@ -1,4 +1,7 @@
 import copy
+import hashlib
+from functools import wraps
+from uuid import UUID
 import json
 import math
 import re
@@ -27,7 +30,7 @@ from django.db.models import (
     Value,
     When,
 )
-from django.db.models.functions import Coalesce
+from django.db.models.functions import Coalesce, Greatest
 from django.http import (
     FileResponse,
     Http404,
@@ -67,6 +70,7 @@ from .models import (
     PinnedMessage,
     VoiceMessagePlayback,
 )
+from .models import MessageSendReceipt
 from .ratelimit import rate_limit
 from .services import (
     apply_archive_rules_on_new_message,
@@ -280,7 +284,7 @@ def _other_membership(chat, user):
 def _other_last_read_id(chat, user):
     other = _other_membership(chat, user)
     if other is not None:
-        return other.last_read_message_id or 0
+        return max(other.read_through_id, other.last_read_message_id or 0)
     return chat.messages.filter(is_deleted=False).order_by("-id").values_list("id", flat=True).first() or 0
 
 
@@ -420,6 +424,7 @@ def _clear_history_for_user(chat, membership):
             latest_id,
         )
     membership.last_read_message_id = latest_id or membership.last_read_message_id
+    membership.read_through_id = max(membership.read_through_id, latest_id or 0)
     membership.draft_text = ""
     membership.draft_updated_at = None
     membership.last_typing_at = None
@@ -427,6 +432,7 @@ def _clear_history_for_user(chat, membership):
         update_fields=(
             "cleared_before_message_id",
             "last_read_message",
+            "read_through_id",
             "draft_text",
             "draft_updated_at",
             "last_typing_at",
@@ -568,7 +574,7 @@ def _prepare_sidebar_chats(user, archived=False):
     unread_count = (
         Message.objects.filter(
             Q(id__gt=F("chat__memberships__cleared_before_message_id")),
-            Q(id__gt=Coalesce(F("chat__memberships__last_read_message_id"), Value(0, output_field=BigIntegerField()), output_field=BigIntegerField())),
+            Q(id__gt=Greatest(F("chat__memberships__read_through_id"), Coalesce(F("chat__memberships__last_read_message_id"), Value(0, output_field=BigIntegerField()), output_field=BigIntegerField()), output_field=BigIntegerField())),
             history_visible,
             chat=OuterRef("pk"),
             chat__memberships__user=user,
@@ -599,7 +605,11 @@ def _prepare_sidebar_chats(user, archived=False):
             ),
             last_read_message_id_ui=Coalesce(
                 Subquery(
-                    membership.values("last_read_message_id")[:1],
+                    membership.annotate(cursor=Greatest(
+                        F("read_through_id"),
+                        Coalesce(F("last_read_message_id"), Value(0, output_field=BigIntegerField()), output_field=BigIntegerField()),
+                        output_field=BigIntegerField(),
+                    )).values("cursor")[:1],
                     output_field=BigIntegerField(),
                 ),
                 Value(0, output_field=BigIntegerField()),
@@ -791,7 +801,7 @@ def _account_slots_with_unread(request):
         slot_user = slot["user"]
         unread = (
             Message.objects.filter(
-                Q(id__gt=Coalesce(F("chat__memberships__last_read_message_id"), Value(0, output_field=BigIntegerField()), output_field=BigIntegerField())),
+                Q(id__gt=Greatest(F("chat__memberships__read_through_id"), Coalesce(F("chat__memberships__last_read_message_id"), Value(0, output_field=BigIntegerField()), output_field=BigIntegerField()), output_field=BigIntegerField())),
                 Q(id__gt=F("chat__memberships__cleared_before_message_id")),
                 (
                     Q(chat__type=Chat.Type.PRIVATE)
@@ -994,10 +1004,6 @@ def sidebar_snapshot(request):
 def chat_detail(request, chat_id):
     chat = _chat_for_user(request.user, chat_id)
     membership = _membership(chat, request.user)
-    latest = _visible_message_queryset(chat, request.user).filter(is_deleted=False).order_by("-id").first()
-    if latest:
-        mark_chat_read(chat, request.user, latest)
-
     try:
         focus_id = max(0, int(request.GET.get("message", "0")))
     except (TypeError, ValueError):
@@ -1005,6 +1011,12 @@ def chat_detail(request, chat_id):
 
     base = _visible_message_queryset(chat, request.user).filter(is_deleted=False)
     focus = base.filter(pk=focus_id).first() if focus_id else None
+    read_cursor = max(membership.read_through_id, membership.last_read_message_id or 0)
+    first_unread_id = (
+        base.filter(id__gt=read_cursor).exclude(sender=request.user)
+        .order_by("id").values_list("id", flat=True).first() or 0
+    )
+    unread_anchor_id = 0
     if focus is not None:
         before = list(base.filter(id__lte=focus.pk).order_by("-id")[:50])
         before.reverse()
@@ -1014,6 +1026,12 @@ def chat_detail(request, chat_id):
         chat_messages = list(base.order_by("-id")[:100])
         chat_messages.reverse()
         focus_id = 0
+        if first_unread_id:
+            unread_anchor_id = first_unread_id
+            if chat_messages and first_unread_id < chat_messages[0].pk:
+                before = list(base.filter(id__lt=first_unread_id).order_by("-id")[:30])
+                before.reverse()
+                chat_messages = before + list(base.filter(id__gte=first_unread_id).order_by("id")[:70])
 
     _hide_inaccessible_reply_previews(chat, request.user, chat_messages)
     for message in chat_messages:
@@ -1022,17 +1040,89 @@ def chat_detail(request, chat_id):
             message, request.user,
         )
 
-    return render(
-        request,
-        "messenger/index.html",
-        _messenger_context(
-            request,
-            chat,
-            chat_messages,
-            archived=membership.is_archived,
-            focus_id=focus_id,
-        ),
+    context = _messenger_context(
+        request, chat, chat_messages,
+        archived=membership.is_archived, focus_id=focus_id,
     )
+    context.update({
+        "history_has_older": bool(chat_messages and base.filter(id__lt=chat_messages[0].pk).exists()),
+        "history_has_newer": bool(chat_messages and base.filter(id__gt=chat_messages[-1].pk).exists()),
+        "own_last_read_id": read_cursor,
+        "unread_anchor_id": unread_anchor_id,
+    })
+    return render(request, "messenger/index.html", context)
+
+
+@login_required
+@require_GET
+def message_history(request, chat_id):
+    chat = _chat_for_user(request.user, chat_id)
+    base = _visible_message_queryset(chat, request.user).filter(is_deleted=False)
+    try:
+        before = int(request.GET.get("before", "0"))
+        after = int(request.GET.get("after", "0"))
+        around = int(request.GET.get("around", "0"))
+        if any(value < 0 or value > 9223372036854775807 for value in (before, after, around)):
+            raise ValueError
+        if sum(bool(value) for value in (before, after, around)) > 1:
+            raise ValueError
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "error": "Некорректный курсор истории."}, status=400)
+    if before:
+        items = list(base.filter(id__lt=before).order_by("-id")[:50])
+        items.reverse()
+    elif after:
+        items = list(base.filter(id__gt=after).order_by("id")[:50])
+    elif around:
+        # A deleted scroll anchor can be restored to its closest visible neighbor.
+        anchor = base.filter(id__gte=around).order_by("id").first()
+        if anchor is None:
+            anchor = base.order_by("-id").first()
+        if anchor is None:
+            items = []
+        else:
+            items = list(base.filter(id__lt=anchor.pk).order_by("-id")[:49])
+            items.reverse()
+            items += list(base.filter(id__gte=anchor.pk).order_by("id")[:51])
+    else:
+        items = list(base.order_by("-id")[:100])
+        items.reverse()
+    _hide_inaccessible_reply_previews(chat, request.user, items)
+    pins = set(_visible_pins_queryset(chat, request.user).values_list("message_id", flat=True))
+    other_cursor = _other_last_read_id(chat, request.user) if chat.type == Chat.Type.PRIVATE else 0
+    membership = _membership(chat, request.user)
+    return JsonResponse({
+        "ok": True,
+        "messages": [serialize_message(item, request.user, other_cursor, pins) for item in items],
+        "has_older": base.filter(id__lt=items[0].pk if items else before).exists() if items or before else False,
+        "has_newer": base.filter(id__gt=items[-1].pk if items else after).exists() if items or after else False,
+        "own_last_read_id": max(membership.read_through_id, membership.last_read_message_id or 0),
+        "other_last_read_id": other_cursor,
+        "server_time": timezone.now().isoformat(),
+    })
+
+
+@login_required
+@require_POST
+def read_messages(request, chat_id):
+    chat = _chat_for_user(request.user, chat_id)
+    try:
+        message_id = int(request.POST.get("message_id", "0"))
+        if not 0 < message_id <= 9223372036854775807:
+            raise ValueError
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "error": "Некорректное сообщение."}, status=400)
+    message = _visible_message_queryset(chat, request.user).filter(
+        pk=message_id, is_deleted=False,
+    ).exclude(sender=request.user).first()
+    if message is None:
+        return JsonResponse({"ok": False, "error": "Сообщение недоступно."}, status=404)
+    mark_chat_read(chat, request.user, message)
+    membership = ChatParticipant.objects.get(chat=chat, user=request.user)
+    return JsonResponse({
+        "ok": True,
+        "own_last_read_id": max(membership.read_through_id, membership.last_read_message_id or 0),
+    })
 
 
 @login_required
@@ -1623,8 +1713,74 @@ def remove_contact(request, username):
     return redirect(_safe_next(request, reverse("messenger:contacts")))
 
 
+def _send_request_digest(request):
+    # Bind an idempotency key to the exact operation, fields and file bytes.
+    fields = [(key, request.POST.getlist(key)) for key in sorted(request.POST)
+              if key not in {"csrfmiddlewaretoken", "client_message_id"}]
+    digest = hashlib.sha256(json.dumps(
+        [request.path, fields], ensure_ascii=False, separators=(",", ":"),
+    ).encode("utf-8"))
+    for key in sorted(request.FILES):
+        for uploaded in request.FILES.getlist(key):
+            metadata = [key, uploaded.name, uploaded.size, uploaded.content_type]
+            digest.update(json.dumps(metadata, ensure_ascii=False).encode("utf-8"))
+            for chunk in uploaded.chunks():
+                digest.update(chunk)
+            uploaded.seek(0)
+    return digest.hexdigest()
+
+
+def idempotent_send(view):
+    """Serialize keyed sends by sender; commit message and receipt together."""
+    @wraps(view)
+    def wrapped(request, *args, **kwargs):
+        raw = request.POST.get("client_message_id", "")
+        if not raw:
+            # Backwards-compatible with older clients and non-JS forms.
+            return view(request, *args, **kwargs)
+        try:
+            client_id = UUID(raw)
+        except (ValueError, TypeError, AttributeError):
+            return JsonResponse({"ok": False, "error": "Некорректный идентификатор отправки."}, status=400)
+        if not _wants_json(request):
+            return JsonResponse({"ok": False, "error": "Требуется JSON-ответ."}, status=400)
+        digest = _send_request_digest(request)
+        with transaction.atomic():
+            get_user_model().objects.select_for_update().only("id").get(pk=request.user.pk)
+            receipt = MessageSendReceipt.objects.filter(sender=request.user, client_id=client_id).first()
+            if receipt:
+                if receipt.request_digest != digest:
+                    return JsonResponse({"ok": False, "error": "Идентификатор уже использован для другой отправки."}, status=409)
+                if receipt.message_id is None:
+                    return JsonResponse({"ok": False, "error": "Сообщение было отправлено, но уже удалено."}, status=409)
+                original = receipt.message
+                chat = _chat_for_user(request.user, original.chat_id)
+                message = _visible_message_queryset(chat, request.user).filter(pk=original.pk, is_deleted=False).first()
+                if message is None:
+                    return JsonResponse({"ok": False, "error": "Сообщение было отправлено, но больше недоступно."}, status=409)
+                _hide_inaccessible_reply_previews(chat, request.user, [message])
+                return JsonResponse({
+                    "ok": True,
+                    "message": _serialized_message(message, request.user, chat),
+                    "target_chat_id": chat.pk,
+                    "target_url": reverse("messenger:chat", args=[chat.pk]),
+                    "replayed": True,
+                })
+            response = view(request, *args, **kwargs)
+            if 200 <= response.status_code < 300:
+                payload = json.loads(response.content)
+                if payload.get("ok") and payload.get("message"):
+                    MessageSendReceipt.objects.create(
+                        sender=request.user, client_id=client_id, request_digest=digest,
+                        message_id=payload["message"]["id"],
+                    )
+            return response
+    return wrapped
+
+
 @login_required
 @require_POST
+@idempotent_send
 @rate_limit("send_message")
 def send_message(request, chat_id):
     chat = _chat_for_user(request.user, chat_id)
@@ -1705,6 +1861,9 @@ def send_message(request, chat_id):
     send_as_voice = attachment_mode == MessageForm.MODE_VOICE
 
     with transaction.atomic():
+        # Allocate IDs under the chat row lock so a later ID cannot become
+        # visible to polling before an earlier send in the same chat commits.
+        Chat.objects.select_for_update().only("id").get(pk=chat.pk)
         message = Message.objects.create(
             chat=chat,
             sender=request.user,
@@ -1751,7 +1910,6 @@ def send_message(request, chat_id):
             draft_updated_at=None,
             last_typing_at=None,
         )
-        mark_chat_read(chat, request.user, message)
 
     message = _base_message_queryset(chat).get(pk=message.pk)
     if wants_json:
@@ -1761,6 +1919,7 @@ def send_message(request, chat_id):
 
 @login_required
 @require_POST
+@idempotent_send
 @rate_limit("send_message")
 def send_special_message(request, chat_id):
     chat = _chat_for_user(request.user, chat_id)
@@ -1824,6 +1983,9 @@ def send_special_message(request, chat_id):
             ).first()
 
     with transaction.atomic():
+        # Allocate IDs under the chat row lock so a later ID cannot become
+        # visible to polling before an earlier send in the same chat commits.
+        Chat.objects.select_for_update().only("id").get(pk=chat.pk)
         message = Message.objects.create(
             chat=chat,
             sender=request.user,
@@ -1849,7 +2011,6 @@ def send_special_message(request, chat_id):
             draft_updated_at=None,
             last_typing_at=None,
         )
-        mark_chat_read(chat, request.user, message)
 
     message = _base_message_queryset(chat).get(pk=message.pk)
     return JsonResponse(
@@ -2265,6 +2426,7 @@ def delete_message(request, chat_id, message_id):
 
 @login_required
 @require_POST
+@idempotent_send
 @rate_limit("send_message")
 def forward_message(request, chat_id, message_id):
     source_chat = _chat_for_user(request.user, chat_id)
@@ -2345,6 +2507,7 @@ def forward_message(request, chat_id, message_id):
         origin_username = ""
 
     with transaction.atomic():
+        Chat.objects.select_for_update().only("id").get(pk=target_chat.pk)
         forwarded = Message.objects.create(
             chat=target_chat,
             sender=request.user,
@@ -2364,7 +2527,6 @@ def forward_message(request, chat_id, message_id):
         clone_attachments(source, forwarded)
         touch_chat(target_chat)
         apply_archive_rules_on_new_message(target_chat, forwarded)
-        mark_chat_read(target_chat, request.user, forwarded)
 
     forwarded = _base_message_queryset(target_chat).get(pk=forwarded.pk)
     return JsonResponse(
@@ -3004,11 +3166,9 @@ def poll_messages(request, chat_id):
         after_update_id = 0
 
     base = _visible_message_queryset(chat, request.user)
-    new_messages = list(
+    new_messages = [] if request.GET.get("skip_new") == "1" else list(
         base.filter(id__gt=after_id, is_deleted=False).order_by("id")[:100]
     )
-    if new_messages:
-        mark_chat_read(chat, request.user, new_messages[-1])
 
     updated_messages = list(
         base.filter(id__lte=after_id)
@@ -3023,14 +3183,8 @@ def poll_messages(request, chat_id):
 
     # Never move past a page of messages that was not delivered to the client.
     # Both new messages and edits may require multiple polling requests.
-    high_watermark = (
-        new_messages[-1].pk
-        if len(new_messages) == 100
-        else max(
-            after_id,
-            chat.messages.order_by("-id").values_list("id", flat=True).first() or 0,
-        )
-    )
+    # Only advance past messages actually returned, never past a concurrent send.
+    high_watermark = new_messages[-1].pk if new_messages else after_id
     if len(updated_messages) == 100:
         updates_cursor_time = updated_messages[-1].updated_at
         updates_cursor_id = updated_messages[-1].pk
@@ -3138,6 +3292,7 @@ def poll_messages(request, chat_id):
             "updates_cursor_time": updates_cursor_time.isoformat(),
             "updates_cursor_id": updates_cursor_id,
             "other_last_read_id": other_last_read_id,
+            "own_last_read_id": max(membership.read_through_id, membership.last_read_message_id or 0),
             "other_typing": other_typing,
             "other_status": other_status,
             "other_last_seen_exact": other_last_seen_exact,

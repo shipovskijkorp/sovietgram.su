@@ -38,6 +38,7 @@
   let appendNextPick = false;
   let objectUrls = [];
   let busy = false;
+  const sendKeys = window.SovietgramSendRetry.batch();
 
   function notify(text) {
     if (typeof window.showToast === "function") window.showToast(text);
@@ -121,6 +122,7 @@
   function closeComposer() {
     if (busy) return;
     releaseUrls();
+    sendKeys.clear();
     selectedFiles = [];
     appendNextPick = false;
     if (backdrop) backdrop.hidden = true;
@@ -309,12 +311,13 @@
     openComposer(next, mode, preserveCaption);
   }
 
-  function upload(files, text, mode, replyTo, onProgress) {
+  function upload(files, text, mode, replyTo, onProgress, clientId, attempt = 0) {
     return new Promise((resolve, reject) => {
       const data = new FormData();
       data.append("csrfmiddlewaretoken", csrfToken);
       data.append("text", text);
       data.append("attachment_mode", mode);
+      data.append("client_message_id", clientId);
       if (replyTo) data.append("reply_to", replyTo);
       files.forEach((file) => data.append("attachments", file, file.name));
 
@@ -333,10 +336,17 @@
           resolve(payload);
           return;
         }
+        if (!attempt && [502, 503, 504].includes(xhr.status)) {
+          upload(files, text, mode, replyTo, onProgress, clientId, 1).then(resolve, reject);
+          return;
+        }
         const firstError = Object.values(payload.errors || {}).flat()?.[0]?.message;
         reject(new Error(payload.error || firstError || "Не удалось отправить файлы."));
       });
-      xhr.addEventListener("error", () => reject(new Error("Не удалось загрузить файлы.")));
+      xhr.addEventListener("error", () => {
+        if (!attempt) upload(files, text, mode, replyTo, onProgress, clientId, 1).then(resolve, reject);
+        else reject(new Error("Не удалось загрузить файлы. Повторите отправку."));
+      });
       xhr.addEventListener("abort", () => reject(new Error("Загрузка была отменена.")));
       xhr.send(data);
     });
@@ -381,6 +391,8 @@
             "media",
             index === 0 ? replyTo : "",
             (loaded) => setProgress(true, ((sentBytes + loaded) / totalBytes) * 100),
+            sendKeys.key(window.SovietgramSendRetry.fileIdentity(file),
+              ["media", index === files.length - 1 ? caption : "", index === 0 ? replyTo : ""]),
           );
           renderSent(payload.message);
           sentBytes += file.size;
@@ -392,6 +404,7 @@
           selectedMode,
           replyTo,
           (loaded, total) => setProgress(true, total ? (loaded / total) * 100 : 0),
+          sendKeys.key("album", [files.map(window.SovietgramSendRetry.fileIdentity), caption, selectedMode, replyTo]),
         );
         renderSent(payload.message);
       }
@@ -406,7 +419,7 @@
       closeComposer();
     } catch (uploadError) {
       setProgress(false, 0);
-      notify(uploadError.message);
+      notify(uploadError.message + " Для безопасного повтора не меняйте состав отправки.");
     }
   }
 

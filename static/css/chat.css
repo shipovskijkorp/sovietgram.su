@@ -1323,3 +1323,20 @@ body[data-theme="dark"] .chat-menu--telegram .chat-menu__mute-options {
   background: rgba(255,255,255,.035);
 }
 
+/* Cursor history and retry controls. Keep the viewport anchor during prepend. */
+.message-flow > [hidden], .voice-retry-row[hidden] { display: none !important; }
+.history-controls { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+.history-control {
+  align-self: center; margin: 8px auto; padding: 7px 13px; cursor: pointer;
+  border: 1px solid currentColor; border-radius: 16px; color: var(--red-soft);
+  background: transparent; font: inherit; font-size: 12px;
+}
+.history-control:disabled { opacity: .65; cursor: wait; }
+.voice-retry-row {
+  grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center;
+  gap: 8px; font-size: 12px; padding: 5px 8px;
+}
+.voice-retry-row button {
+  padding: 5px 9px; color: var(--red-soft); border: 1px solid currentColor;
+  background: transparent; border-radius: 8px; cursor: pointer; font: inherit;
+}

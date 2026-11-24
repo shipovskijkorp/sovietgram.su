@@ -511,6 +511,9 @@
       article = document.querySelector(`[data-message-id="${message.id}"]`);
     }
 
+    // In a historical window chat.js asynchronously loads the latest page.
+    // Never append a distant new voice message across that gap.
+    if (!article && window.SovietgramChat) return true;
     if (!article) return insertVoiceMessageFallback(message);
     hydrateTree(article);
     return true;
@@ -815,7 +818,13 @@
     syncComposerActions();
   }
 
-  async function uploadVoice(blob, mime, durationMs, waveform) {
+  const voiceRetryRow = document.getElementById("voiceRetryRow");
+  const voiceRetrySend = document.getElementById("voiceRetrySend");
+  const voiceRetryDiscard = document.getElementById("voiceRetryDiscard");
+  let pendingVoiceData = null;
+  let voiceRetryBusy = false;
+
+  function prepareVoice(blob, mime, durationMs, waveform) {
     if (!form) throw new Error("Форма отправки недоступна.");
     if (blob.size > MAX_VOICE_BYTES) {
       throw new Error("Запись получилась больше 25 МБ. Отправьте её более короткими частями.");
@@ -825,6 +834,7 @@
     data.append("csrfmiddlewaretoken", csrfToken);
     data.append("text", "");
     data.append("attachment_mode", "voice");
+    data.append("client_message_id", window.SovietgramSendRetry.uuid());
     data.append("voice_duration_ms", String(Math.max(MIN_RECORDING_MS, Math.round(durationMs))));
     data.append("voice_waveform", JSON.stringify(waveform));
     const replyTo = replyInput?.value || "";
@@ -835,7 +845,11 @@
       `voice-${Date.now()}.${recordingExtension(mime)}`,
     );
 
-    const response = await fetch(form.action, {
+    return data;
+  }
+
+  async function uploadVoice(data) {
+    const response = await window.SovietgramSendRetry.fetchSend(form.action, {
       method: "POST",
       credentials: "same-origin",
       headers: { "X-Requested-With": "XMLHttpRequest" },
@@ -848,6 +862,41 @@
     }
     return payload.message;
   }
+
+  function updateVoiceRetryUi() {
+    if (voiceRetryRow) voiceRetryRow.hidden = !pendingVoiceData;
+    if (voiceRetrySend) voiceRetrySend.disabled = voiceRetryBusy;
+    if (voiceRetryDiscard) voiceRetryDiscard.disabled = voiceRetryBusy;
+  }
+
+  async function sendPendingVoice() {
+    if (!pendingVoiceData || voiceRetryBusy) return;
+    const data = pendingVoiceData;
+    voiceRetryBusy = true;
+    updateVoiceRetryUi();
+    try {
+      const message = await uploadVoice(data);
+      pendingVoiceData = null;
+      if (replyInput && replyInput.value === (data.get("reply_to") || "")) {
+        replyInput.value = "";
+        if (composerReply) composerReply.hidden = true;
+      }
+      const inserted = publishSentVoice(message);
+      if (!inserted) window.setTimeout(() => window.SovietgramChat?.syncNow?.(), 50);
+    } catch (error) {
+      notify(error.message || "Не удалось отправить голосовое сообщение. Запись сохранена для повтора.");
+    } finally {
+      voiceRetryBusy = false;
+      updateVoiceRetryUi();
+    }
+  }
+
+  voiceRetrySend?.addEventListener("click", sendPendingVoice);
+  voiceRetryDiscard?.addEventListener("click", () => {
+    if (voiceRetryBusy) return;
+    pendingVoiceData = null;
+    updateVoiceRetryUi();
+  });
 
   async function finalizeRecording(session) {
     window.clearInterval(session.timerInterval);
@@ -879,13 +928,8 @@
     recordSession = session;
     setRecordingUi(session);
     try {
-      const message = await uploadVoice(blob, mime, durationMs, waveform);
-      if (replyInput) replyInput.value = "";
-      if (composerReply) composerReply.hidden = true;
-      const inserted = publishSentVoice(message);
-      if (!inserted) {
-        window.setTimeout(() => window.SovietgramChat?.syncNow?.(), 50);
-      }
+      pendingVoiceData = prepareVoice(blob, mime, durationMs, waveform);
+      await sendPendingVoice();
     } catch (error) {
       notify(error.message || "Не удалось отправить голосовое сообщение.");
     } finally {
@@ -923,6 +967,7 @@
       || !recordButton
       || !isVoiceMode()
       || recordSession
+      || pendingVoiceData
       || messageInput?.value.trim()
     ) return;
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {

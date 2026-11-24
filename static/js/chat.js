@@ -12,7 +12,9 @@ const composerReplyClose = document.getElementById("composerReplyClose");
 function enterToSendEnabled() {
   return document.body.dataset.enterToSend !== "false";
 }
-const csrfToken = form?.querySelector("[name='csrfmiddlewaretoken']")?.value || "";
+const csrfToken = form?.querySelector("[name='csrfmiddlewaretoken']")?.value
+  || document.querySelector("#settingsAjaxForm [name='csrfmiddlewaretoken']")?.value
+  || document.querySelector("[name='csrfmiddlewaretoken']")?.value || "";
 
 function notify(text) {
   if (typeof showToast === "function") showToast(text);
@@ -36,14 +38,15 @@ async function postForm(url, values = {}) {
   const data = new FormData();
   data.append("csrfmiddlewaretoken", csrfToken);
   Object.entries(values).forEach(([key, value]) => data.append(key, value ?? ""));
-  const response = await fetch(url, {
+  const transport = values.client_message_id ? window.SovietgramSendRetry.fetchSend : fetch;
+  const response = await transport(url, {
     method: "POST",
     body: data,
     headers: { "X-Requested-With": "XMLHttpRequest" },
     credentials: "same-origin",
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok || payload.ok === false) throw new Error(errorText(payload));
+  if (!response.ok || payload.ok === false || (values.client_message_id && payload.ok !== true)) throw new Error(errorText(payload));
   return payload;
 }
 
@@ -450,16 +453,24 @@ function buildMessageArticle(message) {
 }
 
 function renderMessage(message) {
-  if (!messageFlow || message.is_deleted) return;
+  if (!messageFlow || !message || message.is_deleted) return;
   if (document.querySelector(`[data-message-id="${message.id}"]`)) {
     applyMessageUpdate(message);
     return;
   }
-  const follow = nearBottom();
+  if (historyHasNewer && !pollRendering) {
+    // Sending from a historical window must not create an artificial gap.
+    if (message.is_own) void loadLatestHistory();
+    return;
+  }
+  const follow = !pollRendering && !historyHasNewer && nearBottom();
   const article = buildMessageArticle(message);
-  messageFlow.appendChild(article);
+  const next = Array.from(messageFlow.querySelectorAll(".message[data-message-id]"))
+    .find(node => Number(node.dataset.messageId) > Number(message.id));
+  messageFlow.insertBefore(article, next || document.getElementById("historyNewerControls"));
   window.SovietgramVoice?.hydrate?.(article);
   if (follow) requestAnimationFrame(() => scrollToBottom(true));
+  scheduleReadCheck();
 }
 
 function syncMessageAttachments(article, message) {
@@ -501,10 +512,9 @@ function applyMessageUpdate(message) {
     if (replyToInput?.value === String(message.id)) clearReplyState();
     return;
   }
-  if (!article) {
-    renderMessage(message);
-    return;
-  }
+  // Updates can refer to unloaded pages; do not insert a distant old
+  // message into the currently loaded, contiguous history window.
+  if (!article) return;
 
   article.dataset.messageText = message.text || "";
   article.dataset.messageKind = message.special?.type || "";
@@ -717,8 +727,10 @@ function syncForwardTargets() {
   });
 }
 
+const legacyForwardKeys = window.SovietgramSendRetry.batch();
 function openForwardModal(article) {
   if (!forwardModal || !article) return;
+  legacyForwardKeys.clear();
   forwardArticle = article;
   forwardRequirements = getForwardRequirements(article);
   forwardModal.hidden = false;
@@ -743,7 +755,11 @@ forwardTargets.forEach((target) => {
     if (!forwardArticle?.dataset.forwardUrl) return;
     target.disabled = true;
     try {
-      const payload = await postForm(forwardArticle.dataset.forwardUrl, { target_chat_id: target.dataset.forwardTarget || "" });
+      const targetId = target.dataset.forwardTarget || "";
+      const payload = await postForm(forwardArticle.dataset.forwardUrl, {
+        target_chat_id: targetId,
+        client_message_id: legacyForwardKeys.key(targetId, forwardArticle.dataset.messageId),
+      });
       if (String(payload.target_chat_id) === String(conversation?.dataset.chatId)) renderMessage(payload.message);
       notify("Сообщение переслано.");
       closeForwardModal();
@@ -1033,14 +1049,23 @@ window.addEventListener("beforeunload", () => {
   navigator.sendBeacon?.(messageStage.dataset.draftUrl, data);
 });
 
+const textSendKeys = window.SovietgramSendRetry.batch();
+const textSendScope = "sovietgram.pending-text." + (messageStage?.dataset.accountId || "") + "." + (conversation?.dataset.chatId || "");
+let textSendBusy = false;
 async function sendTextMessage() {
-  if (!form || !messageInput?.value.trim()) return;
+  if (!form || !messageInput?.value.trim() || textSendBusy) return;
+  textSendBusy = true;
   sendButton.disabled = true;
   const data = new FormData(form);
   data.delete("attachments");
   data.set("attachment_mode", "media");
+  const sentText = messageInput.value;
+  const sentReply = replyToInput?.value || "";
   try {
-    const response = await fetch(form.action, {
+    data.set("client_message_id", await window.SovietgramSendRetry.textKey(
+      textSendScope, [sentText, sentReply], textSendKeys,
+    ));
+    const response = await window.SovietgramSendRetry.fetchSend(form.action, {
       method: "POST",
       body: data,
       headers: { "X-Requested-With": "XMLHttpRequest" },
@@ -1048,18 +1073,21 @@ async function sendTextMessage() {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || !payload.ok) throw new Error(errorText(payload, "Не удалось отправить сообщение."));
+    window.SovietgramSendRetry.clearText(textSendScope, textSendKeys);
     renderMessage(payload.message);
-    newestMessageId = Math.max(newestMessageId, Number(payload.message.id) || 0);
-    messageInput.value = "";
-    messageInput.dispatchEvent(new Event("input", { bubbles: true }));
-    autoSizeInput();
-    clearReplyState();
-    clearDraftState();
+    if (messageInput.value === sentText && (replyToInput?.value || "") === sentReply) {
+      messageInput.value = "";
+      messageInput.dispatchEvent(new Event("input", { bubbles: true }));
+      autoSizeInput();
+      clearReplyState();
+      clearDraftState();
+    }
     focusMessageInput();
-    scrollToBottom(true);
+    if (!historyHasNewer) scrollToBottom(true);
   } catch (error) {
-    notify(error.message);
+    notify((error.message || "Нет ответа сервера.") + " Повторите отправку, не меняя текст.");
   } finally {
+    textSendBusy = false;
     sendButton.disabled = false;
   }
 }
@@ -1103,6 +1131,7 @@ let selectedMode = "media";
 let previewObjectUrls = [];
 let appendNextPick = false;
 let uploadInProgress = false;
+const legacyMediaKeys = window.SovietgramSendRetry.batch();
 let dragDepth = 0;
 
 function fileExtension(file) {
@@ -1262,6 +1291,7 @@ function openMediaComposer(files, mode, preserveCaption = false) {
 }
 function closeMediaComposer() {
   if (uploadInProgress) return;
+  legacyMediaKeys.clear();
   releasePreviewUrls(); selectedFiles = [];
   if (mediaComposeBackdrop) mediaComposeBackdrop.hidden = true;
   if (mediaComposeCaption) mediaComposeCaption.value = "";
@@ -1279,13 +1309,14 @@ function setUploadUi(busy, percent = 0) {
   if (mediaUploadProgress) mediaUploadProgress.hidden = !busy;
   if (mediaUploadProgressBar) mediaUploadProgressBar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
 }
-function uploadMediaRequest(files, text, mode, replyTo, onProgress) {
+function uploadMediaRequest(files, text, mode, replyTo, onProgress, clientId) {
   return new Promise((resolve, reject) => {
     if (!form) { reject(new Error("Форма отправки недоступна.")); return; }
     const data = new FormData();
     data.append("csrfmiddlewaretoken", csrfToken);
     data.append("text", text);
     data.append("attachment_mode", mode);
+    data.append("client_message_id", clientId);
     if (replyTo) data.append("reply_to", replyTo);
     files.forEach((file) => data.append("attachments", file, file.name));
     const xhr = new XMLHttpRequest();
@@ -1312,6 +1343,7 @@ async function sendSelectedMedia() {
   const separately = selectedMode === "media" && files.length > 1 && mediaComposeGroup && !mediaComposeGroup.checked;
   const totalBytes = Math.max(1, files.reduce((sum, file) => sum + file.size, 0));
   let uploadedBefore = 0;
+  const signature = [files.map(window.SovietgramSendRetry.fileIdentity), caption, selectedMode, replyId, separately];
   setUploadUi(true, 0);
   try {
     if (separately) {
@@ -1320,15 +1352,14 @@ async function sendSelectedMedia() {
         const payload = await uploadMediaRequest(
           [file], index === files.length - 1 ? caption : "", "media", index === 0 ? replyId : "",
           (loaded) => setUploadUi(true, ((uploadedBefore + loaded) / totalBytes) * 100),
+          legacyMediaKeys.key(index, signature),
         );
         renderMessage(payload.message);
-        newestMessageId = Math.max(newestMessageId, Number(payload.message.id) || 0);
         uploadedBefore += file.size;
       }
     } else {
-      const payload = await uploadMediaRequest(files, caption, selectedMode, replyId, (loaded, total) => setUploadUi(true, total ? (loaded / total) * 100 : 0));
+      const payload = await uploadMediaRequest(files, caption, selectedMode, replyId, (loaded, total) => setUploadUi(true, total ? (loaded / total) * 100 : 0), legacyMediaKeys.key("album", signature));
       renderMessage(payload.message);
-      newestMessageId = Math.max(newestMessageId, Number(payload.message.id) || 0);
     }
     setUploadUi(false, 100);
     if (messageInput) { messageInput.value = ""; autoSizeInput(); }
@@ -1450,56 +1481,316 @@ function updateLiveChatIdentity(payload) {
   }
 }
 
-let newestMessageId = 0;
-document.querySelectorAll("[data-message-id]").forEach((node) => { newestMessageId = Math.max(newestMessageId, Number(node.dataset.messageId) || 0); });
+// The loaded window is contiguous. Only server history/poll responses may
+// advance its cursor, never an optimistic send acknowledgement.
+const historyOlderButton = document.getElementById("historyOlder");
+const historyNewerControls = document.getElementById("historyNewerControls");
+const historyNewerButton = document.getElementById("historyNewer");
+const historyLatestButton = document.getElementById("historyLatest");
+const dialogStart = messageFlow?.querySelector(".dialog-start");
+const historyStorageKey = "sovietgram.scroll." + (messageStage?.dataset.accountId || "") + "." + (conversation?.dataset.chatId || "");
+const historyNodes = () => Array.from(messageFlow?.querySelectorAll(".message[data-message-id]") || []);
+const nodeId = node => Number(node?.dataset.messageId) || 0;
+let historyHasOlder = messageStage?.dataset.historyOlder === "true";
+let historyHasNewer = messageStage?.dataset.historyNewer === "true";
+let historyBusy = false;
+let historyInitialized = false;
+let pendingLatest = false;
+let historyGeneration = 0;
+let newestMessageId = nodeId(historyNodes().at(-1));
 let newestUpdateAt = messageStage?.dataset.serverTime || new Date().toISOString();
 let newestUpdateId = 0;
+let ownLastReadId = Number(messageStage?.dataset.ownLastRead) || 0;
 let pollBusy = false;
+let pollRendering = false;
+let readBusy = false;
+let readTimer = 0;
+let scrollTimer = 0;
+
+function updateHistoryControls() {
+  if (historyOlderButton) {
+    historyOlderButton.hidden = !historyHasOlder;
+    historyOlderButton.disabled = historyBusy;
+  }
+  if (dialogStart) dialogStart.hidden = historyHasOlder;
+  if (historyNewerControls) historyNewerControls.hidden = !historyHasNewer;
+  if (historyNewerButton) historyNewerButton.disabled = historyBusy;
+  if (historyLatestButton) historyLatestButton.disabled = historyBusy;
+}
+
+function visibleAnchor() {
+  if (!messageStage) return null;
+  const bounds = messageStage.getBoundingClientRect();
+  const node = historyNodes().find(item => {
+    const rect = item.getBoundingClientRect();
+    return rect.bottom > bounds.top && rect.top < bounds.bottom;
+  });
+  return node ? { id: nodeId(node), offset: node.getBoundingClientRect().top - bounds.top } : null;
+}
+
+function restoreAnchor(anchor) {
+  if (!anchor || !messageStage) return false;
+  const nodes = historyNodes();
+  const node = nodes.find(item => nodeId(item) === anchor.id)
+    || nodes.find(item => nodeId(item) > anchor.id) || nodes.at(-1);
+  if (!node) return false;
+  const actual = node.getBoundingClientRect().top - messageStage.getBoundingClientRect().top;
+  messageStage.scrollTop += actual - anchor.offset;
+  return true;
+}
+
+function storeScrollPosition() {
+  if (!historyInitialized || !messageStage) return;
+  const distance = messageStage.scrollHeight - messageStage.scrollTop - messageStage.clientHeight;
+  const anchor = visibleAnchor();
+  try {
+    if (!historyHasNewer && distance < 36) {
+      localStorage.setItem(historyStorageKey, JSON.stringify({ bottom: true }));
+    } else if (anchor) {
+      localStorage.setItem(historyStorageKey, JSON.stringify(anchor));
+    }
+  } catch (_error) {}
+}
+
+function scheduleReadCheck() {
+  if (!messageStage || !historyInitialized) return;
+  clearTimeout(readTimer);
+  readTimer = window.setTimeout(reportVisibleRead, 220);
+}
+
+async function reportVisibleRead() {
+  if (!historyInitialized || !messageStage?.dataset.readUrl || readBusy ||
+      document.hidden || !document.hasFocus() || historyBusy) return;
+  // Don't acknowledge the conversation underneath a modal or profile overlay.
+  if (document.querySelector("#telegramSettings:not([hidden]), #userProfileOverlay:not([hidden]), #mediaComposeBackdrop:not([hidden]), #attachSpecialBackdrop:not([hidden]), #articleViewerBackdrop:not([hidden])")) return;
+  const stage = messageStage.getBoundingClientRect();
+  const top = Math.max(0, stage.top);
+  const bottom = Math.min(window.innerHeight, stage.bottom);
+  if (bottom <= top) return;
+  let candidate = ownLastReadId;
+  for (const article of historyNodes()) {
+    if (article.dataset.messageOwn === "true" || nodeId(article) <= candidate) continue;
+    const rect = article.getBoundingClientRect();
+    const visible = Math.min(rect.bottom, bottom) - Math.max(rect.top, top);
+    if (visible >= Math.min(rect.height * .6, (bottom - top) * .6) && visible > 0) {
+      candidate = nodeId(article);
+    }
+  }
+  if (candidate <= ownLastReadId) return;
+  readBusy = true;
+  try {
+    const result = await postForm(messageStage.dataset.readUrl, { message_id: candidate });
+    ownLastReadId = Math.max(ownLastReadId, Number(result.own_last_read_id) || 0);
+  } catch (_error) {
+    // The next visible/focused check retries; do not assume a read on failure.
+  } finally {
+    readBusy = false;
+  }
+}
+
+function insertHistoryMessages(items, replaceWindow = false) {
+  if (replaceWindow) historyNodes().forEach(node => node.remove());
+  // Insert only new nodes. Reparenting mounted media would interrupt playback.
+  const existing = new Map(historyNodes().map(node => [nodeId(node), node]));
+  const mounted = Array.from(existing.values());
+  const fragment = document.createDocumentFragment();
+  let cursor = 0;
+  for (const message of items) {
+    const id = Number(message.id);
+    if (message.is_deleted || existing.has(id)) continue;
+    while (cursor < mounted.length && nodeId(mounted[cursor]) < id) {
+      if (fragment.childNodes.length) messageFlow.insertBefore(fragment, mounted[cursor]);
+      cursor += 1;
+    }
+    const article = buildMessageArticle(message);
+    existing.set(id, article);
+    fragment.appendChild(article);
+  }
+  if (fragment.childNodes.length) messageFlow.insertBefore(fragment, mounted[cursor] || historyNewerControls);
+  window.SovietgramVoice?.hydrate?.(messageFlow);
+}
+
+async function fetchHistory(params) {
+  const url = new URL(messageStage.dataset.historyUrl, window.location.origin);
+  for (const [key, value] of Object.entries(params)) url.searchParams.set(key, String(value));
+  const response = await fetch(url, { credentials: "same-origin", cache: "no-store" });
+  const payload = await response.json();
+  if (!response.ok || !payload.ok) throw new Error(payload.error || "Не удалось загрузить историю.");
+  return payload;
+}
+
+async function loadHistoryPage(direction) {
+  if (historyBusy || !historyInitialized || !messageStage?.dataset.historyUrl) return;
+  if (direction === "before" && !historyHasOlder) return;
+  if (direction === "after" && !historyHasNewer) return;
+  const nodes = historyNodes();
+  const cursor = nodeId(direction === "before" ? nodes[0] : nodes.at(-1));
+  if (!cursor) return;
+  historyBusy = true;
+  historyGeneration += 1; // Ignore any poll started before this window changes.
+  updateHistoryControls();
+  try {
+    const payload = await fetchHistory({ [direction]: cursor });
+    const anchor = visibleAnchor();
+    insertHistoryMessages(payload.messages || []);
+    if (direction === "before") {
+      historyHasOlder = Boolean(payload.has_older);
+    } else {
+      historyHasNewer = Boolean(payload.has_newer);
+      newestMessageId = Math.max(newestMessageId, nodeId(historyNodes().at(-1)));
+    }
+    ownLastReadId = Math.max(ownLastReadId, Number(payload.own_last_read_id) || 0);
+    updateHistoryControls();
+    restoreAnchor(anchor);
+  } catch (error) {
+    notify(error.message || "Не удалось загрузить историю. Повторите.");
+  } finally {
+    historyBusy = false;
+    updateHistoryControls();
+    scheduleReadCheck();
+    if (pendingLatest) { pendingLatest = false; void loadLatestHistory(); }
+  }
+}
+
+async function replaceHistoryWindow(params, anchor = null) {
+  if (historyBusy || !messageStage?.dataset.historyUrl) return false;
+  historyBusy = true;
+  historyGeneration += 1;
+  updateHistoryControls();
+  try {
+    const payload = await fetchHistory(params);
+    insertHistoryMessages(payload.messages || [], true);
+    historyHasOlder = Boolean(payload.has_older);
+    historyHasNewer = Boolean(payload.has_newer);
+    newestMessageId = nodeId(historyNodes().at(-1));
+    newestUpdateAt = payload.server_time || new Date().toISOString();
+    newestUpdateId = 0;
+    ownLastReadId = Math.max(ownLastReadId, Number(payload.own_last_read_id) || 0);
+    updateReadReceipts(payload.other_last_read_id);
+    updateHistoryControls();
+    if (!anchor || !restoreAnchor(anchor)) scrollToBottom(true);
+    return true;
+  } catch (error) {
+    notify(error.message || "Не удалось восстановить историю.");
+    return false;
+  } finally {
+    historyBusy = false;
+    updateHistoryControls();
+    scheduleReadCheck();
+    if (pendingLatest) { pendingLatest = false; void loadLatestHistory(); }
+  }
+}
+
+async function loadLatestHistory() {
+  if (historyBusy) { pendingLatest = true; return; }
+  if (await replaceHistoryWindow({})) {
+    scrollToBottom(true);
+    storeScrollPosition();
+    scheduleReadCheck();
+  }
+}
+
+function onHistoryScroll() {
+  if (!historyInitialized || historyBusy) return;
+  scheduleReadCheck();
+  clearTimeout(scrollTimer);
+  scrollTimer = window.setTimeout(() => {
+    storeScrollPosition();
+    if (!messageStage || historyBusy) return;
+    if (messageStage.scrollTop < 180 && historyHasOlder) void loadHistoryPage("before");
+    else if (historyHasNewer && nearBottom()) void loadHistoryPage("after");
+  }, 140);
+}
+
+async function initializeHistory() {
+  updateHistoryControls();
+  const focus = Number(messageStage.dataset.focusMessage) || 0;
+  const unread = Number(messageStage.dataset.unreadAnchor) || 0;
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(historyStorageKey) || "null"); } catch (_error) {}
+  if (focus) {
+    const node = historyNodes().find(item => nodeId(item) === focus);
+    if (node) {
+      node.scrollIntoView({ block: "center" });
+      node.classList.add("is-target");
+      window.setTimeout(() => node.classList.remove("is-target"), 1500);
+    }
+  } else if (saved && !saved.bottom && Number.isSafeInteger(saved.id) && Number.isFinite(saved.offset)) {
+    if (!historyNodes().some(item => nodeId(item) === saved.id)) {
+      await replaceHistoryWindow({ around: saved.id }, saved);
+    } else {
+      restoreAnchor(saved);
+    }
+  } else if (unread) {
+    // Even with a previous bottom position, open at the first unread message.
+    restoreAnchor({ id: unread, offset: 12 });
+  } else {
+    scrollToBottom(true);
+  }
+  historyInitialized = true;
+  scheduleReadCheck();
+  void pollMessages();
+}
+
 async function pollMessages() {
-  if (!messageStage?.dataset.pollUrl || pollBusy || document.hidden) return;
+  if (!messageStage?.dataset.pollUrl || pollBusy || document.hidden || !historyInitialized || historyBusy) return;
   pollBusy = true;
+  const generation = historyGeneration;
   try {
     const url = new URL(messageStage.dataset.pollUrl, window.location.origin);
     url.searchParams.set("after", String(newestMessageId));
     url.searchParams.set("since", newestUpdateAt);
     url.searchParams.set("after_update_id", String(newestUpdateId));
+    if (historyHasNewer) url.searchParams.set("skip_new", "1");
     const response = await fetch(url, { credentials: "same-origin", cache: "no-store" });
     if (!response.ok) return;
     const payload = await response.json();
+    if (generation !== historyGeneration) return;
     document.dispatchEvent(new CustomEvent("sovietgram:chat-protection", {
       detail: { enabled: Boolean(payload.protect_content) },
     }));
     document.dispatchEvent(new CustomEvent("sovietgram:chat-mute-state", {
-      detail: {
-        isMuted: Boolean(payload.is_muted),
-        mutedUntil: payload.muted_until || "",
-      },
+      detail: { isMuted: Boolean(payload.is_muted), mutedUntil: payload.muted_until || "" },
     }));
+    pollRendering = true;
+    const follow = !historyHasNewer && nearBottom();
+    const anchor = follow ? null : visibleAnchor();
     for (const message of payload.messages || []) renderMessage(message);
     for (const message of payload.updates || []) applyMessageUpdate(message);
-    newestMessageId = Math.max(newestMessageId, Number(payload.high_watermark) || 0, ...(payload.messages || []).map((item) => Number(item.id) || 0));
+    if (!historyHasNewer) newestMessageId = Math.max(newestMessageId, Number(payload.high_watermark) || 0);
+    ownLastReadId = Math.max(ownLastReadId, Number(payload.own_last_read_id) || 0);
     updateReadReceipts(payload.other_last_read_id);
     updateLiveChatIdentity(payload);
     updateConversationStatus(payload.other_typing, payload.other_status, payload);
     renderPinnedMessages(payload.pins || []);
     newestUpdateAt = payload.updates_cursor_time || payload.server_time || newestUpdateAt;
     newestUpdateId = Number(payload.updates_cursor_id) || 0;
+    if (follow) scrollToBottom(true);
+    else if (anchor) restoreAnchor(anchor);
+    scheduleReadCheck();
   } catch (_error) {
     // The next polling cycle retries silently.
   } finally {
+    pollRendering = false;
     pollBusy = false;
   }
 }
 
 if (messageStage) {
-  requestAnimationFrame(() => {
-    scrollToBottom(true);
-    const focus = messageStage.dataset.focusMessage;
-    if (focus) jumpToMessage(focus);
+  historyOlderButton?.addEventListener("click", () => loadHistoryPage("before"));
+  historyNewerButton?.addEventListener("click", () => loadHistoryPage("after"));
+  historyLatestButton?.addEventListener("click", loadLatestHistory);
+  messageStage.addEventListener("scroll", onHistoryScroll, { passive: true });
+  window.addEventListener("pagehide", storeScrollPosition);
+  window.addEventListener("focus", () => { scheduleReadCheck(); void pollMessages(); });
+  window.addEventListener("resize", scheduleReadCheck);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) { scheduleReadCheck(); void pollMessages(); }
   });
+  window.addEventListener("online", () => { scheduleReadCheck(); void pollMessages(); });
+  // Wait until attachment-special.js has installed its renderer.
+  window.requestAnimationFrame(initializeHistory);
   window.setInterval(pollMessages, 2200);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) pollMessages(); });
-  window.setTimeout(pollMessages, 300);
 }
 
 document.addEventListener("keydown", (event) => {
@@ -1538,7 +1829,6 @@ window.SovietgramChat = {
 
     applyMessageUpdate(message);
     window.SovietgramVoice?.hydrate?.(article);
-    newestMessageId = Math.max(newestMessageId, Number(message.id) || 0);
 
     if (messageInput) {
       messageInput.value = "";
@@ -1548,7 +1838,7 @@ window.SovietgramChat = {
     clearReplyState();
     clearDraftState();
     focusMessageInput();
-    requestAnimationFrame(() => scrollToBottom(true));
+    if (!historyHasNewer) requestAnimationFrame(() => scrollToBottom(true));
     return true;
   },
   syncNow: pollMessages,

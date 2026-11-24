@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from django.db import transaction
+from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 
@@ -79,7 +80,14 @@ def mark_chat_read(chat, user, message=None):
         message = chat.messages.filter(is_deleted=False).order_by("-id").first()
     if message is None:
         return
-    ChatParticipant.objects.filter(chat=chat, user=user).update(last_read_message=message)
+    if message.chat_id != chat.pk:
+        return
+    # A late request from a second tab must never move the cursor backwards.
+    ChatParticipant.objects.filter(
+        chat=chat, user=user, read_through_id__lt=message.pk,
+    ).filter(
+        Q(last_read_message__isnull=True) | Q(last_read_message_id__lt=message.pk)
+    ).update(last_read_message=message, read_through_id=message.pk)
 
 
 def touch_chat(chat):

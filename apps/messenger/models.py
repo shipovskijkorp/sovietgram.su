@@ -110,6 +110,8 @@ class ChatParticipant(models.Model):
         blank=True,
         related_name="read_by_memberships",
     )
+    # A durable read cursor survives deletion/expiry of the referenced message.
+    read_through_id = models.PositiveBigIntegerField(default=0)
     is_pinned = models.BooleanField(default=False)
     is_archived = models.BooleanField(default=False)
     is_muted = models.BooleanField(default=False)
@@ -376,3 +378,23 @@ class ChatAdminLog(models.Model):
 
     def __str__(self):
         return f"{self.chat_id}: {self.description}"
+
+
+class MessageSendReceipt(models.Model):
+    """Idempotency receipt; survives deletion of the original message."""
+
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="message_send_receipts",
+    )
+    client_id = models.UUIDField()
+    request_digest = models.CharField(max_length=64)
+    message = models.ForeignKey(
+        Message, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="send_receipts",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=("sender", "client_id"), name="unique_message_send_receipt"),
+        ]
