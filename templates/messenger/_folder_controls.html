@@ -1,0 +1,33 @@
+<dialog id="chatFoldersDialog" class="chat-folders-dialog" data-url="{% url 'messenger:chat_folders' %}" data-account-id="{{ request.user.pk }}" data-home-url="{% url 'messenger:home' %}" aria-labelledby="chatFoldersTitle">
+  <header><h2 id="chatFoldersTitle">Папки чатов</h2><button type="button" id="chatFoldersClose" aria-label="Закрыть">×</button></header>
+  <p id="chatFoldersError" class="folder-error" role="status" hidden></p>
+  <section id="chatFoldersListPane">
+    <p class="folder-hint">Папки помогают организовать чаты. Один чат может находиться в нескольких папках.</p>
+    <div id="chatFoldersList"></div>
+    <button type="button" class="folder-primary" id="chatFoldersNew">Создать папку</button>
+  </section>
+  <form id="chatFoldersEditor" hidden>
+    <label class="folder-field">Название<input id="chatFolderName" maxlength="32" required autocomplete="off" placeholder="Например, Работа"></label>
+    <fieldset><legend>Типы чатов</legend>
+      <label><input type="checkbox" data-folder-category="contacts"> Контакты</label>
+      <label><input type="checkbox" data-folder-category="noncontacts"> Не из контактов</label>
+      <label><input type="checkbox" data-folder-category="groups"> Группы</label>
+      <label><input type="checkbox" data-folder-category="channels"> Каналы</label>
+      <label><input type="checkbox" data-folder-category="saved"> Избранное</label>
+    </fieldset>
+    <fieldset><legend>Исключать автоматически</legend>
+      <label><input type="checkbox" data-folder-flag="exclude_muted"> Без уведомлений</label>
+      <label><input type="checkbox" data-folder-flag="exclude_read"> Прочитанные</label>
+      <label><input type="checkbox" data-folder-flag="exclude_archived"> В архиве</label>
+    </fieldset>
+    <p class="folder-hint">Явно включённые чаты остаются в папке независимо от фильтров; исключённые никогда не отображаются.</p>
+    <label class="folder-field">Включить или исключить чаты<input type="search" id="chatFolderSearch" placeholder="Поиск по названию" autocomplete="off"></label>
+    <div id="chatFolderChatChoices"></div>
+    <div class="folder-actions"><button type="button" data-folder-back>Назад</button><button type="submit" class="folder-primary" id="chatFolderSave">Сохранить</button></div>
+  </form>
+  <section id="chatFolderMembershipPane" hidden>
+    <p class="folder-hint" id="chatFolderMembershipHint"></p>
+    <div id="chatFolderMembershipChoices"></div>
+    <div class="folder-actions"><button type="button" data-folder-back>Все папки</button><button type="button" class="folder-primary" id="chatFolderMembershipDone">Готово</button></div>
+  </section>
+</dialog>

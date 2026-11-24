@@ -8,6 +8,7 @@ from django.utils import timezone
 from apps.accounts.privacy import privacy_allows
 
 from .markdown import render_message_markdown
+from .folder_rules import keep_in_archive_for_folder
 from .models import (
     Chat,
     ChatParticipant,
@@ -183,6 +184,7 @@ def apply_archive_rules_on_new_message(chat, message):
             membership.is_archived
             and not membership.notifications_muted
             and not user.keep_archived_chats
+            and not keep_in_archive_for_folder(membership)
         ):
             # Recheck the live state so a concurrent mute/keep-archive
             # preference change is not overwritten by the old snapshot.

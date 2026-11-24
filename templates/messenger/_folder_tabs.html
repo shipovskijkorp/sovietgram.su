@@ -1,0 +1,7 @@
+<nav class="chat-folder-strip" id="chatFolderTabs" aria-label="Папки чатов"{% if show_archived %} hidden{% endif %}>
+  {% if folder_tabs %}
+  <a href="{% url 'messenger:home' %}"{% if not active_folder %} aria-current="page"{% endif %}>Все{% if main_unread_count %}<b>{{ main_unread_count }}</b>{% endif %}</a>
+  {% for tab in folder_tabs %}<a href="{% url 'messenger:home' %}?folder={{ tab.id }}"{% if tab.active %} aria-current="page"{% endif %}>{{ tab.name }}{% if tab.unread %}<b>{{ tab.unread }}</b>{% endif %}</a>{% endfor %}
+  {% endif %}
+  <button type="button" data-manage-folders aria-label="Управление папками" title="Управление папками"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v12H3zM12 11v6m-3-3h6"/></svg>{% if not folder_tabs %}Создать папку{% endif %}</button>
+</nav>

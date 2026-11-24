@@ -471,3 +471,23 @@ class ScheduledMessage(models.Model):
             models.Index(fields=("status", "next_attempt_at", "id"), name="sg_sched_due_idx"),
             models.Index(fields=("sender", "chat", "status"), name="sg_sched_owner_idx"),
         ]
+
+
+class ChatFolder(models.Model):
+    """A personal saved chat filter; never changes chat membership or history."""
+
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="chat_folders")
+    name = models.CharField(max_length=32)
+    position = models.PositiveIntegerField(default=0)
+    revision = models.PositiveBigIntegerField(default=1)
+    categories = models.JSONField(default=list, blank=True)
+    included_chat_ids = models.JSONField(default=list, blank=True)
+    excluded_chat_ids = models.JSONField(default=list, blank=True)
+    pinned_chat_ids = models.JSONField(default=list, blank=True)
+    exclude_muted = models.BooleanField(default=False)
+    exclude_read = models.BooleanField(default=False)
+    exclude_archived = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ("position", "pk")
+        indexes = [models.Index(fields=("owner", "position"), name="sg_folder_owner_pos")]

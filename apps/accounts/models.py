@@ -37,6 +37,10 @@ class User(AbstractUser):
         "всегда оставлять чаты в архиве",
         default=False,
     )
+    keep_folder_chats_archived = models.BooleanField(
+        "оставлять чаты из пользовательских папок в архиве",
+        default=False,
+    )
     archive_unknown_chats = models.BooleanField(
         "архивировать и отключать уведомления у новых чатов не из контактов",
         default=False,

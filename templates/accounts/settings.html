@@ -136,6 +136,13 @@
             </span>
           </label>
 
+          <label class="tg-settings-toggle-row" for="id_keep_folder_chats_archived">
+            <span class="tg-settings-toggle-row__copy"><strong>Оставлять чаты из папок в архиве</strong><small>Новые сообщения не возвращают чаты, входящие в пользовательские папки, в основной список.</small></span>
+            <span class="tg-settings-switch">
+              <input id="id_keep_folder_chats_archived" type="checkbox" data-setting="keep_folder_chats_archived" {% if request.user.keep_folder_chats_archived %}checked{% endif %}>
+              <span class="tg-settings-switch__track"><span></span></span>
+            </span>
+          </label>
           <label class="tg-settings-toggle-row" for="id_archive_in_main_menu">
             <span class="tg-settings-toggle-row__copy">
               <strong>Архив в главном меню</strong>

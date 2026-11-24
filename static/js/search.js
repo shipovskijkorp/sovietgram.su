@@ -234,7 +234,7 @@
   const filterControls = Array.from(document.querySelectorAll("[data-chat-filter]"));
   const filterOptions = new Set(["all", "unread", "group", "channel"]);
   const filterStorage = "sovietgram.chat-filter." + (chatTools?.dataset.accountId || "") +
-    "." + (chatTools?.dataset.archived || "false");
+    "." + (chatTools?.dataset.archived || "false") + "." + (chatTools?.dataset.folderId || "");
   let activeChatFilter = "all";
   if (chatTools) {
     try {
@@ -340,7 +340,8 @@
         if (!response.ok || generation !== refreshGeneration || (!force && sidebarInput.value.trim())) return;
         const html = await response.text();
         if (generation !== refreshGeneration || (!force && sidebarInput.value.trim())) return;
-        const next = new DOMParser().parseFromString(html, "text/html").getElementById("chatList");
+        const snapshot = new DOMParser().parseFromString(html, "text/html");
+        const next = snapshot.getElementById("chatList");
         if (!next || next.dataset.accountId !== chatList.dataset.accountId) return;
         // The sidebar snapshot is also the lightweight avatar directory for
         // visible conversations. Reuse it to refresh open search/forward
@@ -366,6 +367,13 @@
         });
         for (const name of ["archiveCount","archiveUnread","archiveLoudUnread","archiveHidden"]) {
           chatList.dataset[name] = next.dataset[name] || "";
+        }
+        const tabs = document.getElementById("chatFolderTabs"), nextTabs = snapshot.getElementById("chatFolderTabs");
+        if (tabs && nextTabs) {
+          const offset = tabs.scrollLeft;
+          tabs.replaceChildren(...nextTabs.childNodes);
+          tabs.hidden = nextTabs.hidden;
+          tabs.scrollLeft = offset;
         }
         chatList.replaceChildren(...next.childNodes);
         chatList.classList.toggle("chat-list--empty", next.classList.contains("chat-list--empty"));
@@ -455,6 +463,10 @@
     if (chatTools?.dataset.archived === "true" && window.SovietgramArchive) {
       event.preventDefault();
       void window.SovietgramArchive.readAll();
+      return;
+    }
+    if (chatTools?.dataset.folderId) {
+      if (!window.confirm("Отметить все чаты этой папки прочитанными?")) event.preventDefault();
       return;
     }
     if (!window.confirm("Отметить все чаты, включая архив, прочитанными?")) event.preventDefault();

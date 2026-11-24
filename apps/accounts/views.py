@@ -396,6 +396,7 @@ def profile(request):
 _BOOLEAN_SETTINGS = {
     "enter_to_send",
     "keep_archived_chats",
+    "keep_folder_chats_archived",
     "archive_unknown_chats",
     "archive_in_main_menu",
 }
@@ -451,6 +452,7 @@ def settings_view(request):
                         "theme": request.user.theme,
                         "enter_to_send": request.user.enter_to_send,
                         "keep_archived_chats": request.user.keep_archived_chats,
+                        "keep_folder_chats_archived": request.user.keep_folder_chats_archived,
                         "archive_unknown_chats": request.user.archive_unknown_chats,
                         "archive_in_main_menu": request.user.archive_in_main_menu,
                         "delete_after_inactive_days": request.user.delete_after_inactive_days,

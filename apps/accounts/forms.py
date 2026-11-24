@@ -237,6 +237,10 @@ class UserSettingsForm(forms.ModelForm):
         label="Всегда оставлять чаты в архиве",
         required=False,
     )
+    keep_folder_chats_archived = forms.BooleanField(
+        label="Оставлять чаты из папок в архиве",
+        required=False,
+    )
     archive_unknown_chats = forms.BooleanField(
         label="Архивировать и отключать уведомления у новых чатов не из контактов",
         required=False,
@@ -252,6 +256,7 @@ class UserSettingsForm(forms.ModelForm):
             "theme",
             "enter_to_send",
             "keep_archived_chats",
+            "keep_folder_chats_archived",
             "archive_unknown_chats",
             "archive_in_main_menu",
         )

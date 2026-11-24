@@ -27,7 +27,7 @@
       {% endif %}
       <label class="sidebar-searchbar__field" for="chatFilter">
         <span class="tg-native-icon tg-native-icon--search sidebar-searchbar__icon" aria-hidden="true"></span>
-        <input id="chatFilter" type="search" data-global-search-url="{% url 'messenger:global_search' %}{% if show_archived %}?archived=1{% endif %}" placeholder="{% if show_archived %}Поиск в архиве{% else %}Поиск{% endif %}" autocomplete="off">
+        <input id="chatFilter" type="search" data-global-search-url="{% url 'messenger:global_search' %}{% if show_archived %}?archived=1{% elif active_folder %}?folder={{ active_folder.pk }}{% endif %}" placeholder="{% if show_archived %}Поиск в архиве{% else %}Поиск{% endif %}" autocomplete="off">
       </label>
     </header>
 
@@ -45,7 +45,7 @@
       </div>
     {% endif %}
 
-    <div class="sidebar-chat-tools" id="sidebarChatTools" data-account-id="{{ request.user.pk }}" data-archived="{{ show_archived|yesno:'true,false' }}" data-manage-url="{% url 'messenger:chat_list_action' %}" data-home-url="{% url 'messenger:home' %}">
+    <div class="sidebar-chat-tools" id="sidebarChatTools" data-account-id="{{ request.user.pk }}" data-archived="{{ show_archived|yesno:'true,false' }}" data-folder-id="{{ active_folder.pk|default:'' }}" data-manage-url="{% url 'messenger:chat_list_action' %}" data-home-url="{% url 'messenger:home' %}">
       <div class="sidebar-chat-filters" id="sidebarChatFilters" aria-label="Фильтры чатов">
         <button type="button" data-chat-filter="all" aria-pressed="true">Все</button>
         <button type="button" data-chat-filter="unread" aria-pressed="false">Непрочитанные</button>
@@ -58,8 +58,8 @@
       <form method="post" action="{% url 'messenger:mark_all_chats_read' %}" id="markAllChatsReadForm">
         {% csrf_token %}
         <input type="hidden" name="next" value="{{ request.get_full_path }}">
-        {% if show_archived %}<input type="hidden" name="scope" value="archive">{% endif %}
-        <button type="submit" class="sidebar-mark-read" aria-label="{% if show_archived %}Прочитать весь архив{% else %}Прочитать все чаты, включая архив{% endif %}" title="{% if show_archived %}Прочитать весь архив{% else %}Прочитать все чаты, включая архив{% endif %}">
+        {% if show_archived %}<input type="hidden" name="scope" value="archive">{% elif active_folder %}<input type="hidden" name="folder_id" value="{{ active_folder.pk }}">{% endif %}
+        <button type="submit" class="sidebar-mark-read" aria-label="{% if show_archived %}Прочитать весь архив{% elif active_folder %}Прочитать папку{% else %}Прочитать все чаты, включая архив{% endif %}" title="{% if show_archived %}Прочитать весь архив{% elif active_folder %}Прочитать папку{% else %}Прочитать все чаты, включая архив{% endif %}">
           <svg viewBox="0 0 18 14" aria-hidden="true"><path d="M1.9 7.2 5.2 10.5 12 3.7M8.1 8.9l1.6 1.6 6.8-6.8"/></svg>
         </button>
       </form>
@@ -68,7 +68,7 @@
     <div class="archive-selection-bar" id="archiveSelectionBar" hidden>
       <div class="archive-selection-header"><button type="button" id="archiveSelectionClose" aria-label="Отменить выбор">×</button><strong>Выбрано: <span id="archiveSelectionCount">0</span></strong><button type="button" id="archiveSelectAll">Выбрать все</button></div>
       <div class="archive-selection-actions">
-        <button type="button" data-batch-action="{% if show_archived %}unarchive{% else %}archive{% endif %}">{% if show_archived %}Из архива{% else %}В архив{% endif %}</button>
+        {% if active_folder %}<button type="button" data-batch-action="archive">В архив</button><button type="button" data-batch-action="unarchive">Из архива</button>{% else %}<button type="button" data-batch-action="{% if show_archived %}unarchive{% else %}archive{% endif %}">{% if show_archived %}Из архива{% else %}В архив{% endif %}</button>{% endif %}
         <button type="button" data-batch-action="mark_read">Прочитать</button>
         <button type="button" data-batch-action="mark_unread">Не прочитано</button>
         <button type="button" data-batch-action="mute">Без звука</button>
@@ -113,7 +113,7 @@
           data-can-send-media="{{ can_send_media|yesno:'true,false' }}"
           data-can-record-voice="{{ can_record_voice|yesno:'true,false' }}">
       <header class="conversation-header">
-        <a class="icon-button mobile-back" href="{% if show_archived %}{% url 'messenger:home' %}?archived=1{% else %}{% url 'messenger:home' %}{% endif %}" aria-label="Назад"><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span></a>
+        <a class="icon-button mobile-back" href="{% url 'messenger:home' %}{% if show_archived %}?archived=1{% elif active_folder %}?folder={{ active_folder.pk }}{% endif %}" aria-label="Назад"><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span></a>
         {% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}
           <a class="conversation-header__identity" href="{% url 'accounts:public_profile' selected_chat.other_user.username %}" data-user-profile>
             {% if selected_chat.other_user_avatar_url_ui %}
@@ -175,15 +175,20 @@
                 <span class="chat-read-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4m8-4v4M4 10h16m-8 2v4l3 1"/></svg></span>
                 <span class="chat-menu__label">Отложенные сообщения</span>
               </button>
+              {% if active_folder %}
+              <button type="button" id="folderHeaderPin" data-chat-folder-pin="{{ selected_chat.pk }}"><span class="tg-native-icon tg-native-icon--pin" aria-hidden="true"></span><span class="chat-menu__label">{% if selected_chat.pk in active_folder.pinned_chat_ids %}Открепить в папке{% else %}Закрепить в папке{% endif %}</span></button>
+              {% else %}
               <form method="post" action="{% url 'messenger:chat_action' selected_chat.pk %}">
                 {% csrf_token %}<input type="hidden" name="action" value="pin">
                 <input type="hidden" name="pinned" value="{{ active_membership.is_pinned|yesno:'0,1' }}">
                 <button type="submit"><span class="tg-native-icon tg-native-icon--pin" aria-hidden="true"></span><span class="chat-menu__label">{% if active_membership.is_pinned %}Открепить чат{% else %}Закрепить чат{% endif %}</span></button>
               </form>
+              {% endif %}
+              <button type="button" data-chat-folders="{{ selected_chat.pk }}"><span class="archive-menu-svg"><svg viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v12H3zM12 11v6m-3-3h6"/></svg></span><span class="chat-menu__label">Папки чата</span></button>
               <form method="post" action="{% url 'messenger:chat_action' selected_chat.pk %}">
                 {% csrf_token %}<input type="hidden" name="action" value="archive">
                 <input type="hidden" name="archived" value="{{ active_membership.is_archived|yesno:'0,1' }}">
-                <input type="hidden" name="next" value="{% if active_membership.is_archived %}{% url 'messenger:home' %}?archived=1{% else %}{% url 'messenger:home' %}{% endif %}">
+                <input type="hidden" name="next" value="{% url 'messenger:home' %}{% if active_folder %}?folder={{ active_folder.pk }}{% elif active_membership.is_archived %}?archived=1{% endif %}">
                 <button type="submit"><span class="tg-native-icon {% if active_membership.is_archived %}tg-native-icon--unarchive{% else %}tg-native-icon--archive{% endif %}" aria-hidden="true"></span><span class="chat-menu__label">{% if active_membership.is_archived %}Вернуть из архива{% else %}В архив{% endif %}</span></button>
               </form>
               <div class="chat-menu__separator"></div>
@@ -987,6 +992,7 @@
 
   <nav class="profile-drawer__nav profile-drawer__nav--telegram" aria-label="Главное меню">
     <a id="archiveDrawerEntry" href="{% url 'messenger:home' %}?archived=1"{% if archived_count and not request.user.archive_in_main_menu %} hidden{% endif %}><span class="tg-native-icon tg-native-icon--archive-open" aria-hidden="true"></span><strong>Архив</strong><b id="archiveDrawerBadge"{% if not archived_unread_count %} hidden{% endif %}>{{ archived_unread_count }}</b></a>
+    <a href="{% url 'messenger:home' %}?manage_folders=1" data-manage-folders><span class="archive-menu-svg"><svg viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v12H3z"/></svg></span><strong>Папки чатов</strong></a>
     <a href="{% url 'accounts:public_profile' request.user.username %}" data-user-profile data-self-profile><span class="tg-native-icon tg-native-icon--profile" aria-hidden="true"></span><strong>Мой профиль</strong></a>
     <a href="{% url 'messenger:create_community' %}?type=group" data-community-open="group"><span class="tg-native-icon tg-native-icon--groups" aria-hidden="true"></span><strong>Создать группу</strong></a>
     <a href="{% url 'messenger:create_community' %}?type=channel" data-community-open="channel"><span class="tg-native-icon tg-native-icon--channel" aria-hidden="true"></span><strong>Создать канал</strong></a>
@@ -1138,9 +1144,11 @@
   </div>
   <button type="button" data-list-action="move_up" data-pin-reorder hidden><span class="archive-menu-svg"><svg viewBox="0 0 24 24"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></span><span class="chat-menu__label">Выше среди закреплённых</span></button>
   <button type="button" data-list-action="move_down" data-pin-reorder hidden><span class="archive-menu-svg"><svg viewBox="0 0 24 24"><path d="M12 5v14m-6-6 6 6 6-6"/></svg></span><span class="chat-menu__label">Ниже среди закреплённых</span></button>
+  <button type="button" id="sidebarChatFolders"><span class="archive-menu-svg"><svg viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v12H3zM12 11v6m-3-3h6"/></svg></span><span class="chat-menu__label">Папки чата</span></button>
   <button type="button" id="sidebarChatSelect"><span class="archive-menu-svg"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="m8 12 3 3 5-6"/></svg></span><span class="chat-menu__label">Выбрать чаты</span></button>
 </div>
 {% include 'messenger/_archive_controls.html' %}
+{% include 'messenger/_folder_controls.html' %}
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 {% endblock %}
 
@@ -1164,4 +1172,5 @@
 <script src="{% static 'js/community-settings.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/settings.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/archive.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/chat-folders.js' %}?v={{ static_version }}"></script>
 {% endblock %}

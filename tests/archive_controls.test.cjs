@@ -33,7 +33,7 @@ test("hidden archive can be temporarily revealed only in the appropriate sidebar
 test("live archive controls are wired to explicit actions and preserve account and folder scope",()=>{
   const source=read("static/js/archive.js");
   assert.match(source,/account_id:account,action/);
-  assert.match(source,/folder:archived\?"archive":"main"/);
+  assert.match(source,/folder:customFolder\?"custom":archived\?"archive":"main"/);
   assert.match(source,/chat_ids:JSON.stringify\(numbers\)/);
   assert.match(source,/post\("archive_read_all"\)/);
   assert.match(source,/post\("archive_visibility"/);

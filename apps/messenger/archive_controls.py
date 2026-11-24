@@ -10,7 +10,8 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from . import views
-from .models import ChatParticipant
+from .models import ChatFolder, ChatParticipant
+from .folder_rules import MAX_CHATS, requested_folder
 from .ratelimit import rate_limit
 from .services import set_membership_archived, set_membership_pinned
 
@@ -89,10 +90,13 @@ def chat_list_action(request):
     except ValueError as error:
         return _error(str(error))
     folder = request.POST.get("folder")
-    if folder not in ("main", "archive"):
+    if folder not in ("main", "archive", "custom"):
         return _error("Неизвестная папка.")
+    custom = requested_folder(request.user, request.POST.get("folder_id")) if folder == "custom" else None
+    if folder == "custom" and custom is None:
+        return _error("Выберите папку.")
     archived = folder == "archive"
-    if (action == "archive" and archived) or (action == "unarchive" and not archived):
+    if not custom and ((action == "archive" and archived) or (action == "unarchive" and not archived)):
         return _error("Чаты уже находятся в выбранной папке.")
     duration = request.POST.get("duration", "forever")
     if action == "mute" and duration not in MUTE_DURATIONS:
@@ -108,7 +112,38 @@ def chat_list_action(request):
         # No partial operation and no existence oracle for other users' chats.
         if len(rows) != len(ids):
             return _error("Один из чатов больше недоступен.", 404)
-        if any(row.is_archived != archived for row in rows):
+        if custom:
+            custom = ChatFolder.objects.select_for_update().filter(pk=custom.pk, owner=request.user).first()
+            if custom is None:
+                return _error("Папка удалена.", 404)
+            visible_ids = [chat.pk for chat in views._folder_sidebar_context(
+                request.user, raw_folder=custom.pk,
+            )["chats"]]
+            if not ids.issubset(set(visible_ids)):
+                return _error("Список чатов изменился. Обновите его.", 409)
+            if action in {"pin", "unpin", "move_up", "move_down"}:
+                pins = list(custom.pinned_chat_ids)
+                if action == "pin":
+                    pins = [pk for pk in visible_ids if pk in ids and pk not in pins] + pins
+                    if len(pins) > MAX_CHATS:
+                        return _error("Слишком много закреплённых чатов.")
+                elif action == "unpin":
+                    pins = [pk for pk in pins if pk not in ids]
+                else:
+                    pinned_visible = [pk for pk in pins if pk in visible_ids]
+                    pk = next(iter(ids))
+                    if pk in pinned_visible:
+                        index = pinned_visible.index(pk)
+                        other = index + (-1 if action == "move_up" else 1)
+                        if 0 <= other < len(pinned_visible):
+                            first, second = pins.index(pk), pins.index(pinned_visible[other])
+                            pins[first], pins[second] = pins[second], pins[first]
+                if pins != custom.pinned_chat_ids:
+                    custom.pinned_chat_ids = pins
+                    custom.revision += 1
+                    custom.save(update_fields=["pinned_chat_ids", "revision"])
+                return JsonResponse({"ok": True, "count": len(rows)})
+        elif any(row.is_archived != archived for row in rows):
             return _error("Список чатов изменился. Обновите его.", 409)
         now = timezone.now()
         for row in rows:

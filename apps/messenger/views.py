@@ -61,9 +61,11 @@ from apps.accounts.privacy import (
 )
 
 from .forms import CommunityForm, EditMessageForm, MessageForm
+from .folder_rules import decorate_folder_categories, matching_chats, requested_folder
 from .markdown import render_message_markdown
 from .models import (
     Chat,
+    ChatFolder,
     ChatParticipant,
     Contact,
     Message,
@@ -692,6 +694,7 @@ def _prepare_sidebar_chats(user, archived=False):
 
     for chat in chats:
         _decorate_chat_ui(chat, user)
+        chat.is_archived_ui = archived
         chat.has_unread_ui = bool(chat.unread_count_ui or chat.marked_unread_ui)
         chat.unread_badge_count_ui = max(chat.unread_count_ui or 0, int(chat.marked_unread_ui))
         preview = " ".join((chat.last_message_text_ui or "").split())
@@ -888,17 +891,49 @@ def _archive_summary(archive_chats):
     }
 
 
+def _folder_sidebar_context(user, archived=False, raw_folder=None):
+    active_folder = requested_folder(user, raw_folder)
+    if active_folder:
+        archived = False
+    main_chats = _prepare_sidebar_chats(user, archived=False)
+    archive_chats = _prepare_sidebar_chats(user, archived=True)
+    folders = list(ChatFolder.objects.filter(owner=user))
+    all_chats = main_chats + archive_chats
+    tabs = []
+    current_chats = archive_chats if archived else main_chats
+    if folders:
+        decorate_folder_categories(all_chats, user)
+        for folder in folders:
+            matches = matching_chats(folder, all_chats)
+            tabs.append({
+                "id": folder.pk, "name": folder.name,
+                "unread": sum(chat.unread_badge_count_ui for chat in matches),
+                "active": bool(active_folder and folder.pk == active_folder.pk),
+            })
+            if active_folder and folder.pk == active_folder.pk:
+                order = {pk: index for index, pk in enumerate(folder.pinned_chat_ids)}
+                current_chats = sorted(matches, key=lambda chat: (
+                    chat.pk not in order, order.get(chat.pk, 0),
+                    -(chat.last_message_created_at_ui or chat.updated_at).timestamp(), -chat.pk,
+                ))
+                for chat in current_chats:
+                    chat.is_pinned_ui = chat.pk in order
+    return {
+        "chats": current_chats, "show_archived": archived,
+        "active_folder": active_folder, "folder_tabs": tabs,
+        "main_unread_count": sum(chat.unread_badge_count_ui for chat in main_chats),
+        **_archive_summary(archive_chats),
+    }
+
+
 def _messenger_context(request, selected_chat=None, chat_messages=None, archived=False, focus_id=0):
     user = request.user
-    current_chats = _prepare_sidebar_chats(user, archived=archived)
-    archive_chats = current_chats if archived else _prepare_sidebar_chats(user, archived=True)
+    sidebar = _folder_sidebar_context(user, archived, request.GET.get("folder"))
     context = {
-        "chats": current_chats,
+        **sidebar,
         "selected_chat": selected_chat,
         "chat_messages": chat_messages or [],
         "message_form": MessageForm(),
-        "show_archived": archived,
-        **_archive_summary(archive_chats),
         "forward_targets": _forward_targets(user),
         "message_focus_id": focus_id,
         "server_time": timezone.now().isoformat(),
@@ -1034,12 +1069,9 @@ def home(request):
 def sidebar_snapshot(request):
     """Refresh unread counts and new chats without reloading the conversation."""
     archived = request.GET.get("archived") == "1"
-    chats = _prepare_sidebar_chats(request.user, archived=archived)
-    archive_chats = chats if archived else _prepare_sidebar_chats(request.user, archived=True)
     response = render(
-        request,
-        "messenger/_chat_list.html",
-        {"chats": chats, "show_archived": archived, **_archive_summary(archive_chats)},
+        request, "messenger/_chat_list.html",
+        _folder_sidebar_context(request.user, archived, request.GET.get("folder")),
     )
     response["Cache-Control"] = "private, no-store"
     return response
@@ -1214,18 +1246,26 @@ def mark_all_chats_read(request):
     # Legacy main-list action includes archived chats. The archive button
     # explicitly scopes the same operation to that folder (also without JS).
     archive_only = request.POST.get("scope") == "archive"
+    active_folder = requested_folder(request.user, request.POST.get("folder_id"))
     scope = {"is_archived": True} if archive_only else {}
+    if active_folder:
+        scope = {"chat_id__in": [chat.pk for chat in _folder_sidebar_context(
+            request.user, raw_folder=active_folder.pk,
+        )["chats"]]}
     with transaction.atomic():
         memberships = ChatParticipant.objects.select_for_update().filter(
             user=request.user, is_hidden=False, **scope,
         ).order_by("pk")
         for membership in memberships:
             _mark_membership_read(membership, request.user)
-    label = "Весь архив отмечен прочитанным." if archive_only else "Все чаты, включая архив, отмечены прочитанными."
+    label = ("Папка отмечена прочитанной." if active_folder else
+             "Весь архив отмечен прочитанным." if archive_only else "Все чаты, включая архив, отмечены прочитанными.")
     if _wants_json(request):
         return JsonResponse({"ok": True, "message": label})
     messages.success(request, label)
-    fallback = reverse("messenger:home") + ("?archived=1" if archive_only else "")
+    fallback = reverse("messenger:home") + (
+        f"?folder={active_folder.pk}" if active_folder else "?archived=1" if archive_only else ""
+    )
     return redirect(_safe_next(request, fallback))
 
 
@@ -1513,9 +1553,14 @@ def global_search(request):
         )
 
     normalized = query.lower().lstrip("@")
-    archive_only = request.GET.get("archived") == "1"
+    active_folder = requested_folder(request.user, request.GET.get("folder"))
+    archive_only = request.GET.get("archived") == "1" and not active_folder
     membership_scope = {"is_archived": True} if archive_only else {}
     message_scope = {"chat__memberships__is_archived": True} if archive_only else {}
+    if active_folder:
+        ids = [chat.pk for chat in _folder_sidebar_context(request.user, raw_folder=active_folder.pk)["chats"]]
+        membership_scope = {"chat_id__in": ids}
+        message_scope = {"chat_id__in": ids}
     memberships = list(
         ChatParticipant.objects.filter(
             user=request.user,
@@ -1571,14 +1616,14 @@ def global_search(request):
                     else ""
                 ),
                 "avatar_text": chat.avatar_text_ui,
-                "url": reverse("messenger:chat", args=[chat.pk]),
+                "url": reverse("messenger:chat", args=[chat.pk]) + (f"?folder={active_folder.pk}" if active_folder else ""),
                 "is_archived": membership.is_archived,
             }
         )
         if len(chat_results) >= 12:
             break
 
-    people = [] if archive_only else list(
+    people = [] if archive_only or active_folder else list(
         User.objects.filter(is_active=True)
         .exclude(pk=request.user.pk)
         .filter(
@@ -1610,7 +1655,7 @@ def global_search(request):
         for user in people
     ]
 
-    communities = [] if archive_only else list(
+    communities = [] if archive_only or active_folder else list(
         Chat.objects.filter(
             type__in=(Chat.Type.GROUP, Chat.Type.CHANNEL),
         )
@@ -1711,7 +1756,9 @@ def global_search(request):
                     ),
                     "url": (
                         f"{reverse('messenger:chat', args=[chat.pk])}"
-                        f"?message={message.pk}#message-{message.pk}"
+                        f"?message={message.pk}"
+                        + (f"&folder={active_folder.pk}" if active_folder else "")
+                        + f"#message-{message.pk}"
                     ),
                 }
             )

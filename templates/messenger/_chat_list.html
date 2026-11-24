@@ -1,6 +1,7 @@
 {% load static %}
-    <section class="chat-list{% if not chats and not archived_count %} chat-list--empty{% endif %}" id="chatList" data-account-id="{{ request.user.pk }}" data-archive-count="{{ archived_count }}" data-archive-unread="{{ archived_unread_count }}" data-archive-loud-unread="{{ archive_has_loud_unread|yesno:'true,false' }}" data-archive-hidden="{{ request.user.archive_in_main_menu|yesno:'true,false' }}" data-refresh-url="{% url 'messenger:sidebar_snapshot' %}{% if show_archived %}?archived=1{% endif %}" aria-label="{% if show_archived %}Архив{% else %}Чаты{% endif %}">
-      {% if not show_archived and archived_count %}
+    {% include 'messenger/_folder_tabs.html' %}
+    <section class="chat-list{% if not chats %}{% if active_folder or not archived_count or show_archived %} chat-list--empty{% endif %}{% endif %}" id="chatList" data-account-id="{{ request.user.pk }}" data-archive-count="{{ archived_count }}" data-archive-unread="{{ archived_unread_count }}" data-archive-loud-unread="{{ archive_has_loud_unread|yesno:'true,false' }}" data-archive-hidden="{{ request.user.archive_in_main_menu|yesno:'true,false' }}" data-refresh-url="{% url 'messenger:sidebar_snapshot' %}{% if show_archived %}?archived=1{% elif active_folder %}?folder={{ active_folder.pk }}{% endif %}" aria-label="{% if show_archived %}Архив{% elif active_folder %}{{ active_folder.name }}{% else %}Чаты{% endif %}">
+      {% if not show_archived and not active_folder and archived_count %}
         <a class="archive-folder-row{% if request.user.archive_in_main_menu %} archive-folder-row--concealed{% endif %}" data-archive-folder href="{% url 'messenger:home' %}?archived=1"{% if request.user.archive_in_main_menu %} hidden{% endif %}>
           <span class="archive-folder-row__avatar">
             <span class="tg-native-icon tg-native-icon--archive-open" aria-hidden="true"></span>
@@ -13,7 +14,7 @@
         </a>
       {% endif %}
       {% for chat in chats %}
-        <a class="chat-row{% if selected_chat and selected_chat.pk == chat.pk %} is-active{% endif %}" href="{% url 'messenger:chat' chat.pk %}" data-chat-row data-chat-id="{{ chat.pk }}" data-chat-archived="{{ show_archived|yesno:'true,false' }}" data-chat-pinned="{{ chat.is_pinned_ui|yesno:'true,false' }}" data-chat-muted="{{ chat.is_muted_ui|yesno:'true,false' }}" data-search="{{ chat.search_text_ui }}" data-chat-type="{{ chat.type }}" data-chat-unread="{{ chat.has_unread_ui|yesno:'true,false' }}" data-read-action-url="{% url 'messenger:chat_action' chat.pk %}">
+        <a class="chat-row{% if selected_chat and selected_chat.pk == chat.pk %} is-active{% endif %}" href="{% url 'messenger:chat' chat.pk %}{% if active_folder %}?folder={{ active_folder.pk }}{% endif %}" data-chat-row data-chat-id="{{ chat.pk }}" data-chat-archived="{{ chat.is_archived_ui|yesno:'true,false' }}" data-chat-pinned="{{ chat.is_pinned_ui|yesno:'true,false' }}" data-chat-muted="{{ chat.is_muted_ui|yesno:'true,false' }}" data-search="{{ chat.search_text_ui }}" data-chat-type="{{ chat.type }}" data-chat-unread="{{ chat.has_unread_ui|yesno:'true,false' }}" data-read-action-url="{% url 'messenger:chat_action' chat.pk %}">
           {% if chat.type == 'private' and chat.other_user_avatar_url_ui %}
             <img class="chat-row__avatar" data-avatar-user-id="{{ chat.other_user.pk }}" src="{{ chat.other_user_avatar_url_ui }}" alt="">
           {% elif chat.type != 'private' and chat.avatar %}
@@ -45,12 +46,12 @@
           {% if chat.unread_count_ui %}<span class="chat-row__unread">{{ chat.unread_count_ui }}</span>{% elif chat.marked_unread_ui %}<span class="chat-row__unread chat-row__unread--manual" title="Отмечено непрочитанным" aria-label="Отмечено непрочитанным"></span>{% endif %}
         </a>
       {% empty %}
-        {% if show_archived or not archived_count or request.user.archive_in_main_menu %}
+        {% if active_folder or show_archived or not archived_count or request.user.archive_in_main_menu %}
           <div class="chat-empty">
             <span class="chat-empty__icon">{% if show_archived %}<span class="tg-native-icon tg-native-icon--archive" aria-hidden="true"></span>{% else %}✉{% endif %}</span>
-            <strong>{% if show_archived %}Архив пуст{% else %}Чатов пока нет{% endif %}</strong>
-            <p>{% if show_archived %}Здесь появятся чаты, которые вы отправите в архив.{% else %}Найдите человека или канал и выходите на связь.{% endif %}</p>
-            {% if not show_archived %}<a class="chat-empty__action" href="{% url 'messenger:contacts' %}?focus=search">Открыть поиск</a>{% endif %}
+            <strong>{% if active_folder %}Папка пуста{% elif show_archived %}Архив пуст{% else %}Чатов пока нет{% endif %}</strong>
+            <p>{% if active_folder %}Добавьте чаты вручную или измените правила папки.{% elif show_archived %}Здесь появятся чаты, которые вы отправите в архив.{% else %}Найдите человека или канал и выходите на связь.{% endif %}</p>
+            {% if active_folder %}<button type="button" class="chat-empty__action" data-manage-folders data-edit-folder="{{ active_folder.pk }}">Изменить папку</button>{% elif not show_archived %}<a class="chat-empty__action" href="{% url 'messenger:contacts' %}?focus=search">Открыть поиск</a>{% endif %}
           </div>
         {% endif %}
       {% endfor %}

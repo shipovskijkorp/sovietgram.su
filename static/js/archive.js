@@ -16,6 +16,7 @@
   if (!tools?.dataset.manageUrl || !list) return;
   const account = tools.dataset.accountId;
   const archived = tools.dataset.archived === "true";
+  const customFolder = tools.dataset.folderId || "";
   const home = tools.dataset.homeUrl;
   const search = $("chatFilter"), folderMenu = $("archiveFolderContext");
   const folderButton = $("archiveFolderMenuButton"), rowMenu = $("sidebarChatContext");
@@ -31,7 +32,7 @@
   function isOpenChat(row) {
     return !!row && new URL(row.href, window.location.origin).pathname === window.location.pathname;
   }
-  function folderUrl() { return home + (archived ? "?archived=1" : ""); }
+  function folderUrl() { return home + (customFolder ? "?folder="+encodeURIComponent(customFolder) : archived ? "?archived=1" : ""); }
   function sync() {
     const count = Number(list.dataset.archiveCount) || 0;
     const unread = Number(list.dataset.archiveUnread) || 0;
@@ -47,6 +48,12 @@
       badge.classList.toggle("archive-folder-row__badge--muted", list.dataset.archiveLoudUnread !== "true");
     }
     if (heading) heading.textContent = "Чатов: "+count+" · Непрочитанных: "+unread;
+    const headerPin = $("folderHeaderPin");
+    if(headerPin){
+      const active = allRows().find(row=>row.dataset.chatId===headerPin.dataset.chatFolderPin);
+      headerPin.hidden=!active;
+      if(active)headerPin.querySelector(".chat-menu__label").textContent=active.dataset.chatPinned==="true"?"Открепить в папке":"Закрепить в папке";
+    }
     list.classList.toggle("is-selecting",selecting);
     selectionBar.hidden = !selecting;
     $("sidebarSelectChats")?.setAttribute("aria-pressed",String(selecting));
@@ -96,7 +103,7 @@
     archiveIcon.classList.toggle("tg-native-icon--archive",!inArchive);
     archiveIcon.classList.toggle("tg-native-icon--unarchive",inArchive);
     pin.dataset.listAction=pinned?"unpin":"pin";
-    pin.querySelector(".chat-menu__label").textContent=pinned?"Открепить чат":inArchive?"Закрепить в архиве":"Закрепить чат";
+    pin.querySelector(".chat-menu__label").textContent=customFolder?(pinned?"Открепить в папке":"Закрепить в папке"):pinned?"Открепить чат":inArchive?"Закрепить в архиве":"Закрепить чат";
     mute.dataset.listAction=muted?"unmute":"mute";
     mute.querySelector(".chat-menu__label").textContent=muted?"Включить уведомления":"Выключить уведомления";
     $("sidebarMuteDurations").hidden=true;
@@ -142,7 +149,7 @@
     const active=allRows().some(row=>ids.includes(row.dataset.chatId)&&isOpenChat(row));
     closeFolderMenu();closeRowMenu();busy=true;sync();
     try {
-      const result=await post(action,{folder:archived?"archive":"main",chat_ids:JSON.stringify(numbers),duration});
+      const result=await post(action,{folder:customFolder?"custom":archived?"archive":"main",folder_id:customFolder,chat_ids:JSON.stringify(numbers),duration});
       toast(labels[action]+(result.count>1?": "+result.count:"."));
       if(active&&["archive","unarchive","mark_unread"].includes(action)){
         window.location.assign(folderUrl());return;
@@ -207,6 +214,11 @@
   rowMenu.addEventListener("click",event=>{
     const select=event.target.closest?.("#sidebarChatSelect");
     if(select){beginSelection(targetId);return;}
+    if(event.target.closest?.("#sidebarChatFolders")){
+      closeRowMenu();
+      window.SovietgramFolders?.openForChat(targetId);
+      return;
+    }
     const button=event.target.closest?.("[data-list-action]");
     if(!button||!targetId||busy)return;
     if(button.id==="sidebarChatMuteAction"&&button.dataset.listAction==="mute"){
@@ -216,6 +228,13 @@
       return;
     }
     void applyAction(button.dataset.listAction,[targetId],button.dataset.muteDuration||"forever");
+  });
+  $("folderHeaderPin")?.addEventListener("click",event=>{
+    const row=allRows().find(item=>item.dataset.chatId===event.currentTarget.dataset.chatFolderPin);
+    if(!row)return;
+    const menu=$("chatMenu");if(menu)menu.hidden=true;
+    $("chatMenuButton")?.setAttribute("aria-expanded","false");
+    void applyAction(row.dataset.chatPinned==="true"?"unpin":"pin",[row.dataset.chatId]);
   });
   $("sidebarChatReadForm")?.addEventListener("submit",event=>{
     if(!targetId)return;
@@ -309,7 +328,7 @@
     if(dx<-70&&Math.abs(dx)>Math.abs(dy)*1.5&&current.row?.isConnected){
       suppressClickUntil=Date.now()+450;if(event.cancelable)event.preventDefault();
       if(current.row.hasAttribute("data-archive-folder"))void setHidden(true);
-      else void applyAction(archived?"unarchive":"archive",[current.row.dataset.chatId]);
+      else void applyAction(current.row.dataset.chatArchived==="true"?"unarchive":"archive",[current.row.dataset.chatId]);
     }
   },{passive:false});
   list.addEventListener("touchcancel",clearGesture,{passive:true});
