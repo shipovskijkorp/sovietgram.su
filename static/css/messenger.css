@@ -70,7 +70,21 @@
 .message__text { margin: 0; overflow-wrap: anywhere; white-space: normal; line-height: 1.42; font-size: 14px; }
 .message footer { min-height: 14px; display: flex; justify-content: flex-end; align-items: center; gap: 4px; margin-top: 4px; color: #9c8b76; font-size: 9.5px; }
 .message--outgoing footer { color: #9a6c69; }
-.message-check { color: var(--red-soft); }
+.message-check {
+  /* Both states occupy the same box, so live read updates never move the time. */
+  --receipt-icon: url("../icons/message-sent.svg");
+  display: inline-block;
+  flex: 0 0 17px;
+  width: 17px;
+  height: 13px;
+  color: var(--red-soft);
+  background-color: currentColor;
+  -webkit-mask: var(--receipt-icon) center / contain no-repeat;
+  mask: var(--receipt-icon) center / contain no-repeat;
+}
+.message-check[data-read-state="read"] {
+  --receipt-icon: url("../icons/message-read.svg");
+}
 .message-media { display: grid; gap: 6px; margin: -3px -5px 7px; }
 .message-media__item, .message-media__image, .message-media__video { display: block; width: 100%; }
 .message-media__image, .message-media__video { max-width: 520px; max-height: 430px; border-radius: 11px; object-fit: contain; background: rgba(43, 34, 27, .07); }

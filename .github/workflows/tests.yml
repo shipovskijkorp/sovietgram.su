@@ -34,6 +34,7 @@ jobs:
           node --check static/js/attachment-menu.js
           node --check static/js/attachment-files.js
           node --check static/js/send-retry.js
+          node --check static/js/message-status.js
           node --check static/js/chat.js
           node --check static/js/voice-messages.js
           node --check static/js/community-wizard.js

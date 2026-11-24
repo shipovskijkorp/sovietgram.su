@@ -440,7 +440,7 @@
                 {% if message.signature_name %}<span class="message-channel-signature">{{ message.signature_name }}</span>{% endif %}
                 {% if message.edited_at %}<span class="message-edited">изм.</span>{% endif %}
                 <time>{{ message.created_at|date:'H:i' }}</time>
-                {% if message.sender_id == request.user.pk %}<span class="message-check">{% if message.is_read_ui %}✓✓{% else %}✓{% endif %}</span>{% endif %}
+                {% if message.sender_id == request.user.pk %}<span class="message-check" role="img" data-read-state="{% if message.is_read_ui %}read{% else %}sent{% endif %}" aria-label="{% if message.is_read_ui %}Прочитано{% else %}Отправлено{% endif %}" title="{% if message.is_read_ui %}Прочитано{% else %}Отправлено{% endif %}"></span>{% endif %}
               </footer>
               <button class="message-action-trigger" type="button" aria-label="Действия с сообщением">⋮</button>
             </article>

@@ -430,10 +430,7 @@ function renderMessage(message) {
   time.textContent = message.time;
   footer.appendChild(time);
   if (message.is_own) {
-    const check = document.createElement("span");
-    check.className = "message-check";
-    check.textContent = "✓✓";
-    footer.appendChild(check);
+    footer.appendChild(window.SovietgramReadReceipt.create(message.is_read));
   }
   article.appendChild(footer);
   messageFlow.appendChild(article);

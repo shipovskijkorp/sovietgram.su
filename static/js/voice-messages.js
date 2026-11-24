@@ -467,10 +467,7 @@
     time.textContent = message.time || "";
     footer.appendChild(time);
     if (message.is_own) {
-      const check = document.createElement("span");
-      check.className = "message-check";
-      check.textContent = message.is_read ? "✓✓" : "✓";
-      footer.appendChild(check);
+      footer.appendChild(window.SovietgramReadReceipt.create(message.is_read));
     }
     article.appendChild(footer);
 

@@ -436,10 +436,7 @@ function buildMessageArticle(message) {
   time.textContent = message.time;
   footer.appendChild(time);
   if (message.is_own) {
-    const check = document.createElement("span");
-    check.className = "message-check";
-    check.textContent = message.is_read ? "✓✓" : "✓";
-    footer.appendChild(check);
+    footer.appendChild(window.SovietgramReadReceipt.create(message.is_read));
   }
   article.appendChild(footer);
 
@@ -561,7 +558,7 @@ function applyMessageUpdate(message) {
     edited?.remove();
   }
   const check = footer?.querySelector(".message-check");
-  if (check && message.is_own) check.textContent = message.is_read ? "✓✓" : "✓";
+  if (check && message.is_own) window.SovietgramReadReceipt.set(check, message.is_read);
 }
 
 // Export the renderer immediately after it is defined. Voice/media uploads must
@@ -1396,7 +1393,7 @@ function updateReadReceipts(lastReadId) {
   const value = Number(lastReadId) || 0;
   document.querySelectorAll('.message[data-message-own="true"]').forEach((article) => {
     const check = article.querySelector(".message-check");
-    if (check) check.textContent = Number(article.dataset.messageId) <= value ? "✓✓" : "✓";
+    if (check) window.SovietgramReadReceipt.set(check, Number(article.dataset.messageId) <= value);
   });
 }
 const conversationStatus = document.getElementById("conversationStatus");
