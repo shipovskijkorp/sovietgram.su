@@ -1,0 +1,36 @@
+<div id="sendOptionsMenu" class="send-options-menu" hidden>
+  <button type="button" id="sendWithoutSound">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5m5 4 6 6m0-6-6 6"/></svg>
+    Отправить без звука
+  </button>
+  <button type="button" id="scheduleCurrentMessage">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/></svg>
+    Отправить позже
+  </button>
+  <button type="button" data-open-scheduled>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4m8-4v4M4 10h16"/></svg>
+    Отложенные сообщения
+  </button>
+</div>
+<dialog id="scheduledDialog" class="scheduled-dialog" aria-labelledby="scheduledTitle">
+  <header>
+    <h2 id="scheduledTitle">Отложенные сообщения</h2>
+    <button type="button" id="scheduledClose" aria-label="Закрыть">×</button>
+  </header>
+  <section id="scheduledListPane">
+    <p class="scheduled-hint">Сообщения отправятся с сервера, даже если сайт закрыт.</p>
+    <div id="scheduledList" aria-live="polite"></div>
+    {% if can_send_text %}<button class="scheduled-primary" id="scheduledNew" type="button">Запланировать сообщение</button>{% endif %}
+  </section>
+  <form id="scheduledEditor" hidden>
+    <label>Текст сообщения<textarea id="scheduledText" rows="5" maxlength="4096" required></textarea></label>
+    <label>Дата и время (ваш часовой пояс)<input id="scheduledDate" type="datetime-local" required></label>
+    <label class="scheduled-checkbox"><input id="scheduledSilent" type="checkbox"> Отправить без звука</label>
+    <label class="scheduled-checkbox" id="scheduledReplyRow" hidden><input id="scheduledRemoveReply" type="checkbox"> Убрать ответ на сообщение</label>
+    <div class="scheduled-editor-actions">
+      <button id="scheduledBack" type="button">Назад</button>
+      <button class="scheduled-primary" id="scheduledSave" type="submit">Запланировать</button>
+    </div>
+  </form>
+  <p class="scheduled-error" id="scheduledError" role="status" hidden></p>
+</dialog>

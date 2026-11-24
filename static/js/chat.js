@@ -1040,18 +1040,19 @@ window.addEventListener("beforeunload", () => {
 const textSendKeys = window.SovietgramSendRetry.batch();
 const textSendScope = "sovietgram.pending-text." + (messageStage?.dataset.accountId || "") + "." + (conversation?.dataset.chatId || "");
 let textSendBusy = false;
-async function sendTextMessage() {
-  if (!form || !messageInput?.value.trim() || textSendBusy) return;
+async function sendTextMessage(silent = false) {
+  if (!form || !messageInput?.value.trim() || messageInput.readOnly || textSendBusy) return;
   textSendBusy = true;
   sendButton.disabled = true;
   const data = new FormData(form);
   data.delete("attachments");
   data.set("attachment_mode", "media");
+  if (silent) data.set("silent", "1");
   const sentText = messageInput.value;
   const sentReply = replyToInput?.value || "";
   try {
     data.set("client_message_id", await window.SovietgramSendRetry.textKey(
-      textSendScope, [sentText, sentReply], textSendKeys,
+      textSendScope, silent ? [sentText, sentReply, "silent"] : [sentText, sentReply], textSendKeys,
     ));
     const response = await window.SovietgramSendRetry.fetchSend(form.action, {
       method: "POST",
@@ -1269,6 +1270,7 @@ function openMediaComposer(files, mode, preserveCaption = false) {
   selectedFiles = files; selectedMode = mode;
   if (attachmentModeInput) attachmentModeInput.value = mode;
   if (mediaComposeGroup && !preserveCaption) mediaComposeGroup.checked = true;
+  if (!preserveCaption && document.getElementById("mediaComposeSilent")) document.getElementById("mediaComposeSilent").checked = false;
   if (mediaComposeCaption) mediaComposeCaption.value = preserveCaption ? oldCaption : (messageInput?.value || "");
   renderMediaSelection(); autoSizeCaption();
   if (mediaUploadProgress) mediaUploadProgress.hidden = true;
@@ -1293,10 +1295,12 @@ function setUploadUi(busy, percent = 0) {
   if (mediaComposeSend) { mediaComposeSend.disabled = busy; mediaComposeSend.textContent = busy ? "Отправка…" : "Отправить"; }
   if (mediaComposeAdd) mediaComposeAdd.disabled = busy;
   if (mediaComposeClose) mediaComposeClose.disabled = busy;
+  const silentToggle = document.getElementById("mediaComposeSilent");
+  if (silentToggle) silentToggle.disabled = busy;
   if (mediaUploadProgress) mediaUploadProgress.hidden = !busy;
   if (mediaUploadProgressBar) mediaUploadProgressBar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
 }
-function uploadMediaRequest(files, text, mode, replyTo, onProgress, clientId) {
+function uploadMediaRequest(files, text, mode, replyTo, onProgress, clientId, silent = false) {
   return new Promise((resolve, reject) => {
     if (!form) { reject(new Error("Форма отправки недоступна.")); return; }
     const data = new FormData();
@@ -1304,6 +1308,7 @@ function uploadMediaRequest(files, text, mode, replyTo, onProgress, clientId) {
     data.append("text", text);
     data.append("attachment_mode", mode);
     data.append("client_message_id", clientId);
+    if (silent) data.append("silent", "1");
     if (replyTo) data.append("reply_to", replyTo);
     files.forEach((file) => data.append("attachments", file, file.name));
     const xhr = new XMLHttpRequest();
@@ -1330,7 +1335,8 @@ async function sendSelectedMedia() {
   const separately = selectedMode === "media" && files.length > 1 && mediaComposeGroup && !mediaComposeGroup.checked;
   const totalBytes = Math.max(1, files.reduce((sum, file) => sum + file.size, 0));
   let uploadedBefore = 0;
-  const signature = [files.map(window.SovietgramSendRetry.fileIdentity), caption, selectedMode, replyId, separately];
+  const silent = Boolean(document.getElementById("mediaComposeSilent")?.checked);
+  const signature = [files.map(window.SovietgramSendRetry.fileIdentity), caption, selectedMode, replyId, separately, silent];
   setUploadUi(true, 0);
   try {
     if (separately) {
@@ -1339,13 +1345,13 @@ async function sendSelectedMedia() {
         const payload = await uploadMediaRequest(
           [file], index === files.length - 1 ? caption : "", "media", index === 0 ? replyId : "",
           (loaded) => setUploadUi(true, ((uploadedBefore + loaded) / totalBytes) * 100),
-          legacyMediaKeys.key(index, signature),
+          legacyMediaKeys.key(index, signature), silent,
         );
         renderMessage(payload.message);
         uploadedBefore += file.size;
       }
     } else {
-      const payload = await uploadMediaRequest(files, caption, selectedMode, replyId, (loaded, total) => setUploadUi(true, total ? (loaded / total) * 100 : 0), legacyMediaKeys.key("album", signature));
+      const payload = await uploadMediaRequest(files, caption, selectedMode, replyId, (loaded, total) => setUploadUi(true, total ? (loaded / total) * 100 : 0), legacyMediaKeys.key("album", signature), silent);
       renderMessage(payload.message);
     }
     setUploadUi(false, 100);
@@ -1553,7 +1559,7 @@ async function reportVisibleRead() {
   if (!historyInitialized || !messageStage?.dataset.readUrl || readBusy ||
       document.hidden || !document.hasFocus() || historyBusy) return;
   // Don't acknowledge the conversation underneath a modal or profile overlay.
-  if (document.querySelector("#telegramSettings:not([hidden]), #userProfileOverlay:not([hidden]), #mediaComposeBackdrop:not([hidden]), #attachSpecialBackdrop:not([hidden]), #articleViewerBackdrop:not([hidden])")) return;
+  if (document.querySelector("#telegramSettings:not([hidden]), #userProfileOverlay:not([hidden]), #mediaComposeBackdrop:not([hidden]), #attachSpecialBackdrop:not([hidden]), #articleViewerBackdrop:not([hidden]), #scheduledDialog[open]")) return;
   const stage = messageStage.getBoundingClientRect();
   const top = Math.max(0, stage.top);
   const bottom = Math.min(window.innerHeight, stage.bottom);
@@ -1847,6 +1853,16 @@ window.SovietgramChat = {
     return true;
   },
   syncNow: pollMessages,
+  sendSilently: () => sendTextMessage(true),
+  clearScheduledDraft(originalText, originalReply) {
+    if (!messageInput || messageInput.value !== originalText ||
+        (replyToInput?.value || "") !== originalReply) return;
+    messageInput.value = "";
+    messageInput.dispatchEvent(new Event("input", { bubbles: true }));
+    autoSizeInput();
+    clearReplyState();
+    clearDraftState();
+  },
   focusComposer: focusMessageInput,
   resizeComposer: autoSizeInput,
 };

@@ -460,6 +460,7 @@ def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=No
         "sender_name": message.sender.display_name,
         "sender_username": message.sender.username,
         "is_own": is_own,
+        "silent": message.silent,
         "is_deleted": message.is_deleted,
         "is_edited": bool(message.edited_at) and not message.is_deleted,
         "is_read": bool(is_own and message.pk <= other_last_read_id),

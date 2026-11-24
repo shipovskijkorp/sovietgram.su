@@ -152,6 +152,7 @@ class MessageForm(forms.Form):
     MODE_VOICE = "voice"
 
     text = forms.CharField(required=False, max_length=4096, strip=False)
+    silent = forms.BooleanField(required=False)
     reply_to = forms.IntegerField(required=False, min_value=1)
     attachment_mode = forms.ChoiceField(
         required=False,

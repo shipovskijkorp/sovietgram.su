@@ -984,6 +984,7 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
             "reaction_choices": MessageReaction.Emoji.choices,
             "mention_profile_prefix": reverse("accounts:public_profile", args=["__mention__"]).split("__mention__")[0],
             "draft_url": reverse("messenger:save_draft", args=[selected_chat.pk]),
+            "scheduled_url": reverse("messenger:scheduled_messages", args=[selected_chat.pk]),
             "typing_url": reverse("messenger:typing", args=[selected_chat.pk]),
         }
     )
@@ -1953,6 +1954,7 @@ def send_message(request, chat_id):
             chat=chat,
             sender=request.user,
             text=form.cleaned_data["text"],
+            silent=form.cleaned_data["silent"],
             reply_to=reply_to,
             signature_name=(
                 request.user.display_name

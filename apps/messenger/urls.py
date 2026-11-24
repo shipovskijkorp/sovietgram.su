@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import community_profiles, views
+from . import community_profiles, views, scheduled, notifications
 
 app_name = "messenger"
 
@@ -9,6 +9,7 @@ urlpatterns = [
     path("contacts/", views.contacts, name="contacts"),
     path("search/", views.global_search, name="global_search"),
     path("sidebar/", views.sidebar_snapshot, name="sidebar_snapshot"),
+    path("notifications/poll/", notifications.poll_sound_notifications, name="poll_sound_notifications"),
     path("chats/mark-all-read/", views.mark_all_chats_read, name="mark_all_chats_read"),
     path("create/", views.create_community, name="create_community"),
     path("join/<str:username>/", views.join_public_chat, name="join_public_chat"),
@@ -28,6 +29,8 @@ urlpatterns = [
     path("chat/<int:chat_id>/profile/member-candidates/", community_profiles.community_member_candidates, name="community_member_candidates"),
     path("chat/<int:chat_id>/profile/action/", community_profiles.community_profile_action, name="community_profile_action"),
     path("chat/<int:chat_id>/send/", views.send_message, name="send_message"),
+    path("chat/<int:chat_id>/scheduled/", scheduled.scheduled_messages, name="scheduled_messages"),
+    path("chat/<int:chat_id>/scheduled/<int:scheduled_id>/", scheduled.scheduled_action, name="scheduled_action"),
     path("chat/<int:chat_id>/send-special/", views.send_special_message, name="send_special_message"),
     path("chat/<int:chat_id>/poll/", views.poll_messages, name="poll_messages"),
     path("chat/<int:chat_id>/history/", views.message_history, name="message_history"),

@@ -72,6 +72,9 @@
         {% endif %}
         <span class="account-mini__name">{{ request.user.display_name }}</span>
       </a>
+      <button class="notification-sound-toggle" id="notificationSoundToggle" type="button" data-notification-url="{% url 'messenger:poll_sound_notifications' %}" data-account-id="{{ request.user.pk }}" aria-label="Звуковые уведомления" title="Звуковые уведомления" aria-pressed="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5" /><path class="notification-sound-waves" d="M15 9a4 4 0 0 1 0 6m3-9a8 8 0 0 1 0 12"/><path class="notification-sound-cross" d="m16 9 6 6m0-6-6 6"/></svg>
+      </button>
       <button id="easterStar" class="footer-star" type="button" title="Одобрено Госпланом">★</button>
     </footer>
   </aside>
@@ -152,6 +155,10 @@
                   <span class="chat-menu__label">Отметить непрочитанным</span>
                 </button>
               </form>
+              <button type="button" data-open-scheduled>
+                <span class="chat-read-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4m8-4v4M4 10h16m-8 2v4l3 1"/></svg></span>
+                <span class="chat-menu__label">Отложенные сообщения</span>
+              </button>
               <div class="chat-menu__separator"></div>
               {% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}
                 <button type="button" data-chat-menu-mute aria-expanded="false" aria-controls="chatMuteOptions">
@@ -271,6 +278,7 @@
                data-history-newer="{{ history_has_newer|yesno:'true,false' }}"
                data-unread-anchor="{{ unread_anchor_id }}"
                data-draft-url="{{ draft_url }}"
+               data-scheduled-url="{{ scheduled_url }}"
                data-typing-url="{{ typing_url }}"
                data-mention-url="{{ mention_url }}"
                data-markdown-preview-url="{{ markdown_preview_url }}"
@@ -571,7 +579,10 @@
         <input id="attachmentModeInput" type="hidden" name="attachment_mode" value="media">
         <div class="composer__field">
           <textarea id="messageInput" name="text" rows="1" maxlength="4096" placeholder="{% if not can_send_text and can_send_media %}Можно отправлять только медиа{% else %}Сообщение{% endif %}" autocomplete="off"{% if not can_send_text %} readonly{% endif %}>{{ composer_draft_text }}</textarea>
-          {% if can_send_text %}{% include 'messenger/_composer_tools.html' with editor_id="messageInput" %}{% endif %}
+          {% if can_send_text %}{% include 'messenger/_composer_tools.html' with editor_id="messageInput" %}
+          <button class="composer-tool-button" id="sendOptionsToggle" type="button" aria-expanded="false" aria-controls="sendOptionsMenu" aria-label="Параметры отправки" title="Параметры отправки">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/></svg>
+          </button>{% endif %}
         </div>
         <button class="send-button composer-action-button{% if can_record_voice and not composer_draft_text %} is-voice-mode{% endif %}"
                 id="sendButton"
@@ -610,6 +621,7 @@
 </div>
 
 {% if selected_chat %}
+{% include 'messenger/_scheduled_messages.html' %}
 <div class="media-compose-backdrop" id="mediaComposeBackdrop" hidden>
   <section class="media-compose-dialog" role="dialog" aria-modal="true" aria-labelledby="mediaComposeTitle">
     <header class="media-compose-header">
@@ -623,6 +635,10 @@
       <span class="media-compose-switch"><input id="mediaComposeGroup" type="checkbox" checked><span><i></i></span></span>
     </label>
     <div class="media-compose-caption"><textarea id="mediaComposeCaption" rows="1" maxlength="4096" placeholder="Добавить подпись…"></textarea>{% if can_send_text %}{% include 'messenger/_composer_tools.html' with editor_id="mediaComposeCaption" %}{% endif %}</div>
+    <label class="media-compose-group media-compose-silent">
+      <span><strong>Отправить без звука</strong><small>Не воспроизводить звук уведомления у получателя</small></span>
+      <span class="media-compose-switch"><input id="mediaComposeSilent" type="checkbox"><span><i></i></span></span>
+    </label>
     <div class="media-upload-progress" id="mediaUploadProgress" hidden><span id="mediaUploadProgressBar"></span></div>
     <footer class="media-compose-footer"><small id="mediaComposeHint">Фото, GIF и видео будут отправлены как медиа.</small><button class="media-compose-send" id="mediaComposeSend" type="button">Отправить</button></footer>
   </section>
@@ -1110,6 +1126,8 @@
 <script src="{% static 'js/attachment-menu.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/attachment-files.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/chat.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/scheduled-messages.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/sound-notifications.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/voice-messages.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/attachment-special.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/article-editor.js' %}?v={{ static_version }}"></script>

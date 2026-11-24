@@ -181,6 +181,7 @@ class Message(models.Model):
     )
     special_data = models.JSONField(blank=True, default=dict)
     is_deleted = models.BooleanField(default=False, db_index=True)
+    silent = models.BooleanField(default=False)
     reaction_version = models.PositiveBigIntegerField(default=0)
     reaction_changed_at = models.DateTimeField(null=True, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
@@ -427,4 +428,44 @@ class MessageReaction(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=("message", "user"), name="unique_message_reaction_user"),
+        ]
+
+
+class ScheduledMessage(models.Model):
+    """Private outbox. A Message ID is allocated only at actual delivery."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Запланировано"
+        FAILED = "failed", "Не отправлено"
+        SENT = "sent", "Отправлено"
+        CANCELED = "canceled", "Отменено"
+
+    chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="scheduled_messages")
+    sender = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="scheduled_messages",
+    )
+    client_id = models.UUIDField()
+    request_digest = models.CharField(max_length=64)
+    text = models.TextField(blank=True, max_length=4096)
+    # Keep the original ID even if the referenced message is removed.
+    reply_message_id = models.PositiveBigIntegerField(null=True, blank=True)
+    silent = models.BooleanField(default=False)
+    scheduled_for = models.DateTimeField()
+    next_attempt_at = models.DateTimeField()
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
+    error = models.CharField(max_length=300, blank=True, default="")
+    revision = models.PositiveBigIntegerField(default=1)
+    delivered_message = models.ForeignKey(
+        Message, on_delete=models.SET_NULL, null=True, blank=True, related_name="scheduled_sources",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=("sender", "client_id"), name="unique_scheduled_send_key"),
+        ]
+        indexes = [
+            models.Index(fields=("status", "next_attempt_at", "id"), name="sg_sched_due_idx"),
+            models.Index(fields=("sender", "chat", "status"), name="sg_sched_owner_idx"),
         ]

@@ -20,6 +20,7 @@
   const sendButton = document.getElementById("mediaComposeSend");
   const groupRow = document.getElementById("mediaComposeGroupRow");
   const groupToggle = document.getElementById("mediaComposeGroup");
+  const silentToggle = document.getElementById("mediaComposeSilent");
   const progressNode = document.getElementById("mediaUploadProgress");
   const progressBar = document.getElementById("mediaUploadProgressBar");
   const messageInput = document.getElementById("messageInput");
@@ -112,6 +113,7 @@
     }
     if (addButton) addButton.disabled = active;
     if (closeButton) closeButton.disabled = active;
+    if (silentToggle) silentToggle.disabled = active;
     if (progressNode) progressNode.hidden = !active;
     if (progressBar) progressBar.style.width = Math.max(0, Math.min(100, percent)) + "%";
   }
@@ -259,6 +261,7 @@
     selectedMode = mode;
     if (modeInput) modeInput.value = mode;
     if (groupToggle && !preserveCaption) groupToggle.checked = true;
+    if (silentToggle && !preserveCaption) silentToggle.checked = false;
     if (captionNode) {
       captionNode.value = preserveCaption
         ? previousCaption
@@ -308,13 +311,14 @@
     openComposer(next, mode, preserveCaption);
   }
 
-  function upload(files, text, mode, replyTo, onProgress, clientId, attempt = 0) {
+  function upload(files, text, mode, replyTo, onProgress, clientId, silent = false, attempt = 0) {
     return new Promise((resolve, reject) => {
       const data = new FormData();
       data.append("csrfmiddlewaretoken", csrfToken);
       data.append("text", text);
       data.append("attachment_mode", mode);
       data.append("client_message_id", clientId);
+      if (silent) data.append("silent", "1");
       if (replyTo) data.append("reply_to", replyTo);
       files.forEach((file) => data.append("attachments", file, file.name));
 
@@ -334,14 +338,14 @@
           return;
         }
         if (!attempt && [502, 503, 504].includes(xhr.status)) {
-          upload(files, text, mode, replyTo, onProgress, clientId, 1).then(resolve, reject);
+          upload(files, text, mode, replyTo, onProgress, clientId, silent, 1).then(resolve, reject);
           return;
         }
         const firstError = Object.values(payload.errors || {}).flat()?.[0]?.message;
         reject(new Error(payload.error || firstError || "Не удалось отправить файлы."));
       });
       xhr.addEventListener("error", () => {
-        if (!attempt) upload(files, text, mode, replyTo, onProgress, clientId, 1).then(resolve, reject);
+        if (!attempt) upload(files, text, mode, replyTo, onProgress, clientId, silent, 1).then(resolve, reject);
         else reject(new Error("Не удалось загрузить файлы. Повторите отправку."));
       });
       xhr.addEventListener("abort", () => reject(new Error("Загрузка была отменена.")));
@@ -369,6 +373,7 @@
     const files = [...selectedFiles];
     const caption = captionNode?.value || "";
     const replyTo = replyInput?.value || "";
+    const silent = Boolean(silentToggle?.checked);
     const separate = selectedMode === "media"
       && files.length > 1
       && groupToggle
@@ -389,7 +394,8 @@
             index === 0 ? replyTo : "",
             (loaded) => setProgress(true, ((sentBytes + loaded) / totalBytes) * 100),
             sendKeys.key(window.SovietgramSendRetry.fileIdentity(file),
-              ["media", index === files.length - 1 ? caption : "", index === 0 ? replyTo : ""]),
+              ["media", index === files.length - 1 ? caption : "", index === 0 ? replyTo : "", silent]),
+            silent,
           );
           renderSent(payload.message);
           sentBytes += file.size;
@@ -401,7 +407,8 @@
           selectedMode,
           replyTo,
           (loaded, total) => setProgress(true, total ? (loaded / total) * 100 : 0),
-          sendKeys.key("album", [files.map(window.SovietgramSendRetry.fileIdentity), caption, selectedMode, replyTo]),
+          sendKeys.key("album", [files.map(window.SovietgramSendRetry.fileIdentity), caption, selectedMode, replyTo, silent]),
+          silent,
         );
         renderSent(payload.message);
       }

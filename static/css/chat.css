@@ -1520,3 +1520,42 @@ body[data-theme="dark"] .markdown-body .md-hl-s,body[data-theme="dark"] .markdow
 body[data-theme="dark"] .markdown-body .md-hl-c,body[data-theme="dark"] .markdown-body .md-hl-c1,body[data-theme="dark"] .markdown-body .md-hl-cm { color: #a1a5ac; }
 body[data-theme="dark"] .markdown-body .md-hl-mi,body[data-theme="dark"] .markdown-body .md-hl-mf,body[data-theme="dark"] .markdown-body .md-hl-mb,body[data-theme="dark"] .markdown-body .md-hl-mh { color: #efbd87; }
 body[data-theme="dark"] .markdown-body .md-hl-nf,body[data-theme="dark"] .markdown-body .md-hl-nc,body[data-theme="dark"] .markdown-body .md-hl-nb { color: #8ac2fb; }
+
+/* Scheduled outbox and quiet delivery controls. */
+.send-options-menu[hidden],.scheduled-dialog [hidden] { display:none!important; }
+.send-options-menu { position:fixed;z-index:160;min-width:218px;padding:5px;border:1px solid var(--line);border-radius:11px;background:var(--panel,#fffaf1);color:var(--ink);box-shadow:0 12px 35px #0003; }
+.send-options-menu button { width:100%;display:flex;align-items:center;gap:10px;padding:9px 10px;border:0;border-radius:7px;background:transparent;color:inherit;cursor:pointer;font:inherit;font-size:13px;text-align:left; }
+.send-options-menu button:hover {background:color-mix(in srgb,var(--red) 10%,transparent);}
+.send-options-menu button:disabled {opacity:.45;cursor:default;}
+.send-options-menu svg,.notification-sound-toggle svg { width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none; }
+.notification-sound-toggle { display:grid;place-items:center;flex:none;width:34px;height:34px;padding:4px;border:0;border-radius:7px;background:transparent;color:var(--ink);opacity:.7;cursor:pointer; }
+.notification-sound-toggle:hover {opacity:1;background:color-mix(in srgb,var(--red) 10%,transparent);}
+.notification-sound-toggle .notification-sound-cross,.notification-sound-toggle[aria-pressed="false"] .notification-sound-waves {display:none;}
+.notification-sound-toggle[aria-pressed="false"] .notification-sound-cross {display:block;}
+.scheduled-dialog { width:min(480px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto;box-sizing:border-box;border:1px solid var(--line);border-radius:15px;padding:16px;background:var(--panel,#fffaf1);color:var(--ink);box-shadow:0 20px 70px #0005; }
+.scheduled-dialog::backdrop {background:#0007;}
+.scheduled-dialog header {display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;}
+.scheduled-dialog h2 {font-size:18px;margin:0;}
+.scheduled-dialog button {font:inherit;cursor:pointer;border:1px solid var(--line);border-radius:7px;background:transparent;color:inherit;padding:7px 10px;}
+.scheduled-dialog button:disabled {opacity:.5;cursor:wait;}
+.scheduled-dialog header button {border:0;font-size:22px;padding:0 6px;}
+.scheduled-dialog .scheduled-primary {background:var(--red,#a12732);color:#fff;border-color:transparent;font-weight:650;}
+.scheduled-hint {font-size:12px;opacity:.75;margin:0 0 12px;}
+#scheduledList {display:grid;gap:8px;margin-bottom:14px;max-height:54dvh;overflow:auto;}
+.scheduled-item {display:grid;gap:7px;padding:10px 11px;border:1px solid var(--line);border-radius:9px;}
+.scheduled-item time {font-weight:650;font-size:13px;}
+.scheduled-item p {white-space:pre-wrap;overflow-wrap:anywhere;max-height:132px;overflow:auto;margin:0;font-size:13px;}
+.scheduled-item small {font-size:11px;opacity:.8;}
+.scheduled-item .scheduled-item-actions {display:flex;flex-wrap:wrap;gap:5px;}
+.scheduled-item-actions button {font-size:12px;padding:5px 8px;}
+.scheduled-item-actions button[data-action="cancel"] {color:var(--red-soft);}
+#scheduledEditor {display:grid;gap:12px;}
+#scheduledEditor label {display:grid;gap:5px;font-size:13px;font-weight:600;}
+#scheduledEditor textarea,#scheduledEditor input[type="datetime-local"] {box-sizing:border-box;width:100%;font:inherit;font-weight:400;color:inherit;border:1px solid var(--line);background:color-mix(in srgb,currentColor 4%,transparent);border-radius:8px;padding:8px;}
+#scheduledEditor textarea {resize:vertical;min-height:88px;}
+#scheduledEditor .scheduled-checkbox {display:flex;align-items:center;gap:7px;font-weight:400;}
+.scheduled-checkbox input {accent-color:var(--red);}
+.scheduled-editor-actions {display:flex;justify-content:flex-end;gap:8px;}
+.scheduled-error {color:var(--red-soft);font-size:12px;overflow-wrap:anywhere;}
+body[data-theme="dark"] .scheduled-dialog,body[data-theme="dark"] .send-options-menu {background:#251f1b;color:#f2e8dc;color-scheme:dark;}
+.media-compose-silent {border-top:1px solid var(--line);}

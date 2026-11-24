@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Sovietgram scheduled message outbox
+
+[Timer]
+OnBootSec=5s
+OnUnitInactiveSec=10s
+AccuracySec=1s
+Unit=sovietgram-scheduled.service
+
+[Install]
+WantedBy=timers.target
