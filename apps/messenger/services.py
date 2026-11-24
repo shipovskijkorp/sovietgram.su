@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import BigIntegerField, Case, F, Max, Q, Value, When
 from django.urls import reverse
 from django.utils import timezone
 
@@ -96,6 +96,42 @@ def touch_chat(chat):
     Chat.objects.filter(pk=chat.pk).update(updated_at=timezone.now())
 
 
+def set_membership_archived(membership, archived):
+    """A folder change removes the old folder's pin, not its notification or read settings."""
+    if membership.is_archived == archived:
+        return False
+    membership.is_archived = archived
+    membership.is_pinned = False
+    membership.pin_order = 0
+    membership.save(update_fields=["is_archived", "is_pinned", "pin_order"])
+    return True
+
+
+def set_membership_pinned(membership, pinned):
+    """Call under the account and membership row locks."""
+    if membership.is_pinned == pinned:
+        return False
+    membership.is_pinned = pinned
+    membership.pin_order = (
+        (ChatParticipant.objects.filter(
+            user_id=membership.user_id, is_archived=membership.is_archived,
+            is_hidden=False, is_pinned=True,
+        ).aggregate(position=Max("pin_order"))["position"] or 0) + 1
+        if pinned else 0
+    )
+    membership.save(update_fields=["is_pinned", "pin_order"])
+    return True
+
+
+def invited_membership_defaults(inviter, invitee, known_contact=None):
+    """Auto-archive only unsolicited additions, not a voluntary join."""
+    if not invitee.archive_unknown_chats or inviter.pk == invitee.pk:
+        return {}
+    if known_contact is None:
+        known_contact = Contact.objects.filter(owner=invitee, user=inviter).exists()
+    return {} if known_contact else {"is_archived": True, "is_muted": True}
+
+
 def apply_archive_rules_on_new_message(chat, message):
     """Mirror Telegram archive behavior for a newly delivered message."""
     sender = message.sender
@@ -134,6 +170,8 @@ def apply_archive_rules_on_new_message(chat, message):
         ):
             ChatParticipant.objects.filter(pk=membership.pk).update(
                 is_archived=True,
+                is_pinned=Case(When(is_archived=False, then=Value(False)), default=F("is_pinned")),
+                pin_order=Case(When(is_archived=False, then=Value(0)), default=F("pin_order"), output_field=BigIntegerField()),
                 is_muted=True,
                 muted_until=None,
             )
@@ -146,9 +184,13 @@ def apply_archive_rules_on_new_message(chat, message):
             and not membership.notifications_muted
             and not user.keep_archived_chats
         ):
-            ChatParticipant.objects.filter(pk=membership.pk).update(
-                is_archived=False,
-            )
+            # Recheck the live state so a concurrent mute/keep-archive
+            # preference change is not overwritten by the old snapshot.
+            ChatParticipant.objects.filter(
+                pk=membership.pk, is_archived=True, user__keep_archived_chats=False,
+            ).filter(
+                Q(is_muted=False) | Q(muted_until__lte=timezone.now())
+            ).update(is_archived=False, is_pinned=False, pin_order=0)
 
 
 def attachment_kind(uploaded):

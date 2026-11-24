@@ -81,7 +81,10 @@ from .services import (
     clone_attachments,
     delete_message_content,
     get_or_create_direct_chat,
+    invited_membership_defaults,
     mark_chat_read,
+    set_membership_archived,
+    set_membership_pinned,
     other_user_for_chat,
     serialize_message,
     serialize_reactions,
@@ -622,6 +625,10 @@ def _prepare_sidebar_chats(user, archived=False):
             is_pinned_ui=Subquery(
                 membership.values("is_pinned")[:1], output_field=BooleanField()
             ),
+            pin_order_ui=Coalesce(
+                Subquery(membership.values("pin_order")[:1], output_field=BigIntegerField()),
+                Value(0, output_field=BigIntegerField()),
+            ),
             marked_unread_ui=Exists(membership.filter(marked_unread_at__isnull=False)),
             is_muted_ui=Subquery(
                 membership.annotate(
@@ -662,6 +669,7 @@ def _prepare_sidebar_chats(user, archived=False):
         .prefetch_related("participants")
         .order_by(
             F("is_pinned_ui").desc(nulls_last=True),
+            F("pin_order_ui").desc(nulls_last=True),
             F("last_message_created_at_ui").desc(nulls_last=True),
             "-updated_at",
         )
@@ -706,6 +714,7 @@ def _prepare_sidebar_chats(user, archived=False):
     chats.sort(
         key=lambda chat: (
             1 if chat.is_pinned_ui else 0,
+            chat.pin_order_ui if chat.is_pinned_ui else 0,
             (chat.last_message_created_at_ui or chat.updated_at).timestamp(),
             chat.updated_at.timestamp(),
         ),
@@ -870,23 +879,26 @@ def _community_candidates(user):
     return visible
 
 
+def _archive_summary(archive_chats):
+    return {
+        "archived_count": len(archive_chats),
+        "archived_unread_count": sum(chat.unread_badge_count_ui for chat in archive_chats),
+        "archive_has_loud_unread": any(chat.has_unread_ui and not chat.is_muted_ui for chat in archive_chats),
+        "archive_preview": ", ".join(chat.display_name_ui for chat in archive_chats[:3]),
+    }
+
+
 def _messenger_context(request, selected_chat=None, chat_messages=None, archived=False, focus_id=0):
     user = request.user
     current_chats = _prepare_sidebar_chats(user, archived=archived)
     archive_chats = current_chats if archived else _prepare_sidebar_chats(user, archived=True)
-    archived_count = len(archive_chats)
-    archived_unread_count = sum(chat.unread_badge_count_ui for chat in archive_chats)
-    archive_preview = ", ".join(chat.display_name_ui for chat in archive_chats[:3])
-
     context = {
         "chats": current_chats,
         "selected_chat": selected_chat,
         "chat_messages": chat_messages or [],
         "message_form": MessageForm(),
         "show_archived": archived,
-        "archived_count": archived_count,
-        "archived_unread_count": archived_unread_count,
-        "archive_preview": archive_preview,
+        **_archive_summary(archive_chats),
         "forward_targets": _forward_targets(user),
         "message_focus_id": focus_id,
         "server_time": timezone.now().isoformat(),
@@ -1024,17 +1036,13 @@ def sidebar_snapshot(request):
     archived = request.GET.get("archived") == "1"
     chats = _prepare_sidebar_chats(request.user, archived=archived)
     archive_chats = chats if archived else _prepare_sidebar_chats(request.user, archived=True)
-    return render(
+    response = render(
         request,
         "messenger/_chat_list.html",
-        {
-            "chats": chats,
-            "show_archived": archived,
-            "archived_count": len(archive_chats),
-            "archived_unread_count": sum(chat.unread_badge_count_ui for chat in archive_chats),
-            "archive_preview": ", ".join(chat.display_name_ui for chat in archive_chats[:3]),
-        },
+        {"chats": chats, "show_archived": archived, **_archive_summary(archive_chats)},
     )
+    response["Cache-Control"] = "private, no-store"
+    return response
 
 
 @login_required
@@ -1197,17 +1205,22 @@ def _mark_membership_read(membership, user):
 @login_required
 @require_POST
 def mark_all_chats_read(request):
-    # Include archived chats, but never touch hidden chats or other accounts.
+    # Legacy main-list action includes archived chats. The archive button
+    # explicitly scopes the same operation to that folder (also without JS).
+    archive_only = request.POST.get("scope") == "archive"
+    scope = {"is_archived": True} if archive_only else {}
     with transaction.atomic():
         memberships = ChatParticipant.objects.select_for_update().filter(
-            user=request.user, is_hidden=False,
+            user=request.user, is_hidden=False, **scope,
         ).order_by("pk")
         for membership in memberships:
             _mark_membership_read(membership, request.user)
+    label = "Весь архив отмечен прочитанным." if archive_only else "Все чаты, включая архив, отмечены прочитанными."
     if _wants_json(request):
-        return JsonResponse({"ok": True, "message": "Все чаты отмечены прочитанными."})
-    messages.success(request, "Все чаты, включая архив, отмечены прочитанными.")
-    return redirect(_safe_next(request, reverse("messenger:home")))
+        return JsonResponse({"ok": True, "message": label})
+    messages.success(request, label)
+    fallback = reverse("messenger:home") + ("?archived=1" if archive_only else "")
+    return redirect(_safe_next(request, fallback))
 
 
 @login_required
@@ -1387,12 +1400,16 @@ def create_community(request):
                 if not is_blocked_between(request.user, user)
                 and privacy_allows(user, request.user, "invites")
             ]
+            known_ids = set(Contact.objects.filter(
+                user=request.user, owner__in=users,
+            ).values_list("owner_id", flat=True))
             ChatParticipant.objects.bulk_create(
                 [
                     ChatParticipant(
                         chat=chat,
                         user=user,
                         role=ChatParticipant.Role.MEMBER,
+                        **invited_membership_defaults(request.user, user, user.pk in known_ids),
                     )
                     for user in users
                 ],
@@ -1490,14 +1507,18 @@ def global_search(request):
         )
 
     normalized = query.lower().lstrip("@")
+    archive_only = request.GET.get("archived") == "1"
+    membership_scope = {"is_archived": True} if archive_only else {}
+    message_scope = {"chat__memberships__is_archived": True} if archive_only else {}
     memberships = list(
         ChatParticipant.objects.filter(
             user=request.user,
             is_hidden=False,
+            **membership_scope,
         )
         .select_related("chat")
         .prefetch_related("chat__participants")
-        .order_by("-is_pinned", "-chat__updated_at")[:120]
+        .order_by("-is_pinned", "-pin_order", "-chat__updated_at")[:120]
     )
     joined_ids = {membership.chat_id for membership in memberships}
     collective_ids = {
@@ -1551,7 +1572,7 @@ def global_search(request):
         if len(chat_results) >= 12:
             break
 
-    people = list(
+    people = [] if archive_only else list(
         User.objects.filter(is_active=True)
         .exclude(pk=request.user.pk)
         .filter(
@@ -1583,7 +1604,7 @@ def global_search(request):
         for user in people
     ]
 
-    communities = list(
+    communities = [] if archive_only else list(
         Chat.objects.filter(
             type__in=(Chat.Type.GROUP, Chat.Type.CHANNEL),
         )
@@ -1641,6 +1662,7 @@ def global_search(request):
                 chat__memberships__user=request.user,
                 chat__memberships__is_hidden=False,
                 is_deleted=False,
+                **message_scope,
             )
             .exclude(hidden_for_users__user=request.user)
             .select_related("sender", "chat")
@@ -1660,6 +1682,7 @@ def global_search(request):
                     # but full-text search must still find older conversations.
                     membership = ChatParticipant.objects.filter(
                         chat=chat, user=request.user, is_hidden=False,
+                        **membership_scope,
                     ).first()
                 if membership is None:
                     continue
@@ -2878,9 +2901,20 @@ def chat_action(request, chat_id):
             marked_unread=action == "mark_unread",
         )
     elif action == "pin":
-        membership.is_pinned = not membership.is_pinned
-        membership.save(update_fields=("is_pinned",))
-        messages.success(request, "Чат закреплён." if membership.is_pinned else "Чат откреплён.")
+        with transaction.atomic():
+            User.objects.select_for_update().only("id").get(pk=request.user.pk)
+            membership = ChatParticipant.objects.select_for_update().filter(pk=membership.pk, is_hidden=False).first()
+            if membership is None:
+                raise Http404
+            raw = request.POST.get("pinned")
+            if raw not in (None, "1", "0"):
+                return action_error("Некорректное состояние закрепления.")
+            set_membership_pinned(membership, not membership.is_pinned if raw is None else raw == "1")
+        return action_response(
+            "Чат закреплён." if membership.is_pinned else "Чат откреплён.",
+            _safe_next(request, reverse("messenger:chat", args=[chat.pk])),
+            is_pinned=membership.is_pinned,
+        )
     elif action == "mute":
         duration = request.POST.get("duration")
         if duration is None:
@@ -2928,20 +2962,24 @@ def chat_action(request, chat_id):
             protect_content=chat.protect_content,
         )
     elif action == "archive":
-        membership.is_archived = not membership.is_archived
-        membership.save(update_fields=("is_archived",))
-        messages.success(
-            request,
-            "Чат перенесён в архив."
-            if membership.is_archived
-            else "Чат возвращён из архива.",
-        )
+        raw = request.POST.get("archived")
+        if raw not in (None, "1", "0"):
+            return action_error("Некорректное состояние архива.")
+        with transaction.atomic():
+            membership = ChatParticipant.objects.select_for_update().filter(pk=membership.pk, is_hidden=False).first()
+            if membership is None:
+                raise Http404
+            set_membership_archived(membership, not membership.is_archived if raw is None else raw == "1")
         fallback = (
             reverse("messenger:home")
             if membership.is_archived
             else f"{reverse('messenger:home')}?archived=1"
         )
-        return redirect(_safe_next(request, fallback))
+        return action_response(
+            "Чат перенесён в архив." if membership.is_archived else "Чат возвращён из архива.",
+            _safe_next(request, fallback),
+            is_archived=membership.is_archived,
+        )
     elif action == "leave":
         if chat.type == Chat.Type.PRIVATE:
             if wants_json:
@@ -3067,6 +3105,7 @@ def chat_action(request, chat_id):
                         is_hidden=True,
                         cleared_before_message_id=latest_id,
                         is_pinned=False,
+                        pin_order=0,
                         is_archived=False,
                         draft_text="",
                         draft_updated_at=None,
@@ -3086,9 +3125,10 @@ def chat_action(request, chat_id):
                 _clear_history_for_user(chat, membership)
                 membership.is_hidden = True
                 membership.is_pinned = False
+                membership.pin_order = 0
                 membership.is_archived = False
                 membership.save(
-                    update_fields=("is_hidden", "is_pinned", "is_archived")
+                    update_fields=("is_hidden", "is_pinned", "pin_order", "is_archived")
                 )
             return action_response(
                 "Чат удалён у вас.",

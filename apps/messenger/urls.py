@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import community_profiles, views, scheduled, notifications
+from . import archive_controls, community_profiles, views, scheduled, notifications
 
 app_name = "messenger"
 
@@ -11,6 +11,7 @@ urlpatterns = [
     path("sidebar/", views.sidebar_snapshot, name="sidebar_snapshot"),
     path("notifications/poll/", notifications.poll_sound_notifications, name="poll_sound_notifications"),
     path("chats/mark-all-read/", views.mark_all_chats_read, name="mark_all_chats_read"),
+    path("chats/manage/", archive_controls.chat_list_action, name="chat_list_action"),
     path("create/", views.create_community, name="create_community"),
     path("join/<str:username>/", views.join_public_chat, name="join_public_chat"),
     path("invite/<str:token>/", community_profiles.join_invite, name="join_invite"),

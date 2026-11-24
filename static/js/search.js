@@ -270,6 +270,7 @@
     filterControls.forEach(control =>
       control.setAttribute("aria-pressed", String(control.dataset.chatFilter === activeChatFilter))
     );
+    if (typeof window !== "undefined") window.SovietgramArchive?.sync();
   }
 
   filterControls.forEach(control => {
@@ -326,19 +327,21 @@
   const chatList = document.getElementById("chatList");
   if (chatList && sidebarInput) {
     let sidebarRefreshBusy = false;
-    async function refreshSidebar() {
-      if (sidebarRefreshBusy || document.hidden || sidebarInput.value.trim()) return;
+    let refreshGeneration = 0;
+    async function refreshSidebar(force = false) {
+      if ((!force && sidebarRefreshBusy) || document.hidden || (!force && sidebarInput.value.trim())) return;
       sidebarRefreshBusy = true;
+      const generation = ++refreshGeneration;
       try {
         const response = await fetch(chatList.dataset.refreshUrl, {
           credentials: "same-origin",
           cache: "no-store",
         });
-        if (!response.ok || sidebarInput.value.trim()) return;
+        if (!response.ok || generation !== refreshGeneration || (!force && sidebarInput.value.trim())) return;
         const html = await response.text();
-        if (sidebarInput.value.trim()) return;
+        if (generation !== refreshGeneration || (!force && sidebarInput.value.trim())) return;
         const next = new DOMParser().parseFromString(html, "text/html").getElementById("chatList");
-        if (!next) return;
+        if (!next || next.dataset.accountId !== chatList.dataset.accountId) return;
         // The sidebar snapshot is also the lightweight avatar directory for
         // visible conversations. Reuse it to refresh open search/forward
         // results and other mounted surfaces, not only the sidebar itself.
@@ -359,15 +362,20 @@
         next.querySelectorAll("[data-chat-row]").forEach((row) => {
           if (new URL(row.href).pathname === window.location.pathname) row.classList.add("is-active");
         });
+        for (const name of ["archiveCount","archiveUnread","archiveLoudUnread","archiveHidden"]) {
+          chatList.dataset[name] = next.dataset[name] || "";
+        }
         chatList.replaceChildren(...next.childNodes);
         chatList.classList.toggle("chat-list--empty", next.classList.contains("chat-list--empty"));
         applyLocalChatFilter();
+        window.SovietgramArchive?.onRefresh();
       } catch (_error) {
         // Transient connection failures must not interrupt the conversation.
       } finally {
-        sidebarRefreshBusy = false;
+        if (generation === refreshGeneration) sidebarRefreshBusy = false;
       }
     }
+    window.SovietgramSidebar = { refresh: () => refreshSidebar(true) };
     window.setInterval(refreshSidebar, 5000);
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) refreshSidebar();
@@ -403,6 +411,7 @@
     const selected = new URL(row.href, window.location.origin).pathname === current;
     rowNext.value = !unread && selected ? "" : current + window.location.search;
     rowMenu.hidden = false;
+    window.SovietgramArchive?.prepareRowMenu(row);
     const rect = rowMenu.getBoundingClientRect();
     rowMenu.style.left = Math.max(6, Math.min(x, window.innerWidth - rect.width - 6)) + "px";
     rowMenu.style.top = Math.max(6, Math.min(y, window.innerHeight - rect.height - 6)) + "px";
@@ -410,6 +419,7 @@
   }
 
   if (chatList && rowMenu) {
+    window.SovietgramSidebar = { ...window.SovietgramSidebar, openRowMenu, closeRowMenu };
     chatList.addEventListener("contextmenu", event => {
       const row = event.target.closest?.("[data-chat-row]");
       if (!row) return;
@@ -440,6 +450,11 @@
   }
 
   document.getElementById("markAllChatsReadForm")?.addEventListener("submit", event => {
+    if (chatTools?.dataset.archived === "true" && window.SovietgramArchive) {
+      event.preventDefault();
+      void window.SovietgramArchive.readAll();
+      return;
+    }
     if (!window.confirm("Отметить все чаты, включая архив, прочитанными?")) event.preventDefault();
   });
 

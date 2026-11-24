@@ -115,6 +115,8 @@ class ChatParticipant(models.Model):
     # A personal reminder, independent of the real read receipt cursor.
     marked_unread_at = models.DateTimeField(null=True, blank=True)
     is_pinned = models.BooleanField(default=False)
+    # Personal order within the current folder, independent of message activity.
+    pin_order = models.PositiveBigIntegerField(default=0)
     is_archived = models.BooleanField(default=False)
     is_muted = models.BooleanField(default=False)
     muted_until = models.DateTimeField(null=True, blank=True)

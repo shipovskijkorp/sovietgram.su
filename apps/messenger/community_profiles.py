@@ -23,7 +23,7 @@ from .models import (
     ChatParticipant,
     MessageAttachment,
 )
-from .services import attachment_url
+from .services import attachment_url, invited_membership_defaults, set_membership_archived
 
 User = get_user_model()
 
@@ -780,6 +780,7 @@ def community_member_action(request, chat_id):
             user=target_user,
             role=ChatParticipant.Role.MEMBER,
             can_see_pre_join_history=chat.history_visible_to_new_members,
+            **invited_membership_defaults(request.user, target_user),
         )
         _log(
             chat,
@@ -882,8 +883,9 @@ def community_profile_action(request, chat_id):
         membership.muted_until = None
         membership.save(update_fields=("is_muted", "muted_until"))
     elif action == "archive":
-        membership.is_archived = not membership.is_archived
-        membership.save(update_fields=("is_archived",))
+        with transaction.atomic():
+            membership = ChatParticipant.objects.select_for_update().get(pk=membership.pk)
+            set_membership_archived(membership, not membership.is_archived)
     elif action == "leave":
         if membership.role == ChatParticipant.Role.OWNER:
             return _json_error(

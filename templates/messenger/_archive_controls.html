@@ -1,0 +1,16 @@
+<div class="sidebar-chat-context chat-menu chat-menu--telegram" id="archiveFolderContext" hidden>
+  <a href="{% url 'messenger:home' %}?archived=1"><span class="tg-native-icon tg-native-icon--archive-open" aria-hidden="true"></span><span class="chat-menu__label">Открыть архив</span></a>
+  <button type="button" data-archive-command="visibility"><span class="archive-menu-svg"><svg viewBox="0 0 24 24"><path d="M3 8h18M6 12h12M9 16h6"/></svg></span><span class="chat-menu__label" id="archiveVisibilityLabel"></span></button>
+  <button type="button" data-archive-command="read_all"><span class="archive-menu-svg"><svg viewBox="0 0 24 24"><path d="m3 12 5 5 12-12m-8 12 9-9"/></svg></span><span class="chat-menu__label">Прочитать весь архив</span></button>
+  <button type="button" data-archive-command="select"><span class="archive-menu-svg"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="m8 12 3 3 5-6"/></svg></span><span class="chat-menu__label">Выбрать чаты</span></button>
+  <a href="{% url 'messenger:home' %}?archived=1&settings=archive" data-open-settings="archive"><span class="tg-native-icon tg-native-icon--settings" aria-hidden="true"></span><span class="chat-menu__label">Настройки архива</span></a>
+  <button type="button" data-archive-command="help"><span class="tg-native-icon tg-native-icon--info" aria-hidden="true"></span><span class="chat-menu__label">Как это работает?</span></button>
+</div>
+<dialog class="archive-help-dialog" id="archiveHelpDialog" aria-labelledby="archiveHelpTitle">
+  <header><h2 id="archiveHelpTitle">Ваш архив</h2><button type="button" id="archiveHelpClose" aria-label="Закрыть">×</button></header>
+  <p><strong>Архивируйте чаты</strong> — через меню чата, правой кнопкой мыши или свайпом влево. История, черновики и уведомления не удаляются.</p>
+  <p><strong>Управляйте архивом</strong> — закрепляйте чаты, меняйте порядок закреплённых, выбирайте несколько чатов и возвращайте их в основной список.</p>
+  <p><strong>Новые сообщения</strong> — заглушённые чаты остаются в архиве, остальные могут вернуться в список. Это можно изменить в настройках.</p>
+  <p><strong>Скрытый архив</strong> — потяните список вниз или прокрутите вверх у его начала. Архив также доступен из главного меню.</p>
+  <a href="{% url 'messenger:home' %}?archived=1&settings=archive" data-open-settings="archive" id="archiveHelpSettings">Настройки архива</a>
+</dialog>

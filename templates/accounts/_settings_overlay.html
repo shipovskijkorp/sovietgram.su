@@ -131,7 +131,7 @@
           <label class="tg-settings-toggle-row" for="id_archive_unknown_chats">
             <span class="tg-settings-toggle-row__copy">
               <strong>Архивировать и отключать уведомления</strong>
-              <small>Новые личные чаты от пользователей не из контактов попадут в архив без уведомлений.</small>
+              <small>Новые входящие личные чаты и добавления в сообщества не от контактов попадут в архив без уведомлений.</small>
             </span>
             <span class="tg-settings-switch">
               <input id="id_archive_unknown_chats" type="checkbox" data-setting="archive_unknown_chats" {% if request.user.archive_unknown_chats %}checked{% endif %}>
@@ -318,7 +318,7 @@
 
       <section class="tg-settings-screen" data-settings-screen="archive" id="archiveSettings" hidden>
         <div class="tg-settings-subsection">
-          <h2>Архив</h2>
+          <h2>Незаглушённые чаты</h2>
           <label class="tg-settings-toggle-row" for="id_keep_archived_chats">
             <span class="tg-settings-toggle-row__copy"><strong>Всегда оставлять в архиве</strong><small>Новые сообщения не будут возвращать незаглушённые чаты в основной список.</small></span>
             <span class="tg-settings-switch">
@@ -326,10 +326,23 @@
               <span class="tg-settings-switch__track"><span></span></span>
             </span>
           </label>
+        </div>
+        <div class="tg-settings-subsection">
+          <h2>Отображение архива</h2>
           <label class="tg-settings-toggle-row" for="id_archive_in_main_menu">
-            <span class="tg-settings-toggle-row__copy"><strong>Архив в главном меню</strong><small>Показывать Архив отдельным пунктом бокового меню вместо строки над чатами.</small></span>
+            <span class="tg-settings-toggle-row__copy"><strong>Скрыть архив из списка чатов</strong><small>Архив останется в главном меню. Потяните список вниз, чтобы временно показать папку.</small></span>
             <span class="tg-settings-switch">
               <input id="id_archive_in_main_menu" type="checkbox" data-setting="archive_in_main_menu" {% if request.user.archive_in_main_menu %}checked{% endif %}>
+              <span class="tg-settings-switch__track"><span></span></span>
+            </span>
+          </label>
+        </div>
+        <div class="tg-settings-subsection">
+          <h2>Новые чаты от незнакомых пользователей</h2>
+          <label class="tg-settings-toggle-row" for="id_archive_unknown_from_archive">
+            <span class="tg-settings-toggle-row__copy"><strong>Архивировать и отключать уведомления</strong><small>Новые входящие личные чаты и добавления в группы и каналы не от контактов будут заглушены и перенесены в архив.</small></span>
+            <span class="tg-settings-switch">
+              <input id="id_archive_unknown_from_archive" type="checkbox" data-setting="archive_unknown_chats" {% if request.user.archive_unknown_chats %}checked{% endif %}>
               <span class="tg-settings-switch__track"><span></span></span>
             </span>
           </label>
