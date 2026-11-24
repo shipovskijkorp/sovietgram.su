@@ -25,15 +25,20 @@
       {% endif %}
     </div>
 
+    {% if request_pending and invite.requires_approval %}
+    <p>Заявка уже отправлена. Дождитесь решения администратора.</p>
+    <a class="primary-button" href="{% url 'messenger:my_join_requests' %}">Мои заявки</a>
+    {% else %}
     <form method="post" class="auth-form">
-      {% csrf_token %}
+      {% csrf_token %}<input type="hidden" name="account_id" value="{{ request.user.pk }}">
       <button class="primary-button" type="submit">
-        {% if chat.type == 'channel' %}Подписаться{% else %}Вступить{% endif %}
+        {% if invite.requires_approval %}Отправить заявку{% elif chat.type == 'channel' %}Подписаться{% else %}Вступить{% endif %}
       </button>
     </form>
+    {% endif %}
 
     <p class="auth-switch"><a href="{% url 'messenger:home' %}">Не вступать и вернуться к чатам</a></p>
-    <p class="micro-copy">Открытие ссылки само по себе ничего не меняет. Вступление произойдёт только после подтверждения.</p>
+    <p class="micro-copy">{% if invite.requires_approval %}Для вступления требуется одобрение администратора. До одобрения история чата недоступна.{% else %}Открытие ссылки само по себе ничего не меняет. Вступление произойдёт только после подтверждения.{% endif %}</p>
   </section>
 </main>
 {% endblock %}

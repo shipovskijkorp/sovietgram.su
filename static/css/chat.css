@@ -1602,3 +1602,17 @@ body[data-theme="dark"] .sticker-dialog {background:#251f1b;color:#f2e8dc;color-
 .link-preview-card small {font-size:11px;opacity:.8;}
 .link-preview-card p {margin:0;font-size:12px;line-height:1.4;white-space:normal;}
 .link-preview-card button {text-align:left;color:var(--red-soft);background:transparent;border:0;padding:0;cursor:pointer;font:inherit;font-size:12px;font-weight:600;}
+
+/* Personal sticker collections and join request moderation. */
+.sticker-grid-cell {position:relative;min-width:0;}
+.sticker-grid-cell>button:first-child {width:100%;}
+.sticker-grid-cell .sticker-favorite,.sticker-grid-cell .sticker-forget {position:absolute;z-index:1;top:3px;right:3px;width:23px;height:23px;min-height:0;border-radius:50%;padding:0;background:var(--panel,#fffaf1);font-size:16px;line-height:1;display:grid;place-items:center;}
+.sticker-grid-cell .sticker-favorite[aria-pressed="true"] {color:#d9a238;}
+.sticker-grid-cell .sticker-forget {right:auto;left:3px;font-size:18px;}
+.community-settings-join-row {display:grid;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line);}
+.community-settings-join-row .community-settings-invite__copy {overflow-wrap:anywhere;}
+.community-settings-join-row .community-settings-invite__actions {display:flex;flex-wrap:wrap;gap:6px;}
+.community-settings-invite-form .join-approval-toggle input[type="checkbox"] {width:18px;height:18px;accent-color:var(--red);}
+.join-request-page .join-request-item {display:grid;gap:6px;padding:10px 0;border-bottom:1px solid var(--line);}
+.join-request-item span,.join-request-item small {font-size:12px;opacity:.8;}
+.join-request-item button {font:inherit;font-size:12px;cursor:pointer;color:var(--red-soft);background:transparent;border:1px solid var(--line);border-radius:6px;padding:5px 8px;}

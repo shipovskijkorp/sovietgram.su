@@ -52,10 +52,14 @@ def error(message, status=400):
     return JsonResponse({"ok": False, "error": message}, status=status)
 
 
+def sticker_payload(item):
+    return {"id": item.pk, "pack_id": item.pack_id, "emoji": item.emoji,
+            "favorite": item.is_favorite, "url": reverse("messenger:sticker_image", args=[item.pk])}
+
+
 def pack_payload(pack):
     return {"id": pack.pk, "name": pack.name, "stickers": [
-        {"id": item.pk, "emoji": item.emoji, "url": reverse("messenger:sticker_image", args=[item.pk])}
-        for item in pack.stickers.defer("image").all()
+        sticker_payload(item) for item in pack.stickers.defer("image").all()
     ]}
 
 
@@ -66,16 +70,21 @@ def sticker_packs(request):
     if request.method == "GET":
         if request.GET.get("account_id", str(request.user.pk)) != str(request.user.pk):
             return error("Аккаунт изменился. Обновите страницу.", 409)
-        response = JsonResponse({"ok": True, "account_id": request.user.pk, "packs": [
-            pack_payload(pack) for pack in StickerPack.objects.filter(owner=request.user)
-        ]})
+        library = Sticker.objects.filter(pack__owner=request.user).defer("image")
+        response = JsonResponse({
+            "ok": True, "account_id": request.user.pk,
+            "packs": [pack_payload(pack) for pack in StickerPack.objects.filter(owner=request.user)],
+            "favorites": [sticker_payload(item) for item in library.filter(is_favorite=True).order_by("-id")],
+            "recent": [sticker_payload(item) for item in library.filter(last_used_at__isnull=False)
+                       .order_by("-last_used_at", "-id")[:30]],
+        })
         response["Cache-Control"] = "private, no-store"
         return response
 
     if request.POST.get("account_id") != str(request.user.pk):
         return error("Аккаунт изменился. Обновите страницу.", 409)
     action = request.POST.get("action", "")
-    if action not in {"create", "rename", "delete", "add", "remove", "save_message"}:
+    if action not in {"create", "rename", "delete", "add", "remove", "save_message", "favorite", "forget_recent", "clear_recent"}:
         return error("Неизвестное действие.")
     image = None
     emoji = request.POST.get("emoji", "").strip()
@@ -107,6 +116,28 @@ def sticker_packs(request):
     with transaction.atomic():
         get_user_model().objects.select_for_update().only("id").get(pk=request.user.pk)
         packs = StickerPack.objects.filter(owner=request.user)
+        library = Sticker.objects.filter(pack__owner=request.user)
+        if action == "clear_recent":
+            library.filter(last_used_at__isnull=False).update(last_used_at=None)
+            return JsonResponse({"ok": True})
+        if action in {"favorite", "forget_recent"}:
+            try:
+                sticker_id = int(request.POST.get("sticker_id", ""))
+                if not 0 < sticker_id <= 9223372036854775807:
+                    raise ValueError
+            except (ValueError, TypeError, OverflowError):
+                return error("Некорректный стикер.")
+            item = get_object_or_404(library.defer("image"), pk=sticker_id)
+            if action == "favorite":
+                value = request.POST.get("favorite")
+                if value not in {"0", "1"}:
+                    return error("Некорректное состояние избранного.")
+                item.is_favorite = value == "1"
+                item.save(update_fields=["is_favorite"])
+            else:
+                item.last_used_at = None
+                item.save(update_fields=["last_used_at"])
+            return JsonResponse({"ok": True, "sticker": sticker_payload(item)})
         name = request.POST.get("name", "").strip()
         if action in {"create", "rename"}:
             if not 1 <= len(name) <= 48 or any(ord(c) < 32 for c in name):

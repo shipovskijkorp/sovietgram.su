@@ -67,6 +67,7 @@ from .markdown import render_message_markdown
 from .models import (
     Chat,
     ChatFolder,
+    ChatJoinRequest,
     ChatParticipant,
     Contact,
     Message,
@@ -1485,23 +1486,26 @@ def create_community(request):
 @login_required
 @require_POST
 def join_public_chat(request, username):
-    chat = get_object_or_404(
-        Chat,
-        username__iexact=username,
-        type__in=(Chat.Type.GROUP, Chat.Type.CHANNEL),
-    )
-    membership, created = ChatParticipant.objects.get_or_create(
-        chat=chat,
-        user=request.user,
-        defaults={
-            "role": ChatParticipant.Role.MEMBER,
-            "can_see_pre_join_history": chat.history_visible_to_new_members,
-        },
-    )
-    if not created and membership.is_hidden:
-        # Rejoining an existing but locally hidden chat must not redirect to
-        # a 404. Preserve the previous clear-history watermark.
-        ChatParticipant.objects.filter(pk=membership.pk).update(is_hidden=False)
+    with transaction.atomic():
+        chat = get_object_or_404(
+            Chat.objects.select_for_update(),
+            username__iexact=username,
+            type__in=(Chat.Type.GROUP, Chat.Type.CHANNEL),
+        )
+        membership, created = ChatParticipant.objects.get_or_create(
+            chat=chat,
+            user=request.user,
+            defaults={
+                "role": ChatParticipant.Role.MEMBER,
+                "can_see_pre_join_history": chat.history_visible_to_new_members,
+            },
+        )
+        if not created and membership.is_hidden:
+            # Rejoining a hidden chat preserves the clear-history watermark.
+            ChatParticipant.objects.filter(pk=membership.pk).update(is_hidden=False)
+        ChatJoinRequest.objects.filter(chat=chat, user=request.user, status=ChatJoinRequest.Status.PENDING).update(
+            status=ChatJoinRequest.Status.APPROVED, decided_at=timezone.now(),
+        )
     return redirect("messenger:chat", chat_id=chat.pk)
 
 
@@ -2059,6 +2063,7 @@ def send_message(request, chat_id):
                 kind=MessageAttachment.Kind.STICKER, original_name="sticker.webp",
                 mime_type="image/webp", size=len(image),
             )
+            Sticker.objects.filter(pk=sticker.pk, pack__owner=request.user).update(last_used_at=timezone.now())
         for uploaded in form.cleaned_data["attachments"]:
             MessageAttachment.objects.create(
                 message=message,

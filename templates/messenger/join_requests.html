@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}Мои заявки — Sovietgram{% endblock %}
+{% block body_class %}auth-body{% endblock %}
+{% block content %}
+<main class="auth-shell">
+  <section class="auth-card join-request-page">
+    <button class="auth-theme-toggle" type="button" data-auth-theme-toggle aria-label="Переключить тему"><span data-auth-theme-icon aria-hidden="true">☾</span></button>
+    <a class="auth-brand" href="{% url 'messenger:home' %}"><span class="brand__mark">★</span><span>SOVIETGRAM</span></a>
+    <div class="auth-heading"><h1>Мои заявки</h1><p>Статусы заявок на вступление в группы и каналы.</p></div>
+    {% for row in join_rows %}
+    <article class="join-request-item">
+      <strong>{{ row.chat.title }}</strong>
+      <span>{{ row.get_status_display }} · {{ row.created_at|date:"d.m.Y H:i" }}</span>
+      {% if row.chat_id in joined_ids %}
+        <a href="{% url 'messenger:chat' row.chat_id %}">Открыть чат</a>
+      {% elif row.status == 'pending' %}
+        {% if not row.invite.is_active %}<small>Срок действия ссылки истёк или исчерпан лимит вступлений.</small>{% endif %}
+        <form method="post">{% csrf_token %}<input type="hidden" name="account_id" value="{{ request.user.pk }}"><input type="hidden" name="action" value="cancel"><input type="hidden" name="request_id" value="{{ row.pk }}"><input type="hidden" name="revision" value="{{ row.created_at.isoformat }}"><button type="submit">Отменить заявку</button></form>
+      {% elif row.status != 'approved' and row.invite.is_active %}
+        <a href="{% url 'messenger:join_invite' row.invite.token %}">Открыть приглашение</a>
+      {% endif %}
+    </article>
+    {% empty %}<p>Заявок пока нет.</p>{% endfor %}
+    <p class="auth-switch"><a href="{% url 'messenger:my_join_requests' %}">Обновить статусы</a> · <a href="{% url 'messenger:home' %}">Вернуться к чатам</a></p>
+  </section>
+</main>
+{% endblock %}

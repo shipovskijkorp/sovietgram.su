@@ -199,6 +199,11 @@
           </span>
           <b>›</b>
         </button>
+        <button class="community-settings-row" type="button" data-community-settings-open="join-requests">
+          <span class="community-settings-row__icon"><span class="tg-native-icon tg-native-icon--groups" aria-hidden="true"></span></span>
+          <span class="community-settings-row__copy"><strong>Заявки на вступление</strong><small id="communitySettingsJoinSummary"></small></span>
+          <b>›</b>
+        </button>
         <button class="community-settings-row" type="button" data-community-settings-open="admins">
           <span class="community-settings-row__icon"><span class="tg-native-icon tg-native-icon--profile" aria-hidden="true"></span></span>
           <span class="community-settings-row__copy">
@@ -305,9 +310,18 @@
         <label><span>Название</span><input name="name" type="text" maxlength="64" placeholder="Например, Для друзей"></label>
         <label><span>Срок действия</span><select name="expires_hours"><option value="0">Без срока</option><option value="1">1 час</option><option value="24">1 день</option><option value="168">1 неделя</option><option value="720">30 дней</option></select></label>
         <label><span>Лимит вступлений</span><input name="usage_limit" type="number" min="0" max="100000" value="0"><small>0 — без лимита</small></label>
+        <label class="join-approval-toggle"><span>Требовать одобрение администратора</span><input name="requires_approval" type="checkbox" value="1"><small>Пользователи отправят заявку вместо немедленного вступления.</small></label>
         <div><button type="button" id="communitySettingsInviteCancel">Отмена</button><button type="submit">Создать ссылку</button></div>
       </form>
       <div class="community-settings-list" id="communitySettingsInviteList"></div>
+    </section>
+
+    <section class="community-settings__subview" data-community-settings-view="join-requests" hidden>
+      <header class="community-settings__subheader">
+        <button type="button" data-community-settings-back><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span></button>
+        <strong>Заявки на вступление</strong><button class="community-settings__header-action" type="button" id="communitySettingsJoinRefresh">Обновить</button>
+      </header>
+      <div class="community-settings-list" id="communitySettingsJoinList"></div>
     </section>
 
     <section class="community-settings__subview" data-community-settings-view="admins" hidden>

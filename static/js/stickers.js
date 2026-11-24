@@ -7,7 +7,7 @@
   const upload=$("stickerUploadForm"),file=$("stickerFile"),emoji=$("stickerEmoji"),hint=$("stickerHint"),errorNode=$("stickerError");
   const save=$("stickerSaveIncoming"),silentRow=$("stickerSilentRow");
   const csrf=document.querySelector("[name='csrfmiddlewaretoken']")?.value||"";
-  let packs=[],selected=null,mode="manage",attachmentId=null,removing=false,busy=false;
+  let packs=[],favorites=[],recent=[],selected=null,mode="manage",attachmentId=null,removing=false,busy=false;
   function error(value=""){errorNode.textContent=value;errorNode.hidden=!value;}
   function pack(){return packs.find(item=>item.id===selected);}
   function setBusy(value){
@@ -30,8 +30,8 @@
     return result;
   }
   async function load(){
-    const result=await request();packs=result.packs||[];
-    if(!pack())selected=packs[0]?.id??null;
+    const result=await request();packs=result.packs||[];favorites=result.favorites||[];recent=result.recent||[];
+    if(!pack() && (mode==="save" || !["favorites","recent"].includes(selected)))selected=mode==="send"&&recent.length?"recent":packs[0]?.id??"favorites";
   }
   function button(text,callback){
     const node=document.createElement("button");node.type="button";node.textContent=text;
@@ -41,6 +41,13 @@
     const current=pack();
     hint.textContent=mode==="save"?"Выберите набор для сохранения полученного стикера.":mode==="send"?"Нажмите на стикер для отправки.": "Создавайте и редактируйте свои наборы.";
     tabs.replaceChildren();
+    if(mode!=="save"){
+      for(const [id,label] of [["favorites","Избранное"],["recent","Недавние"]]){
+        const tab=button(label,()=>{selected=id;removing=false;error();draw();});
+        tab.setAttribute("aria-pressed",String(selected===id));tab.disabled=busy;tabs.appendChild(tab);
+      }
+    }
+    $("stickerClearRecent").hidden=selected!=="recent"||!recent.length||mode==="save";
     for(const item of packs){
       const tab=button(item.name,()=>{selected=item.id;removing=false;error();draw();});
       tab.setAttribute("aria-pressed",String(item.id===selected));tab.disabled=busy;tabs.appendChild(tab);
@@ -53,10 +60,12 @@
     $("stickerEditMode").setAttribute("aria-pressed",String(removing));
     $("stickerCreatePack").disabled=busy||packs.length>=10;
     grid.replaceChildren();
-    if(!current||!current.stickers.length){
-      const empty=document.createElement("p");empty.className="sticker-hint";empty.textContent=current?"В наборе пока нет стикеров.":"Создайте первый набор.";grid.appendChild(empty);return;
+    const items=selected==="favorites"?favorites:selected==="recent"?recent:current?.stickers||[];
+    if(!items.length){
+      const empty=document.createElement("p");empty.className="sticker-hint";empty.textContent=selected==="favorites"?"Нажмите звёздочку на стикере, чтобы добавить в избранное.":selected==="recent"?"Недавно отправленных стикеров пока нет.":current?"В наборе пока нет стикеров.":"Создайте первый набор.";grid.appendChild(empty);return;
     }
-    for(const item of current.stickers){
+    for(const item of items){
+      const cell=document.createElement("div");cell.className="sticker-grid-cell";
       const node=button("",()=>void choose(item));
       node.disabled=busy||mode==="save"||(mode==="manage"&&!removing);
       node.title=removing?"Удалить стикер":mode==="send"?"Отправить стикер":"Стикер";
@@ -65,7 +74,16 @@
       node.appendChild(img);
       if(item.emoji){const small=document.createElement("small");small.textContent=item.emoji;node.appendChild(small);}
       if(removing){const remove=document.createElement("span");remove.className="sticker-remove";remove.textContent="×";node.appendChild(remove);}
-      grid.appendChild(node);
+      cell.appendChild(node);
+      if(mode!=="save"&&!removing){
+        const star=button(item.favorite?"★":"☆",()=>void mutate("favorite",{sticker_id:item.id,favorite:item.favorite?"0":"1"}));
+        star.className="sticker-favorite";star.setAttribute("aria-pressed",String(Boolean(item.favorite)));star.setAttribute("aria-label",item.favorite?"Удалить из избранного":"В избранное");star.title=star.getAttribute("aria-label");star.disabled=busy;cell.appendChild(star);
+        if(selected==="recent"){
+          const forget=button("×",()=>void mutate("forget_recent",{sticker_id:item.id}));
+          forget.className="sticker-forget";forget.title="Убрать из недавних";forget.setAttribute("aria-label",forget.title);forget.disabled=busy;cell.appendChild(forget);
+        }
+      }
+      grid.appendChild(cell);
     }
   }
   async function mutate(action,fields={}){
@@ -97,7 +115,7 @@
   async function open(nextMode,id=null){
     if(busy)return;
     mode=nextMode;attachmentId=id;removing=false;
-    packs=[];selected=null;draw();
+    packs=[];favorites=[];recent=[];selected=null;draw();
     $("stickerSilent").checked=false;
     if(!dialog.open)dialog.showModal();
     error();setBusy(true);
@@ -119,6 +137,9 @@
       void mutate("delete",{pack_id:current.id});
   });
   $("stickerEditMode").addEventListener("click",()=>{removing=!removing;draw();});
+  $("stickerClearRecent").addEventListener("click",()=>{
+    if(window.confirm("Очистить список недавних стикеров? Избранное и наборы останутся."))void mutate("clear_recent");
+  });
   upload.addEventListener("submit",async event=>{
     event.preventDefault();if(!pack()||!file.files[0]||busy)return;
     if(file.files[0].size>2*1024*1024){error("Изображение должно быть не больше 2 МБ.");return;}

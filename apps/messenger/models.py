@@ -343,6 +343,7 @@ class ChatInviteLink(models.Model):
     expires_at = models.DateTimeField(null=True, blank=True)
     usage_limit = models.PositiveIntegerField(null=True, blank=True)
     usage_count = models.PositiveIntegerField(default=0)
+    requires_approval = models.BooleanField(default=False)
     revoked_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -509,7 +510,31 @@ class Sticker(models.Model):
     emoji = models.CharField(max_length=24, blank=True, default="")
     # Bounded, normalized small WebP assets. Cascading deletes need no file cleanup.
     image = models.BinaryField()
+    is_favorite = models.BooleanField(default=False)
+    last_used_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ("id",)
+
+
+class ChatJoinRequest(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "На рассмотрении"
+        APPROVED = "approved", "Одобрена"
+        REJECTED = "rejected", "Отклонена"
+        CANCELED = "canceled", "Отменена"
+
+    chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="join_requests")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="chat_join_requests")
+    invite = models.ForeignKey(ChatInviteLink, on_delete=models.CASCADE, related_name="join_requests")
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    created_at = models.DateTimeField(default=timezone.now)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name="decided_join_requests")
+
+    class Meta:
+        ordering = ("created_at", "pk")
+        constraints = [models.UniqueConstraint(fields=("chat", "user"), name="unique_chat_join_request")]
+        indexes = [models.Index(fields=("chat", "status", "created_at"), name="sg_join_chat_status_idx")]

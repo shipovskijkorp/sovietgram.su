@@ -18,6 +18,8 @@ DEFAULT_RATE_LIMITS = {
     "chat_list_action": {"limit": 60, "window": 60},
     "chat_folders": {"limit": 90, "window": 60},
     "sticker_packs": {"limit": 50, "window": 60},
+    "join_invite": {"limit": 40, "window": 60},
+    "join_request_action": {"limit": 60, "window": 60},
     "link_preview": {"limit": 12, "window": 60},
 }
 

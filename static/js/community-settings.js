@@ -157,6 +157,8 @@
       permissionsSummary.textContent = String(denied) + "/" + String(total) + " запрещено" + (slow ? " · медленный режим " + slowModeText(slow) : "");
     }
     inviteSummary.textContent = String(settings.active_invite_count || 0) + " активн.";
+    const joinSummary=$("communitySettingsJoinSummary");
+    if(joinSummary)joinSummary.textContent = String(settings.pending_join_count || 0) + " ожидают";
     adminSummary.textContent = String(settings.admin_count || 0);
     memberSummary.textContent = String(settings.member_count || 0);
     if (signatures) signatures.checked = Boolean(settings.signatures_enabled);
@@ -329,6 +331,7 @@
         String(invite.usage_count) + (invite.usage_limit ? "/" + String(invite.usage_limit) : "") + " вступл.",
       ];
       if (invite.expires_at) parts.push("до " + invite.expires_at);
+      if (invite.requires_approval) parts.push("с одобрением");
       meta.textContent = parts.join(" · ");
       copy.append(titleNode, meta);
 
@@ -350,6 +353,55 @@
       inviteList.appendChild(row);
     });
   }
+
+  let joinBusy=false;
+  function renderJoinRequests() {
+    const list=$("communitySettingsJoinList");
+    if(!list)return;
+    list.replaceChildren();
+    const requests=settings?.join_requests||[];
+    if(!requests.length)list.appendChild(empty("Нет заявок на вступление."));
+    for(const item of requests){
+      const row=document.createElement("div");row.className="community-settings-join-row";
+      const copy=document.createElement("div");copy.className="community-settings-invite__copy";
+      const title=document.createElement("strong");title.textContent=item.name+" · @"+item.username;
+      const detail=document.createElement("small");detail.textContent=item.invite_name+" · "+item.created_at+(item.invite_active?"":" · ссылка недействительна");
+      copy.append(title,detail);
+      const actions=document.createElement("div");actions.className="community-settings-invite__actions";
+      for(const [action,label] of [["approve","Принять"],["reject","Отклонить"]]){
+        const node=document.createElement("button");node.type="button";node.textContent=label;
+        node.disabled=joinBusy||(action==="approve"&&!item.invite_active);
+        if(action==="reject")node.className="is-danger";
+        node.addEventListener("click",()=>void decideJoinRequest(item,action));actions.appendChild(node);
+      }
+      row.append(copy,actions);list.appendChild(row);
+    }
+    if((settings?.pending_join_count||0)>requests.length)list.appendChild(empty("Показаны первые 100 заявок. Остальные появятся после обработки."));
+  }
+  async function refreshJoinRequests() {
+    if(joinBusy)return;
+    joinBusy=true;renderJoinRequests();
+    try{
+      const payload=await fetchJson(profileRoot.dataset.settingsUrl,{cache:"no-store"});
+      settings=payload.settings;render();
+    }catch(error){toast(error.message);}
+    finally{joinBusy=false;renderJoinRequests();}
+  }
+  async function decideJoinRequest(item,action) {
+    if(joinBusy)return;
+    if(!window.confirm((action==="approve"?"Принять":"Отклонить")+" заявку @"+item.username+"?"))return;
+    joinBusy=true;renderJoinRequests();
+    try{
+      const payload=await post(settings.urls.join_request_action,{
+        account_id:document.getElementById("messageStage")?.dataset.accountId,
+        action,request_id:item.id,revision:item.revision,
+      });
+      settings=payload.settings;render();toast(action==="approve"?"Заявка одобрена.":"Заявка отклонена.");
+      void window.SovietgramSidebar?.refresh();
+    }catch(error){toast(error.message);}
+    finally{joinBusy=false;renderJoinRequests();}
+  }
+  $("communitySettingsJoinRefresh")?.addEventListener("click",refreshJoinRequests);
 
   function renderLog() {
     if (!logList) return;
@@ -378,6 +430,7 @@
     renderTypeForm();
     renderPermissionsForm();
     renderInvites();
+    renderJoinRequests();
     renderAdmins();
     renderMembers();
     renderLog();
@@ -498,6 +551,7 @@
       if (next === "type") renderTypeForm();
       if (next === "permissions") renderPermissionsForm();
       if (next === "invites") renderInvites();
+      if (next === "join-requests") void refreshJoinRequests();
       if (next === "admins") renderAdmins();
       if (next === "members") renderMembers();
       if (next === "log") renderLog();
@@ -583,6 +637,7 @@
         name: data.get("name") || "",
         expires_hours: data.get("expires_hours") || "0",
         usage_limit: data.get("usage_limit") || "0",
+        requires_approval: data.get("requires_approval") || "0",
       });
       settings = payload.settings;
       inviteForm.reset();

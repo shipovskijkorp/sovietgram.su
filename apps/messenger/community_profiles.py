@@ -20,10 +20,12 @@ from .models import (
     Chat,
     ChatAdminLog,
     ChatInviteLink,
+    ChatJoinRequest,
     ChatParticipant,
     MessageAttachment,
 )
 from .services import attachment_url, invited_membership_defaults, set_membership_archived
+from .ratelimit import rate_limit
 
 User = get_user_model()
 
@@ -336,6 +338,7 @@ def _profile_payload(request, chat):
             "action": reverse("messenger:community_profile_action", args=[chat.pk]),
             "settings": reverse("messenger:community_settings", args=[chat.pk]),
             "invite_action": reverse("messenger:community_invite_action", args=[chat.pk]),
+            "join_request_action": reverse("messenger:community_join_request_action", args=[chat.pk]),
         },
     }
 
@@ -351,6 +354,7 @@ def _invite_payload(invite):
         "expires_at": timezone.localtime(invite.expires_at).strftime("%d.%m.%Y %H:%M") if invite.expires_at else "",
         "usage_limit": invite.usage_limit,
         "usage_count": invite.usage_count,
+        "requires_approval": invite.requires_approval,
         "is_active": invite.is_active,
         "revoked": invite.revoked_at is not None,
     }
@@ -388,6 +392,16 @@ def _settings_payload(request, chat):
         for item in ChatAdminLog.objects.filter(chat=chat)
         .select_related("actor", "target_user")[:80]
     ]
+    pending = ChatJoinRequest.objects.filter(chat=chat, status=ChatJoinRequest.Status.PENDING).select_related("user", "invite")
+    pending = pending.exclude(user_id__in=ChatParticipant.objects.filter(chat=chat).values("user_id"))
+    pending_count = pending.count()
+    join_requests = [
+        {"id": row.pk, "name": row.user.display_name, "username": row.user.username,
+         "invite_name": row.invite.name or "Ссылка-приглашение", "invite_active": row.invite.is_active,
+         "created_at": timezone.localtime(row.created_at).strftime("%d.%m.%Y %H:%M"),
+         "revision": row.created_at.isoformat()}
+        for row in pending[:100]
+    ]
     restrictions = [
         not chat.members_can_send_messages,
         not chat.members_can_send_media,
@@ -420,11 +434,14 @@ def _settings_payload(request, chat):
         "admins": admins,
         "members": [_member_payload(actor, item) for item in memberships],
         "invite_links": links,
+        "join_requests": join_requests,
+        "pending_join_count": pending_count,
         "active_invite_count": sum(item["is_active"] for item in links),
         "recent_actions": logs,
         "urls": {
             "settings": reverse("messenger:community_settings", args=[chat.pk]),
             "invite_action": reverse("messenger:community_invite_action", args=[chat.pk]),
+            "join_request_action": reverse("messenger:community_join_request_action", args=[chat.pk]),
             "member_action": reverse("messenger:community_member_action", args=[chat.pk]),
             "member_candidates": reverse("messenger:community_member_candidates", args=[chat.pk]),
             "profile": reverse("messenger:community_profile", args=[chat.pk]),
@@ -588,9 +605,11 @@ def community_settings(request, chat_id):
 
 @login_required
 @require_POST
+@transaction.atomic
 def community_invite_action(request, chat_id):
     chat = _collective_chat_for_user(request.user, chat_id)
-    membership = _membership(chat, request.user)
+    chat = Chat.objects.select_for_update().get(pk=chat.pk)
+    membership = get_object_or_404(ChatParticipant.objects.select_for_update(), chat=chat, user=request.user)
     if not _can_manage(membership):
         return _json_error("Управлять ссылками могут только администраторы.", status=403)
 
@@ -613,6 +632,7 @@ def community_invite_action(request, chat_id):
             name=name,
             expires_at=timezone.now() + timedelta(hours=expires_hours) if expires_hours else None,
             usage_limit=usage_limit or None,
+            requires_approval=_post_bool(request, "requires_approval"),
         )
         _log(chat, request.user, "invite_create", f"Создана ссылка «{invite.name or 'Ссылка-приглашение'}».")
     elif action == "revoke":
@@ -620,10 +640,13 @@ def community_invite_action(request, chat_id):
             invite_id = int(request.POST.get("invite_id", "0"))
         except (TypeError, ValueError):
             return _json_error("Некорректная ссылка.")
-        invite = get_object_or_404(ChatInviteLink, pk=invite_id, chat=chat)
+        invite = get_object_or_404(ChatInviteLink.objects.select_for_update(), pk=invite_id, chat=chat)
         if invite.revoked_at is None:
             invite.revoked_at = timezone.now()
             invite.save(update_fields=("revoked_at",))
+            ChatJoinRequest.objects.filter(invite=invite, status=ChatJoinRequest.Status.PENDING).update(
+                status=ChatJoinRequest.Status.REJECTED, decided_at=invite.revoked_at, decided_by=request.user,
+            )
             _log(chat, request.user, "invite_revoke", f"Отозвана ссылка «{invite.name or 'Ссылка-приглашение'}».")
     else:
         return _json_error("Неизвестное действие со ссылкой.")
@@ -633,68 +656,158 @@ def community_invite_action(request, chat_id):
 
 @login_required
 @require_http_methods(["GET", "POST"])
+@rate_limit("join_invite")
 def join_invite(request, token):
+    invite = ChatInviteLink.objects.select_related("chat").filter(token=token).first()
+    if invite is None or not invite.is_active:
+        messages.error(request, "Ссылка-приглашение недействительна или устарела.")
+        return redirect("messenger:home")
+    chat = invite.chat
     if request.method == "GET":
-        invite = (
-            ChatInviteLink.objects.select_related("chat")
-            .filter(token=token)
-            .first()
-        )
-        if invite is None or not invite.is_active:
-            messages.error(request, "Ссылка-приглашение недействительна или устарела.")
-            return redirect("messenger:home")
-
-        chat = invite.chat
-        if ChatParticipant.objects.filter(
-            chat=chat, user=request.user, is_hidden=False,
-        ).exists():
+        if ChatParticipant.objects.filter(chat=chat, user=request.user, is_hidden=False).exists():
             return redirect("messenger:chat", chat_id=chat.pk)
-
-        return render(
-            request,
-            "messenger/join_invite.html",
-            {
-                "invite": invite,
-                "chat": chat,
-                "member_count": chat.memberships.count(),
-            },
-        )
+        pending = ChatJoinRequest.objects.filter(chat=chat, user=request.user, status=ChatJoinRequest.Status.PENDING).exists()
+        return render(request, "messenger/join_invite.html", {
+            "invite": invite, "chat": chat, "member_count": chat.memberships.count(),
+            "request_pending": pending,
+        })
+    if request.POST.get("account_id", str(request.user.pk)) != str(request.user.pk):
+        messages.error(request, "Аккаунт изменился. Обновите страницу.")
+        return redirect("messenger:home")
 
     with transaction.atomic():
-        invite = (
-            ChatInviteLink.objects.select_for_update()
-            .select_related("chat")
-            .filter(token=token)
-            .first()
-        )
+        User.objects.select_for_update().only("id").get(pk=request.user.pk)
+        chat = get_object_or_404(Chat.objects.select_for_update(), pk=chat.pk,
+                                 type__in=(Chat.Type.GROUP, Chat.Type.CHANNEL))
+        invite = ChatInviteLink.objects.select_for_update().filter(pk=invite.pk, chat=chat).first()
         if invite is None or not invite.is_active:
             messages.error(request, "Ссылка-приглашение недействительна или устарела.")
             return redirect("messenger:home")
-
-        chat = invite.chat
-        membership, created = ChatParticipant.objects.get_or_create(
-            chat=chat,
-            user=request.user,
-            defaults={
-                "role": ChatParticipant.Role.MEMBER,
-                "can_see_pre_join_history": chat.history_visible_to_new_members,
-            },
-        )
-        if not created and membership.is_hidden:
-            # A previously hidden membership is still counted as existing.
-            # Re-open it without consuming another use of the invite link.
-            ChatParticipant.objects.filter(pk=membership.pk).update(is_hidden=False)
-        if created:
+        membership = ChatParticipant.objects.select_for_update().filter(chat=chat, user=request.user).first()
+        if membership is None and invite.requires_approval:
+            pending = ChatJoinRequest.objects.select_for_update().filter(chat=chat, user=request.user).first()
+            if pending and pending.status == ChatJoinRequest.Status.PENDING:
+                return redirect("messenger:my_join_requests")
+            if pending and pending.status == ChatJoinRequest.Status.REJECTED and pending.decided_at and (
+                pending.decided_at > timezone.now() - timedelta(minutes=10)
+            ):
+                messages.error(request, "После отклонения повторную заявку можно отправить через 10 минут.")
+                return redirect("messenger:my_join_requests")
+            if (ChatJoinRequest.objects.filter(user=request.user, status=ChatJoinRequest.Status.PENDING).count() >= 20
+                    or ChatJoinRequest.objects.filter(chat=chat, status=ChatJoinRequest.Status.PENDING).count() >= 500):
+                messages.error(request, "Достигнут лимит заявок. Попробуйте позже.")
+                return redirect("messenger:my_join_requests")
+            ChatJoinRequest.objects.update_or_create(chat=chat, user=request.user, defaults={
+                "invite": invite, "status": ChatJoinRequest.Status.PENDING,
+                "created_at": timezone.now(), "decided_at": None, "decided_by": None,
+            })
+            messages.success(request, "Заявка отправлена. Дождитесь одобрения администратора.")
+            return redirect("messenger:my_join_requests")
+        if membership is None:
+            ChatParticipant.objects.create(chat=chat, user=request.user, role=ChatParticipant.Role.MEMBER,
+                                           can_see_pre_join_history=chat.history_visible_to_new_members)
             invite.usage_count += 1
             invite.save(update_fields=("usage_count",))
-            _log(
-                chat,
-                request.user,
-                "join_invite",
-                f"{request.user.display_name} вступил(а) по ссылке-приглашению.",
-                target_user=request.user,
-            )
+            _log(chat, request.user, "join_invite", f"{request.user.display_name} вступил(а) по ссылке-приглашению.",
+                 target_user=request.user)
+        elif membership.is_hidden:
+            ChatParticipant.objects.filter(pk=membership.pk).update(is_hidden=False)
+        ChatJoinRequest.objects.filter(chat=chat, user=request.user, status=ChatJoinRequest.Status.PENDING).update(
+            status=ChatJoinRequest.Status.APPROVED, decided_at=timezone.now(),
+        )
     return redirect("messenger:chat", chat_id=chat.pk)
+
+
+@login_required
+@require_POST
+@rate_limit("join_request_action")
+def community_join_request_action(request, chat_id):
+    if request.POST.get("account_id") != str(request.user.pk):
+        return _json_error("Аккаунт изменился. Обновите страницу.", status=409)
+    chat = _collective_chat_for_user(request.user, chat_id)
+    action = request.POST.get("action")
+    if action not in {"approve", "reject"}:
+        return _json_error("Неизвестное действие.")
+    try:
+        request_id = int(request.POST.get("request_id", ""))
+        if not 0 < request_id <= 9223372036854775807:
+            raise ValueError
+    except (ValueError, TypeError, OverflowError):
+        return _json_error("Некорректная заявка.")
+    with transaction.atomic():
+        chat = Chat.objects.select_for_update().get(pk=chat.pk)
+        actor = get_object_or_404(ChatParticipant.objects.select_for_update(), chat=chat, user=request.user, is_hidden=False)
+        if not _can_manage(actor):
+            return _json_error("Рассматривать заявки могут только администраторы.", status=403)
+        row = get_object_or_404(ChatJoinRequest.objects.select_for_update(), pk=request_id, chat=chat)
+        if request.POST.get("revision") != row.created_at.isoformat():
+            return _json_error("Заявка изменилась. Обновите список.", status=409)
+        desired = ChatJoinRequest.Status.APPROVED if action == "approve" else ChatJoinRequest.Status.REJECTED
+        if row.status == desired:
+            return JsonResponse({"ok": True, "settings": _settings_payload(request, chat), "replayed": True})
+        if row.status != ChatJoinRequest.Status.PENDING:
+            return _json_error("Заявка уже рассмотрена или отменена.", status=409)
+        if action == "approve":
+            invite = ChatInviteLink.objects.select_for_update().filter(pk=row.invite_id, chat=chat).first()
+            if invite is None or not invite.is_active:
+                return _json_error("Ссылка больше не действует. Отклоните заявку или предложите новую ссылку.", status=409)
+            if not row.user.is_active:
+                return _json_error("Аккаунт пользователя недоступен.", status=409)
+            membership, created = ChatParticipant.objects.get_or_create(
+                chat=chat, user_id=row.user_id,
+                defaults={"role": ChatParticipant.Role.MEMBER,
+                          "can_see_pre_join_history": chat.history_visible_to_new_members},
+            )
+            if created:
+                invite.usage_count += 1
+                invite.save(update_fields=["usage_count"])
+            elif membership.is_hidden:
+                membership.is_hidden = False
+                membership.save(update_fields=["is_hidden"])
+        row.status = desired
+        row.decided_at = timezone.now()
+        row.decided_by = request.user
+        row.save(update_fields=["status", "decided_at", "decided_by"])
+        _log(chat, request.user, "join_request_" + action,
+             ("Одобрена заявка: " if action == "approve" else "Отклонена заявка: ") + row.user.display_name,
+             target_user=row.user)
+    return JsonResponse({"ok": True, "settings": _settings_payload(request, chat)})
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+@rate_limit("join_request_action")
+def my_join_requests(request):
+    if request.method == "POST":
+        if request.POST.get("account_id") != str(request.user.pk):
+            messages.error(request, "Аккаунт изменился. Обновите страницу.")
+            return redirect("messenger:my_join_requests")
+        try:
+            request_id = int(request.POST.get("request_id", ""))
+            if not 0 < request_id <= 9223372036854775807:
+                raise ValueError
+        except (ValueError, TypeError, OverflowError):
+            return redirect("messenger:my_join_requests")
+        if request.POST.get("action") != "cancel":
+            return redirect("messenger:my_join_requests")
+        with transaction.atomic():
+            row = ChatJoinRequest.objects.select_for_update().filter(pk=request_id, user=request.user, status=ChatJoinRequest.Status.PENDING).first()
+            if row and request.POST.get("revision") == row.created_at.isoformat():
+                row.status = ChatJoinRequest.Status.CANCELED
+                row.decided_at = timezone.now()
+                row.decided_by = request.user
+                row.save(update_fields=["status", "decided_at", "decided_by"])
+                messages.success(request, "Заявка отменена.")
+        return redirect("messenger:my_join_requests")
+    own = ChatJoinRequest.objects.filter(user=request.user).select_related("chat", "invite")
+    pending = list(own.filter(status=ChatJoinRequest.Status.PENDING))
+    decided = list(own.exclude(status=ChatJoinRequest.Status.PENDING).order_by("-decided_at", "-pk")[:100])
+    joined_ids = set(ChatParticipant.objects.filter(user=request.user, is_hidden=False).values_list("chat_id", flat=True))
+    response = render(request, "messenger/join_requests.html", {
+        "join_rows": pending + decided, "joined_ids": joined_ids,
+    })
+    response["Cache-Control"] = "private, no-store"
+    return response
 
 
 @login_required
@@ -775,13 +888,20 @@ def community_member_action(request, chat_id):
                 "Пользователь запретил добавлять себя в группы и каналы.",
                 status=403,
             )
-        ChatParticipant.objects.create(
-            chat=chat,
-            user=target_user,
-            role=ChatParticipant.Role.MEMBER,
-            can_see_pre_join_history=chat.history_visible_to_new_members,
-            **invited_membership_defaults(request.user, target_user),
-        )
+        with transaction.atomic():
+            chat = Chat.objects.select_for_update().get(pk=chat.pk)
+            if ChatParticipant.objects.filter(chat=chat, user=target_user).exists():
+                return _json_error("Пользователь уже состоит здесь.")
+            ChatParticipant.objects.create(
+                chat=chat,
+                user=target_user,
+                role=ChatParticipant.Role.MEMBER,
+                can_see_pre_join_history=chat.history_visible_to_new_members,
+                **invited_membership_defaults(request.user, target_user),
+            )
+            ChatJoinRequest.objects.filter(chat=chat, user=target_user, status=ChatJoinRequest.Status.PENDING).update(
+                status=ChatJoinRequest.Status.APPROVED, decided_at=timezone.now(), decided_by=request.user,
+            )
         _log(
             chat,
             request.user,
