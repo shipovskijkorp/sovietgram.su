@@ -125,3 +125,28 @@ class UserBlock(models.Model):
 
     def __str__(self):
         return f"{self.blocker} blocks {self.blocked}"
+
+
+class AccountSecurityRequest(models.Model):
+    """One outstanding credential operation per account and purpose."""
+
+    class Purpose(models.TextChoices):
+        PASSWORD_RESET = "password_reset", "Восстановление пароля"
+        EMAIL_CHANGE = "email_change", "Изменение почты"
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="security_requests",
+    )
+    purpose = models.CharField(max_length=20, choices=Purpose.choices)
+    token_digest = models.CharField(max_length=64, null=True, blank=True, unique=True)
+    email = models.EmailField()
+    account_state = models.CharField(max_length=64)
+    issued_at = models.DateTimeField()
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("user", "purpose"), name="unique_account_security_purpose",
+            ),
+        ]

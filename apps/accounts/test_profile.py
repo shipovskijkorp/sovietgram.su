@@ -87,7 +87,7 @@ class ProfileTests(TestCase):
                 "last_name": "Петров",
                 "username": "ivan_petrov",
                 "bio": "На связи.",
-                "email": "petrov@example.com",
+                "email": self.user.email,
             },
         )
         self.assertRedirects(response, reverse("accounts:profile"))
@@ -97,7 +97,7 @@ class ProfileTests(TestCase):
         self.assertEqual(self.user.last_name, "Петров")
         self.assertEqual(self.user.username, "ivan_petrov")
         self.assertEqual(self.user.bio, "На связи.")
-        self.assertEqual(self.user.email, "petrov@example.com")
+        self.assertEqual(self.user.email, "ivan@example.com")
         self.assertEqual(self.user.display_name, "Иван Петров")
 
     def test_profile_rejects_case_insensitive_username_collision(self):

@@ -89,6 +89,11 @@
             <span class="tg-settings-row__value">Изменить</span>
           </button>
 
+          <a class="tg-settings-row tg-settings-row--plain" href="{% url 'accounts:email_change' %}">
+            <span class="tg-settings-row__label">Электронная почта</span>
+            <span class="tg-settings-row__value">{% if request.user.email_verified_at %}Изменить{% else %}Подтвердить{% endif %}</span>
+          </a>
+
           <button class="tg-settings-row tg-settings-row--plain" type="button" data-settings-target="auto-delete">
             <span class="tg-settings-row__label">Автоудаление сообщений</span>
             <span class="tg-settings-row__value" id="privacyAutoDeleteValue">{{ settings_auto_delete_label }}</span>

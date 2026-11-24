@@ -41,6 +41,7 @@
       <button class="primary-button" type="submit">Войти</button>
     </form>
 
+    <p class="auth-switch"><a href="{% url 'accounts:password_reset' %}">Забыли пароль?</a></p>
     <p class="auth-switch">Ещё нет учётной записи? <a href="{% url 'accounts:register' %}">Зарегистрироваться</a></p>
     <p class="micro-copy">Связь устанавливается без бюрократии. Пока что.</p>
   </section>

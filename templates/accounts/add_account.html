@@ -56,6 +56,7 @@
         </label>
         <button class="primary-button" type="submit">Добавить и переключиться</button>
       </form>
+      <p class="auth-switch"><a href="{% url 'accounts:password_reset' %}">Забыли пароль?</a></p>
     {% endif %}
 
     <p class="auth-switch"><a href="{% url 'messenger:home' %}">Отмена</a></p>

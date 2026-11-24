@@ -1,5 +1,7 @@
 from django.urls import path
 
+from . import account_security
+
 from .views import (
     SovietgramLoginView,
     SovietgramLogoutView,
@@ -22,6 +24,11 @@ app_name = "accounts"
 
 urlpatterns = [
     path("login/", SovietgramLoginView.as_view(), name="login"),
+    path("password/reset/", account_security.password_reset_request, name="password_reset"),
+    path("password/reset/sent/", account_security.password_reset_sent, name="password_reset_sent"),
+    path("password/reset/confirm/<str:token>/", account_security.password_reset_confirm, name="password_reset_confirm"),
+    path("profile/email/", account_security.email_change_request, name="email_change"),
+    path("profile/email/confirm/<str:token>/", account_security.email_change_confirm, name="email_change_confirm"),
     path("register/", register, name="register"),
     path("verify-email/pending/", verification_pending, name="verification_pending"),
     path("verify-email/resend/", resend_verification, name="resend_verification"),

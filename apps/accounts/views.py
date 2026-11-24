@@ -237,7 +237,8 @@ class SovietgramPasswordChangeView(LoginRequiredMixin, PasswordChangeView):
         return redirect(f"{reverse('messenger:home')}?settings=password")
 
     def form_valid(self, form):
-        user = form.save()
+        user = form.save(commit=False)
+        user.save(update_fields=["password"])
         update_session_auth_hash(self.request, user)
         # Password changes rotate the Django auth hash. Refresh the saved
         # multi-account slot in the same request so switching away and back
@@ -353,7 +354,9 @@ def profile(request):
                 {"ok": False, "errors": form.errors.get_json_data()},
                 status=400,
             )
-        user = form.save()
+        user = form.save(commit=False)
+        # A stale profile request must never restore an old email or password.
+        user.save(update_fields=[field for field in form._meta.fields if field != "email"])
         if request.FILES.get("avatar") and old_avatar_name and old_avatar_storage:
             if old_avatar_name != user.avatar.name:
                 old_avatar_storage.delete(old_avatar_name)
@@ -378,7 +381,9 @@ def profile(request):
 
     form = ProfileForm(request.POST or None, request.FILES or None, instance=request.user)
     if request.method == "POST" and form.is_valid():
-        user = form.save()
+        user = form.save(commit=False)
+        # A stale profile request must never restore an old email or password.
+        user.save(update_fields=[field for field in form._meta.fields if field != "email"])
         if request.FILES.get("avatar") and old_avatar_name and old_avatar_storage:
             if old_avatar_name != user.avatar.name:
                 old_avatar_storage.delete(old_avatar_name)
@@ -637,7 +642,8 @@ def settings_view(request):
     form = UserSettingsForm(request.POST or None, instance=request.user)
     if request.method == "POST":
         if form.is_valid():
-            form.save()
+            user = form.save(commit=False)
+            user.save(update_fields=list(form._meta.fields))
             messages.success(request, "Настройки сохранены.")
         else:
             for field_errors in form.errors.values():

@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} — Sovietgram{% endblock %}
+{% block body_class %}auth-body{% endblock %}
+
+{% block content %}
+<main class="auth-shell">
+  <section class="auth-card auth-card--wide">
+    <button class="auth-theme-toggle" type="button" data-auth-theme-toggle
+            aria-label="Переключить тему" title="Переключить тему">
+      <span data-auth-theme-icon aria-hidden="true">☾</span>
+    </button>
+    <a class="auth-brand" href="{% url 'accounts:login' %}">
+      <span class="brand__mark">★</span><span>SOVIETGRAM</span>
+    </a>
+    <div class="auth-heading">
+      <p class="eyebrow">Безопасность аккаунта</p>
+      <h1>{{ heading }}</h1>
+      <p>{{ description }}</p>
+    </div>
+    {% if submit %}
+      <form method="post" class="auth-form">
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+          <div class="form-alert">{{ form.non_field_errors|striptags }}</div>
+        {% endif %}
+        {% for field in form %}
+          <label class="field">
+            <span>{{ field.label }}</span>
+            {{ field }}
+            {% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+          </label>
+          {% if field.help_text %}<div class="micro-copy">{{ field.help_text }}</div>{% endif %}
+        {% endfor %}
+        <button type="submit" class="primary-button">{{ submit }}</button>
+      </form>
+    {% endif %}
+    <p class="auth-switch"><a href="{{ back_url }}">{{ back_label }}</a></p>
+  </section>
+</main>
+{% endblock %}

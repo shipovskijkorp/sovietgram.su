@@ -1,7 +1,6 @@
 from pathlib import Path
 
 from django import forms
-from django.conf import settings
 from django.core.files.uploadedfile import UploadedFile
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 
@@ -178,16 +177,11 @@ class ProfileForm(forms.ModelForm):
             raise forms.ValidationError("Эта почта уже используется.")
         if users.filter(username__iexact=email).exists():
             raise forms.ValidationError("Эта почта совпадает с именем другого пользователя.")
-        if (
-            settings.SOVIETGRAM_REQUIRE_EMAIL_VERIFICATION
-            and self.instance.pk
-            and email.casefold() != (self.instance.email or "").casefold()
-        ):
+        if self.instance.pk and email.casefold() != (self.instance.email or "").casefold():
             raise forms.ValidationError(
-                "Изменение адреса почты временно недоступно: "
-                "новый адрес должен проходить отдельное подтверждение."
+                "Измените почту через настройки безопасности и подтвердите новый адрес."
             )
-        return email
+        return self.instance.email if self.instance.pk else email
 
     def clean_avatar(self):
         avatar = self.cleaned_data.get("avatar")

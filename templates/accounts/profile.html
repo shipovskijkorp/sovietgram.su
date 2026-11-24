@@ -131,7 +131,8 @@
 
         <label class="profile-field" for="{{ form.email.id_for_label }}">
           <span>{{ form.email.label }}</span>
-          {{ form.email }}
+          <input type="email" name="email" id="{{ form.email.id_for_label }}" value="{{ request.user.email }}" readonly autocomplete="email">
+          <a href="{% url 'accounts:email_change' %}">{% if request.user.email_verified_at %}Изменить почту{% else %}Подтвердить или изменить почту{% endif %}</a>
           {% for error in form.email.errors %}<small class="profile-field-error">{{ error }}</small>{% endfor %}
         </label>
 
