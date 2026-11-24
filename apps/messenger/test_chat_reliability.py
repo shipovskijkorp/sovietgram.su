@@ -9,7 +9,7 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from apps.accounts.models import User
-from .models import ChatParticipant, Message, MessageAttachment, MessageHiddenForUser, MessageSendReceipt
+from .models import Chat, ChatParticipant, Message, MessageAttachment, MessageHiddenForUser, MessageSendReceipt
 from .services import get_or_create_direct_chat
 
 
@@ -165,3 +165,47 @@ class ChatReliabilityTests(TestCase):
         second = self.send(forward_data, forward_url)
         self.assertEqual(first.json()["message"]["id"], second.json()["message"]["id"])
         self.assertEqual(first.json()["target_chat_id"], second.json()["target_chat_id"])
+
+    def test_group_and_channel_read_ack_refreshes_real_sidebar_unread_count(self):
+        for kind in (Chat.Type.GROUP, Chat.Type.CHANNEL):
+            with self.subTest(kind=kind):
+                chat = Chat.objects.create(type=kind, title="Read regression")
+                ChatParticipant.objects.create(chat=chat, user=self.bob, role=ChatParticipant.Role.OWNER)
+                member = ChatParticipant.objects.create(chat=chat, user=self.alice)
+                one = Message.objects.create(chat=chat, sender=self.bob, text="First")
+                two = Message.objects.create(chat=chat, sender=self.bob, text="Second")
+                url = reverse("messenger:read_messages", args=[chat.pk])
+                page = self.client.get(reverse("messenger:chat", args=[chat.pk]))
+                self.assertContains(page, 'data-message-own="false"')
+                self.assertContains(page, 'data-unread-anchor="%s"' % one.pk)
+                self.assertContains(page, "js/read-ack.js")
+                member.refresh_from_db()
+                self.assertEqual(member.read_through_id, 0)
+                response = self.client.post(url, {
+                    "account_id": self.alice.pk, "message_id": one.pk,
+                }, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+                self.assertEqual(response.status_code, 200, response.content)
+                self.assertEqual(response.json()["own_last_read_id"], one.pk)
+                self.assertEqual(response.json()["account_id"], self.alice.pk)
+                self.assertIn("no-store", response["Cache-Control"])
+                home = self.client.get(reverse("messenger:home"))
+                current = next(item for item in home.context["chats"] if item.pk == chat.pk)
+                self.assertEqual(current.unread_count_ui, 1)
+                response = self.client.post(url, {
+                    "account_id": self.alice.pk, "message_id": two.pk,
+                })
+                self.assertEqual(response.json()["own_last_read_id"], two.pk)
+                member.refresh_from_db()
+                self.assertEqual(member.read_through_id, two.pk)
+                home = self.client.get(reverse("messenger:home"))
+                current = next(item for item in home.context["chats"] if item.pk == chat.pk)
+                self.assertEqual(current.unread_count_ui, 0)
+                self.assertFalse(current.has_unread_ui)
+
+    def test_stale_tab_cannot_acknowledge_messages_for_switched_account(self):
+        incoming = self.incoming()
+        response = self.client.post(self.read_url, {
+            "account_id": self.bob.pk, "message_id": incoming.pk,
+        })
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(self.membership().read_through_id, 0)

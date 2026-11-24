@@ -1154,6 +1154,9 @@ def message_history(request, chat_id):
 @login_required
 @require_POST
 def read_messages(request, chat_id):
+    account_id = request.POST.get("account_id")
+    if account_id is not None and account_id != str(request.user.pk):
+        return JsonResponse({"ok": False, "error": "Аккаунт изменился. Обновите страницу."}, status=409)
     chat = _chat_for_user(request.user, chat_id)
     token = request.POST.get("opened_marker", "")
     marker = None
@@ -1183,11 +1186,14 @@ def read_messages(request, chat_id):
             # A stale tab must not erase a newer manual mark from another tab.
             ChatParticipant.objects.filter(pk=membership.pk, marked_unread_at=marker).update(marked_unread_at=None)
         membership.refresh_from_db(fields=["read_through_id", "last_read_message", "marked_unread_at"])
-    return JsonResponse({
+    response = JsonResponse({
         "ok": True,
+        "account_id": request.user.pk,
         "own_last_read_id": max(membership.read_through_id, membership.last_read_message_id or 0),
         "marked_unread": membership.marked_unread_at is not None,
     })
+    response["Cache-Control"] = "private, no-store"
+    return response
 
 
 def _mark_membership_read(membership, user):

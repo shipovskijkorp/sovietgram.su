@@ -360,7 +360,9 @@
           );
         });
         next.querySelectorAll("[data-chat-row]").forEach((row) => {
-          if (new URL(row.href).pathname === window.location.pathname) row.classList.add("is-active");
+          // DOMParser's detached document may not have the page's base URL.
+          const href = row.getAttribute("href");
+          if (href && new URL(href, window.location.href).pathname === window.location.pathname) row.classList.add("is-active");
         });
         for (const name of ["archiveCount","archiveUnread","archiveLoudUnread","archiveHidden"]) {
           chatList.dataset[name] = next.dataset[name] || "";

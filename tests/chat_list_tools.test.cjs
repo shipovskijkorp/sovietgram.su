@@ -39,5 +39,5 @@ test("sidebar refresh retains filters and context menu works on refreshed rows",
   assert.match(source, /chatList\.addEventListener\("contextmenu"/);
   assert.match(source, /rowAction\.value = unread \? "mark_read" : "mark_unread"/);
   assert.match(source, /window\.confirm\("Отметить все чаты/);
-  assert.match(read("static/js/chat.js"), /opened_marker: openedUnreadMarker/);
+  assert.match(read("static/js/read-ack.js"), /opened_marker: openedUnreadMarker/);
 });

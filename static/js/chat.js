@@ -1495,13 +1495,8 @@ let newestUpdateAt = messageStage?.dataset.serverTime || new Date().toISOString(
 let newestUpdateId = 0;
 let reactionCursorAt = newestUpdateAt;
 let reactionCursorId = 0;
-let ownLastReadId = Number(messageStage?.dataset.ownLastRead) || 0;
-// Only acknowledge the specific manual marker present on this page's opening.
-let openedUnreadMarker = messageStage?.dataset.openedMarker || "";
 let pollBusy = false;
 let pollRendering = false;
-let readBusy = false;
-let readTimer = 0;
 let scrollTimer = 0;
 
 function updateHistoryControls() {
@@ -1550,43 +1545,7 @@ function storeScrollPosition() {
 }
 
 function scheduleReadCheck() {
-  if (!messageStage || !historyInitialized) return;
-  clearTimeout(readTimer);
-  readTimer = window.setTimeout(reportVisibleRead, 220);
-}
-
-async function reportVisibleRead() {
-  if (!historyInitialized || !messageStage?.dataset.readUrl || readBusy ||
-      document.hidden || !document.hasFocus() || historyBusy) return;
-  // Don't acknowledge the conversation underneath a modal or profile overlay.
-  if (document.querySelector("#telegramSettings:not([hidden]), #userProfileOverlay:not([hidden]), #mediaComposeBackdrop:not([hidden]), #attachSpecialBackdrop:not([hidden]), #articleViewerBackdrop:not([hidden]), #scheduledDialog[open]")) return;
-  const stage = messageStage.getBoundingClientRect();
-  const top = Math.max(0, stage.top);
-  const bottom = Math.min(window.innerHeight, stage.bottom);
-  if (bottom <= top) return;
-  let candidate = ownLastReadId;
-  for (const article of historyNodes()) {
-    if (article.dataset.messageOwn === "true" || nodeId(article) <= candidate) continue;
-    const rect = article.getBoundingClientRect();
-    const visible = Math.min(rect.bottom, bottom) - Math.max(rect.top, top);
-    if (visible >= Math.min(rect.height * .6, (bottom - top) * .6) && visible > 0) {
-      candidate = nodeId(article);
-    }
-  }
-  if (candidate <= ownLastReadId && !openedUnreadMarker) return;
-  readBusy = true;
-  try {
-    const result = await postForm(messageStage.dataset.readUrl, {
-      message_id: candidate > ownLastReadId ? candidate : 0,
-      opened_marker: openedUnreadMarker,
-    });
-    ownLastReadId = Math.max(ownLastReadId, Number(result.own_last_read_id) || 0);
-    openedUnreadMarker = "";
-  } catch (_error) {
-    // The next visible/focused check retries; do not assume a read on failure.
-  } finally {
-    readBusy = false;
-  }
+  window.SovietgramReadAck?.schedule();
 }
 
 function insertHistoryMessages(items, replaceWindow = false) {
@@ -1628,6 +1587,7 @@ async function loadHistoryPage(direction) {
   const cursor = nodeId(direction === "before" ? nodes[0] : nodes.at(-1));
   if (!cursor) return;
   historyBusy = true;
+  if (messageStage) messageStage.dataset.readHistoryBusy = "true";
   historyGeneration += 1; // Ignore any poll started before this window changes.
   updateHistoryControls();
   try {
@@ -1640,13 +1600,14 @@ async function loadHistoryPage(direction) {
       historyHasNewer = Boolean(payload.has_newer);
       newestMessageId = Math.max(newestMessageId, nodeId(historyNodes().at(-1)));
     }
-    ownLastReadId = Math.max(ownLastReadId, Number(payload.own_last_read_id) || 0);
+    window.SovietgramReadAck?.observeCursor(payload.own_last_read_id);
     updateHistoryControls();
     restoreAnchor(anchor);
   } catch (error) {
     notify(error.message || "Не удалось загрузить историю. Повторите.");
   } finally {
     historyBusy = false;
+    if (messageStage) messageStage.dataset.readHistoryBusy = "false";
     updateHistoryControls();
     scheduleReadCheck();
     if (pendingLatest) { pendingLatest = false; void loadLatestHistory(); }
@@ -1656,6 +1617,7 @@ async function loadHistoryPage(direction) {
 async function replaceHistoryWindow(params, anchor = null) {
   if (historyBusy || !messageStage?.dataset.historyUrl) return false;
   historyBusy = true;
+  if (messageStage) messageStage.dataset.readHistoryBusy = "true";
   historyGeneration += 1;
   updateHistoryControls();
   try {
@@ -1668,7 +1630,7 @@ async function replaceHistoryWindow(params, anchor = null) {
     newestUpdateId = 0;
     reactionCursorAt = newestUpdateAt;
     reactionCursorId = 0;
-    ownLastReadId = Math.max(ownLastReadId, Number(payload.own_last_read_id) || 0);
+    window.SovietgramReadAck?.observeCursor(payload.own_last_read_id);
     updateReadReceipts(payload.other_last_read_id);
     updateHistoryControls();
     if (!anchor || !restoreAnchor(anchor)) scrollToBottom(true);
@@ -1678,6 +1640,7 @@ async function replaceHistoryWindow(params, anchor = null) {
     return false;
   } finally {
     historyBusy = false;
+    if (messageStage) messageStage.dataset.readHistoryBusy = "false";
     updateHistoryControls();
     scheduleReadCheck();
     if (pendingLatest) { pendingLatest = false; void loadLatestHistory(); }
@@ -1769,7 +1732,7 @@ async function pollMessages() {
     reactionCursorAt = payload.reaction_cursor_time || reactionCursorAt;
     reactionCursorId = Number(payload.reaction_cursor_id) || 0;
     if (!historyHasNewer) newestMessageId = Math.max(newestMessageId, Number(payload.high_watermark) || 0);
-    ownLastReadId = Math.max(ownLastReadId, Number(payload.own_last_read_id) || 0);
+    window.SovietgramReadAck?.observeCursor(payload.own_last_read_id);
     updateReadReceipts(payload.other_last_read_id);
     updateLiveChatIdentity(payload);
     updateConversationStatus(payload.other_typing, payload.other_status, payload);
@@ -1784,6 +1747,8 @@ async function pollMessages() {
   } finally {
     pollRendering = false;
     pollBusy = false;
+    // Read acknowledgement must not depend on a successful poll/render.
+    scheduleReadCheck();
   }
 }
 
