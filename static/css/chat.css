@@ -1559,3 +1559,46 @@ body[data-theme="dark"] .markdown-body .md-hl-nf,body[data-theme="dark"] .markdo
 .scheduled-error {color:var(--red-soft);font-size:12px;overflow-wrap:anywhere;}
 body[data-theme="dark"] .scheduled-dialog,body[data-theme="dark"] .send-options-menu {background:#251f1b;color:#f2e8dc;color-scheme:dark;}
 .media-compose-silent {border-top:1px solid var(--line);}
+
+/* Standalone stickers and opt-in safe link previews. */
+.message-sticker {position:relative;display:grid;place-items:center;max-width:min(180px,64vw);}
+.message-sticker img {width:100%;height:auto;max-height:180px;object-fit:contain;}
+.message-sticker button {position:absolute;right:2px;bottom:2px;display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--panel,#fffaf1);border:1px solid var(--line);color:var(--ink);cursor:pointer;font:inherit;font-size:20px;opacity:0;transition:opacity .15s;}
+.message-sticker:hover button,.message-sticker:focus-within button {opacity:1;}
+.message-sticker button svg {width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;}
+@media(pointer:coarse){.message-sticker button{opacity:1;}}
+.message:has(.message-sticker):not(:has(.message__text)) {background:transparent;border-color:transparent;box-shadow:none;}
+.message:has(.message-sticker):not(:has(.message__text)) footer {color:var(--muted);}
+.sticker-dialog [hidden],.link-preview-card [hidden] {display:none!important;}
+.sticker-dialog {width:min(460px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto;box-sizing:border-box;padding:15px;border:1px solid var(--line);border-radius:15px;background:var(--panel,#fffaf1);color:var(--ink);box-shadow:0 20px 70px #0005;}
+.sticker-dialog::backdrop {background:#0007;}
+.sticker-dialog header {display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.sticker-dialog h2 {font-size:18px;margin:0;}
+.sticker-dialog button {border:1px solid var(--line);background:transparent;color:inherit;font:inherit;font-size:12px;padding:6px 9px;border-radius:7px;cursor:pointer;}
+.sticker-dialog header button {border:0;font-size:24px;padding:0 6px;}
+.sticker-dialog button:disabled {opacity:.5;cursor:default;}
+.sticker-dialog .sticker-primary {background:var(--red,#a12732);color:white;border-color:transparent;}
+.sticker-hint,.sticker-error {font-size:12px;line-height:1.5;}
+.sticker-hint {opacity:.8;}
+.sticker-error {color:var(--red-soft);}
+.sticker-pack-tabs,.sticker-pack-actions {display:flex;flex-wrap:wrap;gap:5px;margin:8px 0;}
+.sticker-pack-tabs button[aria-pressed="true"],#stickerEditMode[aria-pressed="true"] {background:color-mix(in srgb,var(--red) 14%,transparent);border-color:var(--red);color:var(--red-soft);}
+.sticker-grid {display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:7px;max-height:36dvh;overflow:auto;}
+.sticker-grid button {display:grid;place-items:center;position:relative;min-height:76px;padding:5px;overflow:hidden;}
+.sticker-grid img {width:65px;height:65px;object-fit:contain;}
+.sticker-grid small {max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sticker-grid button:hover {background:color-mix(in srgb,var(--red) 10%,transparent);}
+.sticker-grid .sticker-remove {position:absolute;right:3px;top:3px;background:var(--red);color:white;border-radius:50%;width:20px;height:20px;display:grid;place-items:center;}
+#stickerUploadForm {display:grid;gap:7px;margin:12px 0;padding-top:10px;border-top:1px solid var(--line);}
+#stickerUploadForm label {display:grid;gap:5px;font-size:12px;}
+#stickerUploadForm input {width:100%;box-sizing:border-box;font:inherit;color:inherit;}
+#stickerUploadForm input:not([type=file]) {padding:7px;border:1px solid var(--line);border-radius:7px;background:transparent;}
+#stickerUploadForm small {font-size:11px;opacity:.7;}
+.sticker-silent {display:flex;align-items:center;gap:6px;font-size:12px;margin:7px 0;}
+.sticker-silent input {accent-color:var(--red);}
+body[data-theme="dark"] .sticker-dialog {background:#251f1b;color:#f2e8dc;color-scheme:dark;}
+.link-preview-card {display:grid;gap:4px;padding:8px 10px;margin:6px 0;border-left:3px solid var(--red,#a12732);border-radius:6px;background:color-mix(in srgb,currentColor 5%,transparent);max-width:360px;overflow-wrap:anywhere;}
+.link-preview-card strong {font-size:13px;}
+.link-preview-card small {font-size:11px;opacity:.8;}
+.link-preview-card p {margin:0;font-size:12px;line-height:1.4;white-space:normal;}
+.link-preview-card button {text-align:left;color:var(--red-soft);background:transparent;border:0;padding:0;cursor:pointer;font:inherit;font-size:12px;font-weight:600;}

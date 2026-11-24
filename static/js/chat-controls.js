@@ -302,6 +302,7 @@
     if (text) return text.replace(/\s+/g, " ").slice(0, 180);
     const fileName = article?.querySelector(".message-file-card strong")?.textContent?.trim();
     if (fileName) return fileName;
+    if (article?.querySelector(".message-sticker")) return "Стикер";
     if (article?.querySelector(".message-media")) return "Медиа";
     return "Сообщение";
   }
@@ -325,7 +326,7 @@
     const deleteButton = contextMenu.querySelector('[data-message-action="delete"]');
     const pinLabel = document.getElementById("messagePinLabel");
 
-    if (editButton) editButton.hidden = !isOwn(article) || Boolean(article.dataset.messageKind);
+    if (editButton) editButton.hidden = !isOwn(article) || Boolean(article.dataset.messageKind) || Boolean(article.querySelector(".message-sticker"));
     if (copyButton) copyButton.hidden = chatProtected || !(article.dataset.messageText || "").trim();
     if (forwardButton) forwardButton.hidden = chatProtected;
     if (deleteButton) deleteButton.hidden = !canDeleteArticle(article);

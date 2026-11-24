@@ -279,6 +279,25 @@ function makeVoiceMessage(attachment, isOwn = false) {
 }
 
 function makeMedia(attachment, isOwn = false) {
+  if (attachment.kind === "sticker") {
+    const node = document.createElement("div");
+    node.className = "message-sticker";
+    const image = document.createElement("img");
+    image.src = attachment.url;
+    image.alt = "Стикер";
+    image.loading = "lazy";
+    node.appendChild(image);
+    if (!conversation?.classList.contains("is-content-protected")) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.saveSticker = String(attachment.id);
+      button.textContent = "+";
+      button.title = "Сохранить стикер в набор";
+      button.setAttribute("aria-label", "Сохранить стикер");
+      node.appendChild(button);
+    }
+    return node;
+  }
   if (attachment.kind === "voice") {
     return makeVoiceMessage(attachment, isOwn);
   }
@@ -1038,6 +1057,7 @@ window.addEventListener("beforeunload", () => {
 });
 
 const textSendKeys = window.SovietgramSendRetry.batch();
+const stickerSendKeys = window.SovietgramSendRetry.batch();
 const textSendScope = "sovietgram.pending-text." + (messageStage?.dataset.accountId || "") + "." + (conversation?.dataset.chatId || "");
 let textSendBusy = false;
 async function sendTextMessage(silent = false) {
@@ -1819,6 +1839,43 @@ window.SovietgramChat = {
   },
   syncNow: pollMessages,
   sendSilently: () => sendTextMessage(true),
+  async sendSticker(stickerId, silent = false) {
+    if (!form || conversation?.dataset.canSendMedia !== "true" || textSendBusy) return false;
+    textSendBusy = true;
+    const previousDisabled = sendButton.disabled;
+    sendButton.disabled = true;
+    const sentReply = replyToInput?.value || "";
+    const data = new FormData();
+    const csrf = form.querySelector("[name='csrfmiddlewaretoken']")?.value || "";
+    const scope = "sovietgram.pending-sticker."+messageStage.dataset.accountId+"."+conversation.dataset.chatId;
+    try {
+      data.set("csrfmiddlewaretoken", csrf);
+      data.set("account_id", messageStage.dataset.accountId);
+      data.set("sticker_id", String(stickerId));
+      data.set("attachment_mode", "media");
+      if (sentReply) data.set("reply_to", sentReply);
+      if (silent) data.set("silent", "1");
+      data.set("client_message_id", await window.SovietgramSendRetry.textKey(scope,
+        [stickerId, sentReply, silent], stickerSendKeys));
+      const response = await window.SovietgramSendRetry.fetchSend(form.action, {
+        method:"POST", body:data, headers:{"X-Requested-With":"XMLHttpRequest"}, credentials:"same-origin",
+      });
+      const payload = await response.json().catch(()=>({}));
+      if (!response.ok || !payload.ok) throw new Error(errorText(payload,"Не удалось отправить стикер."));
+      window.SovietgramSendRetry.clearText(scope,stickerSendKeys);
+      renderMessage(payload.message);
+      if ((replyToInput?.value || "") === sentReply) clearReplyState();
+      if (!historyHasNewer) requestAnimationFrame(()=>scrollToBottom(true));
+      void window.SovietgramSidebar?.refresh();
+      return true;
+    } catch(error) {
+      notify(error.message || "Не удалось отправить стикер. Повторите отправку.");
+      return false;
+    } finally {
+      textSendBusy = false;
+      sendButton.disabled = previousDisabled;
+    }
+  },
   clearScheduledDraft(originalText, originalReply) {
     if (!messageInput || messageInput.value !== originalText ||
         (replyToInput?.value || "") !== originalReply) return;

@@ -1,0 +1,23 @@
+<dialog id="stickerDialog" class="sticker-dialog" data-url="{% url 'messenger:sticker_packs' %}" data-account-id="{{ request.user.pk }}" aria-labelledby="stickerDialogTitle">
+  <header><h2 id="stickerDialogTitle">Стикеры</h2><button type="button" id="stickerDialogClose" aria-label="Закрыть">×</button></header>
+  <p class="sticker-hint" id="stickerHint">Ваши личные наборы стикеров.</p>
+  <p class="sticker-error" id="stickerError" role="status" hidden></p>
+  <div id="stickerPackTabs" class="sticker-pack-tabs"></div>
+  <div class="sticker-pack-actions" id="stickerPackActions" hidden>
+    <button type="button" id="stickerRename">Переименовать</button>
+    <button type="button" id="stickerDeletePack">Удалить набор</button>
+    <button type="button" id="stickerEditMode" aria-pressed="false">Удалить стикеры</button>
+  </div>
+  <div id="stickerGrid" class="sticker-grid"></div>
+  <label class="sticker-silent" id="stickerSilentRow" hidden><input type="checkbox" id="stickerSilent"> Отправить без звука</label>
+  <form id="stickerUploadForm" hidden>
+    <label>Добавить изображение <input type="file" id="stickerFile" accept="image/png,image/webp,image/jpeg" required></label>
+    <label>Эмодзи или подпись (необязательно)<input id="stickerEmoji" maxlength="24" placeholder="😀"></label>
+    <button type="submit">Добавить стикер</button>
+    <small>PNG, WebP, JPEG до 2 МБ. Размер автоматически приводится к 512 пикселям или меньше.</small>
+  </form>
+  <div class="sticker-pack-actions">
+    <button type="button" id="stickerCreatePack">Создать набор</button>
+    <button type="button" id="stickerSaveIncoming" class="sticker-primary" hidden>Сохранить в набор</button>
+  </div>
+</dialog>

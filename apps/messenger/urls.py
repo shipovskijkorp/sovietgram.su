@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import archive_controls, community_profiles, views, scheduled, notifications, folders
+from . import archive_controls, community_profiles, views, scheduled, notifications, folders, stickers, link_previews
 
 app_name = "messenger"
 
@@ -13,6 +13,9 @@ urlpatterns = [
     path("chats/mark-all-read/", views.mark_all_chats_read, name="mark_all_chats_read"),
     path("chats/manage/", archive_controls.chat_list_action, name="chat_list_action"),
     path("chats/folders/", folders.chat_folders, name="chat_folders"),
+    path("stickers/", stickers.sticker_packs, name="sticker_packs"),
+    path("stickers/<int:sticker_id>/image/", stickers.sticker_image, name="sticker_image"),
+    path("chat/<int:chat_id>/link-preview/", link_previews.link_preview, name="link_preview"),
     path("create/", views.create_community, name="create_community"),
     path("join/<str:username>/", views.join_public_chat, name="join_public_chat"),
     path("invite/<str:token>/", community_profiles.join_invite, name="join_invite"),

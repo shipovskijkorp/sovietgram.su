@@ -15,6 +15,7 @@ from urllib.parse import quote
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
+from django.core.files.base import ContentFile
 from django.db import connection, transaction
 from django.db.models import (
     BigIntegerField,
@@ -72,6 +73,7 @@ from .models import (
     MessageAttachment,
     MessageHiddenForUser,
     PinnedMessage,
+    Sticker,
     VoiceMessagePlayback,
 )
 from .models import MessageReaction, MessageSendReceipt
@@ -703,6 +705,7 @@ def _prepare_sidebar_chats(user, archived=False):
         elif chat.last_message_id_ui:
             chat.last_message_preview_ui = {
                 MessageAttachment.Kind.VOICE: "Голосовое сообщение",
+                MessageAttachment.Kind.STICKER: "Стикер",
                 MessageAttachment.Kind.AUDIO: "Аудио",
                 MessageAttachment.Kind.IMAGE: "Фото",
                 MessageAttachment.Kind.VIDEO: "Видео",
@@ -1960,6 +1963,15 @@ def send_message(request, chat_id):
                 messages.error(request, error)
         return redirect("messenger:chat", chat_id=chat.pk)
 
+    sticker_id = form.cleaned_data.get("sticker_id")
+    sticker = None
+    if sticker_id:
+        if request.POST.get("account_id") != str(request.user.pk):
+            return JsonResponse({"ok": False, "error": "Аккаунт изменился. Обновите страницу."}, status=409)
+        sticker = Sticker.objects.filter(pk=sticker_id, pack__owner=request.user).first()
+        if sticker is None:
+            return JsonResponse({"ok": False, "error": "Стикер недоступен."}, status=404)
+
     if chat.type == Chat.Type.PRIVATE and chat.direct_key != f"self:{request.user.pk}":
         recipient = other_user_for_chat(chat, request.user)
         if is_blocked_between(request.user, recipient):
@@ -1991,7 +2003,7 @@ def send_message(request, chat_id):
         chat,
         membership,
         text=form.cleaned_data["text"],
-        has_attachments=bool(form.cleaned_data["attachments"]),
+        has_attachments=bool(form.cleaned_data["attachments"] or sticker),
     )
     if restriction:
         error, retry_after = restriction
@@ -2038,6 +2050,15 @@ def send_message(request, chat_id):
                 else ""
             ),
         )
+        if sticker:
+            # Copy into the message's protected attachment storage. Removing a
+            # sticker or its pack must not change messages already sent.
+            image = bytes(sticker.image)
+            MessageAttachment.objects.create(
+                message=message, file=ContentFile(image, name="sticker.webp"),
+                kind=MessageAttachment.Kind.STICKER, original_name="sticker.webp",
+                mime_type="image/webp", size=len(image),
+            )
         for uploaded in form.cleaned_data["attachments"]:
             MessageAttachment.objects.create(
                 message=message,
@@ -2067,12 +2088,15 @@ def send_message(request, chat_id):
             )
         touch_chat(chat)
         apply_archive_rules_on_new_message(chat, message)
-        ChatParticipant.objects.filter(chat=chat, user=request.user).update(
-            is_hidden=False,
-            draft_text="",
-            draft_updated_at=None,
-            last_typing_at=None,
-        )
+        if sticker:
+            ChatParticipant.objects.filter(chat=chat, user=request.user).update(is_hidden=False)
+        else:
+            ChatParticipant.objects.filter(chat=chat, user=request.user).update(
+                is_hidden=False,
+                draft_text="",
+                draft_updated_at=None,
+                last_typing_at=None,
+            )
 
     message = _base_message_queryset(chat).get(pk=message.pk)
     if wants_json:
@@ -2457,6 +2481,8 @@ def edit_message(request, chat_id, message_id):
         sender=request.user,
         is_deleted=False,
     )
+    if message.attachments.filter(kind=MessageAttachment.Kind.STICKER).exists():
+        return JsonResponse({"ok": False, "error": "Стикеры нельзя редактировать."}, status=400)
     if message.special_type:
         return JsonResponse(
             {
@@ -3389,6 +3415,7 @@ def view_attachment(request, attachment_id):
         MessageAttachment.Kind.VIDEO,
         MessageAttachment.Kind.AUDIO,
         MessageAttachment.Kind.VOICE,
+        MessageAttachment.Kind.STICKER,
     }:
         return JsonResponse({"ok": False, "error": "Вложение нельзя открыть inline."}, status=404)
 

@@ -228,6 +228,7 @@ class Message(models.Model):
             MessageAttachment.Kind.VIDEO: "Видео",
             MessageAttachment.Kind.AUDIO: "Аудио",
             MessageAttachment.Kind.VOICE: "Голосовое сообщение",
+            MessageAttachment.Kind.STICKER: "Стикер",
         }.get(attachment.kind, "Файл")
 
     def __str__(self):
@@ -265,6 +266,7 @@ class MessageAttachment(models.Model):
         VIDEO = "video", "Видео"
         AUDIO = "audio", "Аудио"
         VOICE = "voice", "Голосовое сообщение"
+        STICKER = "sticker", "Стикер"
         FILE = "file", "Файл"
 
     message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name="attachments")
@@ -491,3 +493,23 @@ class ChatFolder(models.Model):
     class Meta:
         ordering = ("position", "pk")
         indexes = [models.Index(fields=("owner", "position"), name="sg_folder_owner_pos")]
+
+
+class StickerPack(models.Model):
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sticker_packs")
+    name = models.CharField(max_length=48)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("id",)
+
+
+class Sticker(models.Model):
+    pack = models.ForeignKey(StickerPack, on_delete=models.CASCADE, related_name="stickers")
+    emoji = models.CharField(max_length=24, blank=True, default="")
+    # Bounded, normalized small WebP assets. Cascading deletes need no file cleanup.
+    image = models.BinaryField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("id",)

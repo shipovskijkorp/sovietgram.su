@@ -291,6 +291,7 @@
                data-poll-url="{% url 'messenger:poll_messages' selected_chat.pk %}"
                data-history-url="{% url 'messenger:message_history' selected_chat.pk %}"
                data-read-url="{% url 'messenger:read_messages' selected_chat.pk %}"
+               data-link-preview-url="{% url 'messenger:link_preview' selected_chat.pk %}"
                data-account-id="{{ request.user.pk }}"
                data-own-last-read="{{ own_last_read_id }}"
                data-opened-marker="{{ marked_unread_token }}"
@@ -455,7 +456,12 @@
                 {% if attachment_count %}
                   <div class="message-media{% if attachment_count > 1 %} message-media--album{% endif %}" data-count="{{ attachment_count }}">
                     {% for attachment in message.attachments.all %}
-                      {% if attachment.kind == 'image' %}
+                      {% if attachment.kind == 'sticker' %}
+                        <div class="message-sticker">
+                          <img src="{% url 'messenger:view_attachment' attachment.pk %}" alt="Стикер" loading="lazy">
+                          {% if not selected_chat.protect_content %}<button type="button" data-save-sticker="{{ attachment.pk }}" title="Сохранить стикер в набор" aria-label="Сохранить стикер"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>{% endif %}
+                        </div>
+                      {% elif attachment.kind == 'image' %}
                         <a class="message-media__item" href="{% url 'messenger:view_attachment' attachment.pk %}" target="_blank" rel="noopener" data-lightbox-image="{% url 'messenger:view_attachment' attachment.pk %}">
                           <img class="message-media__image" src="{% url 'messenger:view_attachment' attachment.pk %}" alt="{{ attachment.original_name }}" loading="lazy">
                         </a>
@@ -599,6 +605,7 @@
         <input id="attachmentModeInput" type="hidden" name="attachment_mode" value="media">
         <div class="composer__field">
           <textarea id="messageInput" name="text" rows="1" maxlength="4096" placeholder="{% if not can_send_text and can_send_media %}Можно отправлять только медиа{% else %}Сообщение{% endif %}" autocomplete="off"{% if not can_send_text %} readonly{% endif %}>{{ composer_draft_text }}</textarea>
+          {% if can_send_media %}<button type="button" class="composer-tool-button" data-open-stickers data-sticker-send="true" title="Стикеры" aria-label="Стикеры"><svg viewBox="0 0 24 24" fill="none"><path d="M4 4h16v10l-6 6H4zM14 20v-6h6M8 8h.01M15 8h.01M8 12c1.5 2 3 2 4 1"/></svg></button>{% endif %}
           {% if can_send_text %}{% include 'messenger/_composer_tools.html' with editor_id="messageInput" %}
           <button class="composer-tool-button" id="sendOptionsToggle" type="button" aria-expanded="false" aria-controls="sendOptionsMenu" aria-label="Параметры отправки" title="Параметры отправки">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/></svg>
@@ -992,6 +999,7 @@
 
   <nav class="profile-drawer__nav profile-drawer__nav--telegram" aria-label="Главное меню">
     <a id="archiveDrawerEntry" href="{% url 'messenger:home' %}?archived=1"{% if archived_count and not request.user.archive_in_main_menu %} hidden{% endif %}><span class="tg-native-icon tg-native-icon--archive-open" aria-hidden="true"></span><strong>Архив</strong><b id="archiveDrawerBadge"{% if not archived_unread_count %} hidden{% endif %}>{{ archived_unread_count }}</b></a>
+    <a href="{% url 'messenger:home' %}?manage_stickers=1" data-open-stickers><span class="archive-menu-svg"><svg viewBox="0 0 24 24"><path d="M4 4h16v10l-6 6H4zM14 20v-6h6M8 8h.01M15 8h.01M8 12c1.5 2 3 2 4 1"/></svg></span><strong>Наборы стикеров</strong></a>
     <a href="{% url 'messenger:home' %}?manage_folders=1" data-manage-folders><span class="archive-menu-svg"><svg viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v12H3z"/></svg></span><strong>Папки чатов</strong></a>
     <a href="{% url 'accounts:public_profile' request.user.username %}" data-user-profile data-self-profile><span class="tg-native-icon tg-native-icon--profile" aria-hidden="true"></span><strong>Мой профиль</strong></a>
     <a href="{% url 'messenger:create_community' %}?type=group" data-community-open="group"><span class="tg-native-icon tg-native-icon--groups" aria-hidden="true"></span><strong>Создать группу</strong></a>
@@ -1149,6 +1157,7 @@
 </div>
 {% include 'messenger/_archive_controls.html' %}
 {% include 'messenger/_folder_controls.html' %}
+{% include 'messenger/_sticker_controls.html' %}
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 {% endblock %}
 
@@ -1173,4 +1182,6 @@
 <script src="{% static 'js/settings.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/archive.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/chat-folders.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/stickers.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/link-previews.js' %}?v={{ static_version }}"></script>
 {% endblock %}

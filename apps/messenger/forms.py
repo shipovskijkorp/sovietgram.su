@@ -153,6 +153,7 @@ class MessageForm(forms.Form):
 
     text = forms.CharField(required=False, max_length=4096, strip=False)
     silent = forms.BooleanField(required=False)
+    sticker_id = forms.IntegerField(required=False, min_value=1, max_value=9223372036854775807)
     reply_to = forms.IntegerField(required=False, min_value=1)
     attachment_mode = forms.ChoiceField(
         required=False,
@@ -263,6 +264,11 @@ class MessageForm(forms.Form):
         cleaned = super().clean()
         mode = cleaned.get("attachment_mode") or self.MODE_MEDIA
         attachments = cleaned.get("attachments") or []
+
+        if cleaned.get("sticker_id"):
+            if mode != self.MODE_MEDIA or attachments or cleaned.get("text"):
+                raise forms.ValidationError("Стикер отправляется отдельным сообщением.")
+            return cleaned
 
         if mode == self.MODE_VOICE:
             if len(attachments) != 1:
