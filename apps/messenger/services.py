@@ -13,6 +13,7 @@ from .models import (
     Contact,
     Message,
     MessageAttachment,
+    MessageReaction,
     PinnedMessage,
     VoiceMessagePlayback,
 )
@@ -205,6 +206,9 @@ def delete_message_content(message):
             "updated_at",
         )
     )
+    # Mark the message deleted before removing reactions so concurrent
+    # requests cannot recreate a reaction on a soft-deleted message.
+    message.reactions.all().delete()
 
 
 def attachment_url(attachment):
@@ -375,6 +379,21 @@ def visible_forward_username(message, viewer):
     return origin.sender.username
 
 
+def serialize_reactions(message, current_user):
+    if message.is_deleted:
+        return []
+    counts = {}
+    selected = None
+    for reaction in message.reactions.all():
+        counts[reaction.emoji] = counts.get(reaction.emoji, 0) + 1
+        if reaction.user_id == current_user.pk:
+            selected = reaction.emoji
+    return [
+        {"emoji": emoji, "count": counts[emoji], "selected": emoji == selected}
+        for emoji in MessageReaction.Emoji.values if emoji in counts
+    ]
+
+
 def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=None):
     pinned_ids = pinned_ids or set()
     reply = message.reply_to
@@ -463,7 +482,10 @@ def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=No
             else serialize_special_content(message, current_user)
         ),
         "attachments": attachments,
+        "reaction_version": message.reaction_version,
+        "reactions": serialize_reactions(message, current_user),
         "urls": {
+            "reaction": reverse("messenger:message_reaction", args=[message.chat_id, message.pk]),
             "edit": reverse("messenger:edit_message", args=[message.chat_id, message.pk]),
             "delete": reverse("messenger:delete_message", args=[message.chat_id, message.pk]),
             "forward": reverse("messenger:forward_message", args=[message.chat_id, message.pk]),

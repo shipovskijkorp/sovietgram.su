@@ -181,6 +181,8 @@ class Message(models.Model):
     )
     special_data = models.JSONField(blank=True, default=dict)
     is_deleted = models.BooleanField(default=False, db_index=True)
+    reaction_version = models.PositiveBigIntegerField(default=0)
+    reaction_changed_at = models.DateTimeField(null=True, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True, db_index=True)
     edited_at = models.DateTimeField(null=True, blank=True)
@@ -399,4 +401,30 @@ class MessageSendReceipt(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=("sender", "client_id"), name="unique_message_send_receipt"),
+        ]
+
+
+class MessageReaction(models.Model):
+    """One emoji reaction per user and message."""
+
+    class Emoji(models.TextChoices):
+        THUMBS_UP = "👍", "Нравится"
+        HEART = "❤️", "Любовь"
+        FIRE = "🔥", "Огонь"
+        LAUGH = "😂", "Смешно"
+        SURPRISE = "😮", "Удивление"
+        THUMBS_DOWN = "👎", "Не нравится"
+
+    message = models.ForeignKey(
+        Message, on_delete=models.CASCADE, related_name="reactions",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="message_reactions",
+    )
+    emoji = models.CharField(max_length=8, choices=Emoji.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=("message", "user"), name="unique_message_reaction_user"),
         ]

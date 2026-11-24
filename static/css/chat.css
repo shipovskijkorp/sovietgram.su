@@ -1355,3 +1355,91 @@ body[data-theme="dark"] .chat-menu--telegram .chat-menu__mute-options {
   place-items: center;
 }
 .chat-read-menu-icon svg[hidden] { display: none !important; }
+
+/* Reactions and message references */
+.message__text { white-space: pre-wrap; }
+.message__text .message-hashtag {
+  display: inline;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--red-soft);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.message-reactions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+.message-reactions[hidden], .message-reaction-picker[hidden], .mention-suggestions[hidden] { display: none !important; }
+.message-reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 2px 7px;
+  border: 1px solid transparent;
+  border-radius: 13px;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.message-reaction small { font-size: 11px; font-weight: 650; }
+.message-reaction[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--red) 16%, transparent);
+  border-color: var(--red-soft);
+  color: var(--red-soft);
+}
+.message-reaction:hover, .message-reaction-picker button:hover { filter: brightness(1.14); }
+.message-reaction-picker {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0,1fr));
+  gap: 2px;
+  padding: 2px 0 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.message-context-menu .message-reaction-picker button {
+  display: grid;
+  place-items: center;
+  min-height: 30px;
+  padding: 0;
+  font-size: 18px;
+}
+.message-context-menu .message-reaction-picker button[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--red) 18%, transparent);
+}
+.mention-suggestions {
+  position: fixed;
+  z-index: 150;
+  overflow: auto;
+  max-height: min(260px, 40vh);
+  padding: 5px;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  box-shadow: 0 12px 30px #0003;
+}
+.mention-suggestions button {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.mention-suggestions button[aria-selected="true"], .mention-suggestions button:hover {
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+}
+.mention-suggestions small { color: var(--red-soft); font-size: 11px; }

@@ -272,6 +272,8 @@
                data-unread-anchor="{{ unread_anchor_id }}"
                data-draft-url="{{ draft_url }}"
                data-typing-url="{{ typing_url }}"
+               data-mention-url="{{ mention_url }}"
+               data-mention-profile-prefix="{{ mention_profile_prefix }}"
                data-server-time="{{ server_time }}"
                data-other-last-read="{{ other_last_read_id }}"
                data-focus-message="{{ message_focus_id }}">
@@ -313,7 +315,9 @@
                      data-edit-url="{% url 'messenger:edit_message' selected_chat.pk message.pk %}"
                      data-delete-url="{% url 'messenger:delete_message' selected_chat.pk message.pk %}"
                      data-forward-url="{% url 'messenger:forward_message' selected_chat.pk message.pk %}"
-                     data-pin-url="{% url 'messenger:pin_message' selected_chat.pk message.pk %}">
+                     data-pin-url="{% url 'messenger:pin_message' selected_chat.pk message.pk %}"
+                     data-reaction-url="{% url 'messenger:message_reaction' selected_chat.pk message.pk %}"
+                     data-reaction-version="{{ message.reaction_version }}">
               {% if message.forwarded_from_name %}
                 <div class="message-forwarded">
                   <span>Переслано от</span>
@@ -469,6 +473,11 @@
               {% endwith %}
 
               {% if message.text and not message.special_type %}<p class="message__text">{{ message.text|urlize|linebreaksbr }}</p>{% endif %}
+              <div class="message-reactions" data-message-reactions {% if not message.reactions_ui %}hidden{% endif %}>
+                {% for reaction in message.reactions_ui %}
+                  <button class="message-reaction" type="button" data-message-reaction="{{ reaction.emoji }}" aria-pressed="{{ reaction.selected|yesno:'true,false' }}" aria-label="{{ reaction.emoji }} · {{ reaction.count }}"><span>{{ reaction.emoji }}</span><small>{{ reaction.count }}</small></button>
+                {% endfor %}
+              </div>
               <footer>
                 {% if message.signature_name %}<span class="message-channel-signature">{{ message.signature_name }}</span>{% endif %}
                 {% if message.edited_at %}<span class="message-edited">изм.</span>{% endif %}
@@ -734,6 +743,9 @@
 </div>
 
 <div class="message-context-menu" id="messageContextMenu" hidden>
+  <div class="message-reaction-picker" id="messageReactionPicker" aria-label="Реакции">
+    {% for emoji, label in reaction_choices %}<button type="button" data-pick-reaction="{{ emoji }}" aria-pressed="false" title="{{ label }}" aria-label="{{ label }}">{{ emoji }}</button>{% endfor %}
+  </div>
   <button type="button" data-message-action="reply"><span class="tg-native-icon tg-native-icon--reply" aria-hidden="true"></span>Ответить</button>
   <button type="button" data-message-action="copy"><span class="tg-native-icon tg-native-icon--copy" aria-hidden="true"></span>Копировать текст</button>
   <button type="button" data-message-action="edit"><span class="tg-native-icon tg-native-icon--edit" aria-hidden="true"></span>Изменить</button>
@@ -1090,6 +1102,7 @@
 
 {% block extra_scripts %}
 <script src="{% static 'js/send-retry.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/message-social.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/attachment-menu.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/attachment-files.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/chat.js' %}?v={{ static_version }}"></script>

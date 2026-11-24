@@ -71,7 +71,7 @@ from .models import (
     PinnedMessage,
     VoiceMessagePlayback,
 )
-from .models import MessageSendReceipt
+from .models import MessageReaction, MessageSendReceipt
 from .ratelimit import rate_limit
 from .services import (
     apply_archive_rules_on_new_message,
@@ -83,6 +83,7 @@ from .services import (
     mark_chat_read,
     other_user_for_chat,
     serialize_message,
+    serialize_reactions,
     serialize_pins,
     serialize_special_content,
     touch_chat,
@@ -363,7 +364,7 @@ def _base_message_queryset(chat):
         chat.messages.select_related(
             "sender", "reply_to", "reply_to__sender",
             "forwarded_from", "forwarded_from__sender",
-        ).prefetch_related("attachments")
+        ).prefetch_related("attachments", "reactions")
     )
 
 
@@ -934,6 +935,7 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
     for message in context["chat_messages"]:
         message.is_pinned_ui = message.pk in pinned_ids
         message.is_read_ui = message.sender_id == user.pk and message.pk <= other_last_read_id
+        message.reactions_ui = serialize_reactions(message, user)
 
     voice_listened_attachment_ids = set(
         VoiceMessagePlayback.objects.filter(
@@ -972,6 +974,9 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
             "shared_attachments": shared_items,
             "voice_listened_attachment_ids": voice_listened_attachment_ids,
             "search_url": reverse("messenger:search_messages", args=[selected_chat.pk]),
+            "mention_url": reverse("messenger:mention_candidates", args=[selected_chat.pk]),
+            "reaction_choices": MessageReaction.Emoji.choices,
+            "mention_profile_prefix": reverse("accounts:public_profile", args=["__mention__"]).split("__mention__")[0],
             "draft_url": reverse("messenger:save_draft", args=[selected_chat.pk]),
             "typing_url": reverse("messenger:typing", args=[selected_chat.pk]),
         }
@@ -1027,6 +1032,7 @@ def sidebar_snapshot(request):
 
 @login_required
 def chat_detail(request, chat_id):
+    snapshot_at = timezone.now()
     chat = _chat_for_user(request.user, chat_id)
     membership = _membership(chat, request.user)
     try:
@@ -1070,6 +1076,7 @@ def chat_detail(request, chat_id):
         archived=membership.is_archived, focus_id=focus_id,
     )
     context.update({
+        "server_time": snapshot_at.isoformat(),
         "history_has_older": bool(chat_messages and base.filter(id__lt=chat_messages[0].pk).exists()),
         "history_has_newer": bool(chat_messages and base.filter(id__gt=chat_messages[-1].pk).exists()),
         "own_last_read_id": read_cursor,
@@ -1082,6 +1089,7 @@ def chat_detail(request, chat_id):
 @login_required
 @require_GET
 def message_history(request, chat_id):
+    snapshot_at = timezone.now()
     chat = _chat_for_user(request.user, chat_id)
     base = _visible_message_queryset(chat, request.user).filter(is_deleted=False)
     try:
@@ -1124,7 +1132,7 @@ def message_history(request, chat_id):
         "has_newer": base.filter(id__gt=items[-1].pk if items else after).exists() if items or after else False,
         "own_last_read_id": max(membership.read_through_id, membership.last_read_message_id or 0),
         "other_last_read_id": other_cursor,
-        "server_time": timezone.now().isoformat(),
+        "server_time": snapshot_at.isoformat(),
     })
 
 
@@ -1619,8 +1627,9 @@ def global_search(request):
                     | Q(created_at__gte=F("chat__memberships__joined_at"))
                 ),
                 (
-                    Q(text__icontains=query)
-                    | Q(attachments__original_name__icontains=query)
+                    _message_search_condition(query)
+                    or (Q(text__icontains=query)
+                        | Q(attachments__original_name__icontains=query))
                 ),
                 chat__memberships__user=request.user,
                 chat__memberships__is_hidden=False,
@@ -2650,6 +2659,96 @@ def pin_message(request, chat_id, message_id):
     })
 
 
+def _message_search_condition(query):
+    # Hashtags and mentions are literal whole tokens, not a partial word
+    # or a PostgreSQL full-text query that discards punctuation.
+    if re.fullmatch(r"#[\w]{1,119}", query):
+        return Q(text__iregex=r"(^|[^\w#/@])" + re.escape(query) + r"(?!\w)")
+    if re.fullmatch(r"@[\w.+-]{1,119}", query):
+        return Q(text__iregex=r"(^|[^\w@.+/-])" + re.escape(query) + r"(?![\w+-]|\.[\w])")
+    return None
+
+
+@login_required
+@require_GET
+@rate_limit("mention_candidates")
+def mention_candidates(request, chat_id):
+    chat = _chat_for_user(request.user, chat_id)
+    query = request.GET.get("q", "").strip()[:150]
+    if query and not re.fullmatch(r"[\w.+-]{1,150}", query):
+        return JsonResponse({"ok": True, "results": []})
+    candidates = (
+        User.objects.filter(
+            chat_memberships__chat=chat,
+            chat_memberships__is_hidden=False,
+            is_active=True,
+        )
+        .exclude(pk=request.user.pk)
+        .filter(username__istartswith=query)
+        .order_by("username")[:30]
+    )
+    return JsonResponse({
+        "ok": True,
+        "results": [
+            {"username": candidate.username, "display_name": candidate.display_name}
+            for candidate in candidates
+            if re.fullmatch(r"[\w.+-]{1,150}", candidate.username)
+            and not is_blocked_between(request.user, candidate)
+        ][:8],
+    })
+
+
+@login_required
+@require_POST
+@rate_limit("message_reaction")
+def message_reaction(request, chat_id, message_id):
+    chat = _chat_for_user(request.user, chat_id)
+    emoji = request.POST.get("emoji")
+    if emoji is None or (emoji and emoji not in MessageReaction.Emoji.values):
+        return JsonResponse({"ok": False, "error": "Неизвестная реакция."}, status=400)
+    with transaction.atomic():
+        membership = ChatParticipant.objects.select_for_update().filter(
+            chat=chat, user=request.user, is_hidden=False,
+        ).first()
+        if membership is None:
+            raise Http404
+        if emoji and chat.type == Chat.Type.PRIVATE and not _posting_capabilities(
+            chat, membership, request.user,
+        )["text"]:
+            return JsonResponse({"ok": False, "error": "Нельзя реагировать в этой переписке."}, status=403)
+        if not _visible_message_queryset(chat, request.user).filter(
+            pk=message_id, is_deleted=False,
+        ).exists():
+            raise Http404
+        # Lock a plain message row (no DISTINCT/outer joins) before updating.
+        message = get_object_or_404(
+            Message.objects.select_for_update(), pk=message_id, chat=chat, is_deleted=False,
+        )
+        previous = MessageReaction.objects.filter(message=message, user=request.user).first()
+        changed = False
+        if not emoji:
+            if previous:
+                previous.delete()
+                changed = True
+        elif previous is None:
+            MessageReaction.objects.create(message=message, user=request.user, emoji=emoji)
+            changed = True
+        elif previous.emoji != emoji:
+            previous.emoji = emoji
+            previous.save(update_fields=["emoji"])
+            changed = True
+        if changed:
+            message.reaction_version += 1
+            message.reaction_changed_at = timezone.now()
+            message.save(update_fields=["reaction_version", "reaction_changed_at"])
+        return JsonResponse({
+            "ok": True,
+            "message_id": message.pk,
+            "reaction_version": message.reaction_version,
+            "reactions": serialize_reactions(message, request.user),
+        })
+
+
 @login_required
 @require_GET
 @rate_limit("search_messages")
@@ -2660,7 +2759,10 @@ def search_messages(request, chat_id):
         return JsonResponse({"ok": True, "results": []})
 
     base = _visible_message_queryset(chat, request.user).filter(is_deleted=False)
-    if connection.vendor == "postgresql":
+    token_condition = _message_search_condition(query)
+    if token_condition is not None:
+        results = list(base.filter(token_condition).order_by("-id")[:50])
+    elif connection.vendor == "postgresql":
         from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
 
         search_query = SearchQuery(query, config="simple", search_type="websearch")
@@ -3272,6 +3374,33 @@ def poll_messages(request, chat_id):
     _hide_inaccessible_reply_previews(chat, request.user, new_messages)
     _hide_inaccessible_reply_previews(chat, request.user, updated_messages)
 
+    # Independent reaction cursor: changing an emoji must not rebuild media
+    # or reset playback on the receiving client's existing message element.
+    try:
+        reaction_since = parse_datetime(request.GET.get("reaction_since", "")) or since
+        if timezone.is_naive(reaction_since):
+            reaction_since = timezone.make_aware(reaction_since, timezone.get_current_timezone())
+        reaction_after_id = max(0, min(int(request.GET.get("reaction_after_id", "0")), 9223372036854775807))
+    except (TypeError, ValueError, OverflowError):
+        reaction_since, reaction_after_id = since, 0
+    reaction_messages = list(
+        base.prefetch_related(None).prefetch_related("reactions")
+        .filter(id__lte=after_id, is_deleted=False)
+        .filter(
+            Q(reaction_changed_at__gt=reaction_since)
+            | Q(reaction_changed_at=reaction_since, id__gt=reaction_after_id)
+        )
+        .order_by("reaction_changed_at", "id")[:100]
+    )
+    if len(reaction_messages) == 100:
+        reaction_cursor_time = reaction_messages[-1].reaction_changed_at
+        reaction_cursor_id = reaction_messages[-1].pk
+    else:
+        # Overlap a few seconds for writes that were in flight during a poll.
+        # Clients discard duplicate revisions, so an overlap is harmless.
+        reaction_cursor_time = max(reaction_since, now - timedelta(seconds=5))
+        reaction_cursor_id = reaction_after_id if reaction_cursor_time == reaction_since else 0
+
     # Never move past a page of messages that was not delivered to the client.
     # Both new messages and edits may require multiple polling requests.
     # Only advance past messages actually returned, never past a concurrent send.
@@ -3379,6 +3508,16 @@ def poll_messages(request, chat_id):
                 )
                 for message in updated_messages
             ],
+            "reaction_updates": [
+                {
+                    "message_id": message.pk,
+                    "reaction_version": message.reaction_version,
+                    "reactions": serialize_reactions(message, request.user),
+                }
+                for message in reaction_messages
+            ],
+            "reaction_cursor_time": reaction_cursor_time.isoformat(),
+            "reaction_cursor_id": reaction_cursor_id,
             "high_watermark": high_watermark,
             "updates_cursor_time": updates_cursor_time.isoformat(),
             "updates_cursor_id": updates_cursor_id,

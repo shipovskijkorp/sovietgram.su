@@ -1,10 +1,12 @@
 from django.db import transaction
-from django.db.models import Case, IntegerField, Value, When
+from django.db.models import Case, F, IntegerField, Value, When
+from django.utils import timezone
 
 from apps.messenger.models import (
     Chat,
     ChatAdminLog,
     ChatParticipant,
+    Message,
     MessageAttachment,
 )
 
@@ -118,5 +120,10 @@ def delete_user_account(user):
     for attachment in remaining_attachments:
         _delete_stored_file(attachment.file)
 
+    # The cascade removes reactions on other people's surviving messages.
+    # Advance their revision so already-open clients receive fresh counts.
+    Message.objects.filter(reactions__user=user).exclude(sender=user).update(
+        reaction_version=F("reaction_version") + 1, reaction_changed_at=timezone.now(),
+    )
     _delete_stored_file(user.avatar)
     user.delete()

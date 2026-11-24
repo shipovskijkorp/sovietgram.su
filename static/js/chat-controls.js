@@ -330,6 +330,7 @@
     if (forwardButton) forwardButton.hidden = chatProtected;
     if (deleteButton) deleteButton.hidden = !canDeleteArticle(article);
     if (pinLabel) pinLabel.textContent = article.dataset.messagePinned === "true" ? "Открепить" : "Закрепить";
+    window.SovietgramSocial?.preparePicker(article);
 
     contextMenu.hidden = false;
     const rect = contextMenu.getBoundingClientRect();
@@ -739,9 +740,9 @@
         if (!paragraph) {
           paragraph = document.createElement("p");
           paragraph.className = "message__text";
-          editArticle.insertBefore(paragraph, editArticle.querySelector("footer"));
+          editArticle.insertBefore(paragraph, editArticle.querySelector("[data-message-reactions]") || editArticle.querySelector("footer"));
         }
-        paragraph.textContent = message.text;
+        window.SovietgramSocial.renderText(paragraph, message.text);
       } else {
         paragraph?.remove();
       }
@@ -882,6 +883,16 @@
       return;
     }
 
+    const reactionButton = target.closest("#messageContextMenu [data-pick-reaction]");
+    if (reactionButton) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const article = contextArticle;
+      closeMessageMenu();
+      if (article) void window.SovietgramSocial?.toggleReaction(article, reactionButton.dataset.pickReaction);
+      return;
+    }
+
     const actionButton = target.closest("#messageContextMenu [data-message-action]");
     if (actionButton) {
       event.preventDefault();
@@ -1007,6 +1018,12 @@
   }, true);
 
   searchInput?.addEventListener("input", scheduleSearch);
+  document.addEventListener("sovietgram:search-hashtag", event => {
+    if (!searchInput || !event.detail?.tag) return;
+    setSearchPanel(true);
+    searchInput.value = event.detail.tag;
+    scheduleSearch();
+  });
 
   forwardSearch?.addEventListener("input", syncForwardTargets);
 

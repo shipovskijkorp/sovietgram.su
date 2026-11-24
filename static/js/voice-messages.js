@@ -459,6 +459,7 @@
     article.dataset.deleteUrl = message.urls?.delete || "";
     article.dataset.forwardUrl = message.urls?.forward || "";
     article.dataset.pinUrl = message.urls?.pin || "";
+    article.dataset.reactionUrl = message.urls?.reaction || "";
 
     const media = document.createElement("div");
     media.className = "message-media";
@@ -474,6 +475,7 @@
       footer.appendChild(window.SovietgramReadReceipt.create(message.is_read));
     }
     article.appendChild(footer);
+    window.SovietgramSocial?.renderReactions(article, message);
 
     const actions = document.createElement("button");
     actions.className = "message-action-trigger";

@@ -187,20 +187,7 @@ function clearReplyState() {
 composerReplyClose?.addEventListener("click", clearReplyState);
 
 function linkifyInto(element, text) {
-  element.replaceChildren();
-  const expression = /(https?:\/\/[^\s]+)/gi;
-  let cursor = 0;
-  for (const match of text.matchAll(expression)) {
-    if (match.index > cursor) element.appendChild(document.createTextNode(text.slice(cursor, match.index)));
-    const link = document.createElement("a");
-    link.href = match[0];
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.textContent = match[0];
-    element.appendChild(link);
-    cursor = match.index + match[0].length;
-  }
-  if (cursor < text.length) element.appendChild(document.createTextNode(text.slice(cursor)));
+  window.SovietgramSocial.renderText(element, text);
 }
 
 function makeFileCard(attachment) {
@@ -394,6 +381,7 @@ function buildMessageArticle(message) {
   article.dataset.deleteUrl = message.urls?.delete || "";
   article.dataset.forwardUrl = message.urls?.forward || "";
   article.dataset.pinUrl = message.urls?.pin || "";
+  article.dataset.reactionUrl = message.urls?.reaction || "";
 
   if (message.forwarded) article.appendChild(makeForwardedBlock(message.forwarded));
   if (message.reply) article.appendChild(makeReplyPreview(message.reply));
@@ -439,6 +427,7 @@ function buildMessageArticle(message) {
     footer.appendChild(window.SovietgramReadReceipt.create(message.is_read));
   }
   article.appendChild(footer);
+  window.SovietgramSocial.renderReactions(article, message);
 
   const actions = document.createElement("button");
   actions.className = "message-action-trigger";
@@ -522,7 +511,9 @@ function applyMessageUpdate(message) {
     article.dataset.deleteUrl = message.urls.delete || article.dataset.deleteUrl;
     article.dataset.forwardUrl = message.urls.forward || article.dataset.forwardUrl;
     article.dataset.pinUrl = message.urls.pin || article.dataset.pinUrl;
+    article.dataset.reactionUrl = message.urls.reaction || article.dataset.reactionUrl;
   }
+  window.SovietgramSocial.renderReactions(article, message);
 
   let special = article.querySelector("[data-special-message]");
   if (message.special && typeof window.buildSovietgramSpecialMessage === "function") {
@@ -540,7 +531,7 @@ function applyMessageUpdate(message) {
     if (!paragraph) {
       paragraph = document.createElement("p");
       paragraph.className = "message__text";
-      article.insertBefore(paragraph, article.querySelector("footer"));
+      article.insertBefore(paragraph, article.querySelector("[data-message-reactions]") || article.querySelector("footer"));
     }
     linkifyInto(paragraph, message.text);
   } else {
@@ -1497,6 +1488,8 @@ let historyGeneration = 0;
 let newestMessageId = nodeId(historyNodes().at(-1));
 let newestUpdateAt = messageStage?.dataset.serverTime || new Date().toISOString();
 let newestUpdateId = 0;
+let reactionCursorAt = newestUpdateAt;
+let reactionCursorId = 0;
 let ownLastReadId = Number(messageStage?.dataset.ownLastRead) || 0;
 // Only acknowledge the specific manual marker present on this page's opening.
 let openedUnreadMarker = messageStage?.dataset.openedMarker || "";
@@ -1668,6 +1661,8 @@ async function replaceHistoryWindow(params, anchor = null) {
     newestMessageId = nodeId(historyNodes().at(-1));
     newestUpdateAt = payload.server_time || new Date().toISOString();
     newestUpdateId = 0;
+    reactionCursorAt = newestUpdateAt;
+    reactionCursorId = 0;
     ownLastReadId = Math.max(ownLastReadId, Number(payload.own_last_read_id) || 0);
     updateReadReceipts(payload.other_last_read_id);
     updateHistoryControls();
@@ -1744,6 +1739,8 @@ async function pollMessages() {
     url.searchParams.set("after", String(newestMessageId));
     url.searchParams.set("since", newestUpdateAt);
     url.searchParams.set("after_update_id", String(newestUpdateId));
+    url.searchParams.set("reaction_since", reactionCursorAt);
+    url.searchParams.set("reaction_after_id", String(reactionCursorId));
     if (historyHasNewer) url.searchParams.set("skip_new", "1");
     const response = await fetch(url, { credentials: "same-origin", cache: "no-store" });
     if (!response.ok) return;
@@ -1760,6 +1757,12 @@ async function pollMessages() {
     const anchor = follow ? null : visibleAnchor();
     for (const message of payload.messages || []) renderMessage(message);
     for (const message of payload.updates || []) applyMessageUpdate(message);
+    for (const update of payload.reaction_updates || []) {
+      const article = historyNodes().find(node => nodeId(node) === Number(update.message_id));
+      if (article) window.SovietgramSocial.renderReactions(article, update);
+    }
+    reactionCursorAt = payload.reaction_cursor_time || reactionCursorAt;
+    reactionCursorId = Number(payload.reaction_cursor_id) || 0;
     if (!historyHasNewer) newestMessageId = Math.max(newestMessageId, Number(payload.high_watermark) || 0);
     ownLastReadId = Math.max(ownLastReadId, Number(payload.own_last_read_id) || 0);
     updateReadReceipts(payload.other_last_read_id);
