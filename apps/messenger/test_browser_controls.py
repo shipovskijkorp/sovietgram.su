@@ -378,6 +378,46 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.click("#imageViewerClose")
         self.click("#chatGalleryClose")
 
+    def test_platform_admin_panel_and_report_flow(self):
+        from apps.accounts.two_factor import encrypt_secret
+        import pyotp
+
+        self.owner.platform_role = User.PlatformRole.OWNER
+        self.owner.two_factor_secret = encrypt_secret(pyotp.random_base32())
+        self.owner.save(update_fields=["platform_role","two_factor_secret"])
+        reported = Message.objects.create(chat=self.direct,sender=self.peer,text="Reportable message")
+        self.go(self.direct)
+        self.page.locator(f'.message[data-message-id="{reported.pk}"]').click(button="right")
+        self.click('[data-message-action="report"]')
+        self.page.locator('select[name="reason"]').select_option("spam")
+        self.page.locator('textarea[name="details"]').fill("Browser report")
+        self.page.get_by_role("button",name="Отправить жалобу").click()
+        self.expect(self.page.get_by_role("heading",name="Мои жалобы")).to_be_visible()
+        self.go()
+        self.click("#profileMenuButton")
+        self.click("#platformAdminEntry")
+        self.expect(self.page.get_by_role("heading",name="Обзор",exact=True)).to_be_visible()
+        self.page.locator(".platform-sidebar nav").get_by_role("link",name="Жалобы",exact=True).click()
+        self.page.locator(".platform-table-wrap tbody a").first.click()
+        self.expect(self.page.locator(".platform-evidence")).to_contain_text("Reportable message")
+        self.page.locator('input[name="reason"]').fill("Confirmed spam")
+        self.click('button[value="delete_message"]')
+        self.expect(self.page.locator(".platform-status")).to_have_text("Решена")
+        self.page.locator(".platform-sidebar nav").get_by_role("link",name="Пользователи",exact=True).click()
+        self.page.locator('input[name="q"]').fill("peer")
+        self.page.get_by_role("button",name="Найти").click()
+        self.page.locator(".platform-table-wrap tbody a").first.click()
+        self.page.locator('form:has(button[value="suspend"]) input[name="reason"]').fill("Browser moderation")
+        self.click('button[value="suspend"]')
+        self.visible('button[value="restore"]')
+        self.page.locator('form:has(button[value="restore"]) input[name="reason"]').fill("Appeal accepted")
+        self.click('button[value="restore"]')
+        self.visible('button[value="suspend"]')
+        self.page.locator(".platform-sidebar nav").get_by_role("link",name="Журнал действий").click()
+        self.expect(self.page.locator(".platform-table-wrap")).to_contain_text("delete_reported_message")
+        self.expect(self.page.locator(".platform-table-wrap")).to_contain_text("Browser moderation")
+        self.assertFalse(Message.objects.filter(pk=reported.pk,is_deleted=False).exists())
+
     def test_two_factor_enrollment_and_recovery_login(self):
         import pyotp
 
