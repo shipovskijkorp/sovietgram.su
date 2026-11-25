@@ -204,6 +204,12 @@ class Message(models.Model):
         ordering = ("id",)
 
     @property
+    def sync_revision(self):
+        # Integer microseconds, safely representable by JS Number for the
+        # lifetime of this application. Avoid lossy millisecond Date parsing.
+        return int(self.updated_at.timestamp()) * 1_000_000 + self.updated_at.microsecond
+
+    @property
     def preview(self):
         if self.is_deleted:
             return "Сообщение удалено"

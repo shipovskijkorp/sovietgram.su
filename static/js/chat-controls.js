@@ -94,6 +94,59 @@
   const chatExportLink = chatMenu?.querySelector("[data-chat-export]");
   let chatProtected = conversation.dataset.chatProtected === "true";
 
+  const readersDialog = document.getElementById("messageReadersDialog");
+  const readersStatus = document.getElementById("messageReadersStatus");
+  const readersList = document.getElementById("messageReadersList");
+  const readersMore = document.getElementById("messageReadersMore");
+  let readersUrl = "", readersAfter = 0, readersController = null, readersGeneration = 0;
+  async function loadReaders(append = false) {
+    if (!readersUrl || !readersDialog?.open) return;
+    readersController?.abort();
+    const generation = ++readersGeneration;
+    readersController = new AbortController();
+    if (!append) { readersAfter = 0; readersList.replaceChildren(); }
+    readersMore.hidden = true;
+    readersStatus.textContent = "Загрузка…";
+    try {
+      const url = new URL(readersUrl, location.origin);
+      url.searchParams.set("account_id", document.body.dataset.accountId || "");
+      url.searchParams.set("after", String(readersAfter));
+      const response = await fetch(url, {credentials:"same-origin", cache:"no-store", signal:readersController.signal});
+      const result = await response.json().catch(() => ({}));
+      if (generation !== readersGeneration || !readersDialog.open) return;
+      if (!response.ok || !result.ok) throw new Error(result.error || "Список прочитавших недоступен.");
+      for (const reader of result.readers || []) {
+        const row = document.createElement("li");
+        const name = document.createElement("strong");
+        name.textContent = reader.name;
+        const username = document.createElement("small");
+        username.textContent = "@" + reader.username;
+        row.append(name, username);
+        readersList.append(row);
+      }
+      readersStatus.textContent = result.total ? "Прочитали: " + result.total : "Пока никто не прочитал.";
+      readersAfter = result.next_after || 0;
+      readersMore.textContent = "Показать ещё";
+      readersMore.hidden = !readersAfter;
+    } catch (error) {
+      if (generation !== readersGeneration || error.name === "AbortError") return;
+      readersStatus.textContent = error.message;
+      readersMore.textContent = "Повторить";
+      readersMore.hidden = false;
+    }
+  }
+  function openReaders(article) {
+    if (!readersDialog || !article.dataset.readersUrl || !isOwn(article) || chatType !== "group") return;
+    readersUrl = article.dataset.readersUrl;
+    if (!readersDialog.open) readersDialog.showModal();
+    void loadReaders();
+  }
+  readersMore?.addEventListener("click", () => { void loadReaders(Boolean(readersAfter)); });
+  document.getElementById("messageReadersClose")?.addEventListener("click", () => readersDialog.close());
+  readersDialog?.addEventListener("close", () => {
+    readersGeneration++; readersController?.abort(); readersUrl = ""; readersList.replaceChildren();
+  });
+
   const selectionBar = document.getElementById("messageSelectionBar");
   const selectionCount = document.getElementById("messageSelectionCount");
   const selectionForward = document.getElementById("messageSelectionForward");
@@ -339,6 +392,8 @@
     if (copyLink) copyLink.hidden = chatProtected;
     const deleteButton = contextMenu.querySelector('[data-message-action="delete"]');
     const pinLabel = document.getElementById("messagePinLabel");
+    const readersButton = contextMenu.querySelector('[data-message-action="readers"]');
+    if (readersButton) readersButton.hidden = chatType !== "group" || !isOwn(article) || !article.dataset.readersUrl;
 
     if (editButton) editButton.hidden = !isOwn(article) || Boolean(article.dataset.messageKind) || Boolean(article.querySelector(".message-sticker"));
     if (copyButton) copyButton.hidden = chatProtected || !(article.dataset.messageText || "").trim();
@@ -977,6 +1032,7 @@
       if (action === "copy-link" && !chatProtected) {
         copyText(messageLink(article)).then(() => notify("Ссылка скопирована. Доступ только у участников чата.")).catch(error => notify(error.message));
       }
+      if (action === "readers") openReaders(article);
       if (action === "edit") openEditModal(article);
       if (action === "forward") openForwardModal([article]);
       if (action === "select") setSelectionMode(true, article);

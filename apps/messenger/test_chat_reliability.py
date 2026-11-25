@@ -2,6 +2,8 @@
 import json
 import tempfile
 from uuid import uuid4
+from datetime import timedelta
+from django.utils import timezone
 
 from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -9,7 +11,7 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from apps.accounts.models import User
-from .models import Chat, ChatParticipant, Message, MessageAttachment, MessageHiddenForUser, MessageSendReceipt
+from .models import Chat, ChatParticipant, Message, MessageAttachment, MessageHiddenForUser, MessageSendReceipt, MessageReaction
 from .services import get_or_create_direct_chat
 
 
@@ -209,3 +211,59 @@ class ChatReliabilityTests(TestCase):
         })
         self.assertEqual(response.status_code, 409)
         self.assertEqual(self.membership().read_through_id, 0)
+
+
+    def test_mounted_revisions_repair_edits_and_reactions_older_than_cursor(self):
+        edited = self.incoming("old")
+        reacted = self.incoming("reaction")
+        old_version = edited.sync_revision
+        edited.text = "changed"
+        edited.save(update_fields=["text", "updated_at"])
+        Message.objects.filter(pk=reacted.pk).update(reaction_version=3, reaction_changed_at=timezone.now())
+        future_cursor = (timezone.now() + timedelta(minutes=1)).isoformat()
+        response = self.client.get(self.poll_url, {
+            "after": reacted.pk, "since": future_cursor, "reaction_since": future_cursor,
+            "known_ids": f"{edited.pk},{reacted.pk}",
+            "known_versions": f"{edited.pk}:{old_version}:0,{reacted.pk}:{reacted.sync_revision}:0",
+        })
+        self.assertEqual(response.status_code, 200, response.content)
+        payload = response.json()
+        self.assertEqual([(row["id"], row["text"]) for row in payload["updates"]], [(edited.pk, "changed")])
+        self.assertEqual(payload["reaction_updates"][0]["message_id"], reacted.pk)
+        self.assertEqual(payload["reaction_updates"][0]["reaction_version"], 3)
+        self.assertEqual(payload["updates_cursor_time"], future_cursor)
+        self.assertEqual(self.client.get(self.poll_url, {"known_versions":"123:0:0"}).status_code, 400)
+
+    def test_reconciliation_removes_expired_messages_without_cleanup(self):
+        msg = self.incoming()
+        Message.objects.filter(pk=msg.pk).update(expires_at=timezone.now()-timedelta(seconds=1))
+        cache.set("sovietgram:privacy:message-expiry", 1, 60)
+        payload = self.client.get(self.poll_url, {
+            "after": msg.pk, "known_ids": str(msg.pk), "known_versions": f"{msg.pk}:{msg.sync_revision}:0",
+        }).json()
+        self.assertEqual(payload["removed_ids"], [msg.pk])
+        self.assertTrue(Message.objects.filter(pk=msg.pk).exists())
+
+    def test_group_readers_only_author_can_access_and_visibility_is_respected(self):
+        group = Chat.objects.create(type=Chat.Type.GROUP, title="Readers")
+        ChatParticipant.objects.create(chat=group, user=self.alice, role="owner")
+        reader = ChatParticipant.objects.create(chat=group, user=self.bob)
+        not_reader = ChatParticipant.objects.create(chat=group, user=self.outsider)
+        msg = Message.objects.create(chat=group, sender=self.alice, text="Question")
+        reader.read_through_id = msg.pk
+        reader.save(update_fields=["read_through_id"])
+        url = reverse("messenger:message_readers", args=[group.pk,msg.pk])
+        payload = self.client.get(url).json()
+        self.assertEqual(payload["total"], 1)
+        self.assertEqual(payload["readers"], [{"name":"bob", "username":"bob"}])
+        self.assertNotIn("last_seen", payload["readers"][0])
+        self.assertEqual(self.client.get(url, {"account_id":self.bob.pk}).status_code,409)
+        self.client.force_login(self.bob)
+        self.assertEqual(self.client.get(url).status_code,404)
+        self.client.force_login(self.alice)
+        MessageHiddenForUser.objects.create(message=msg, user=self.bob)
+        self.assertEqual(self.client.get(url).json()["total"],0)
+        not_reader.read_through_id = msg.pk
+        not_reader.cleared_before_message_id = msg.pk
+        not_reader.save(update_fields=["read_through_id","cleared_before_message_id"])
+        self.assertEqual(self.client.get(url).json()["total"],0)

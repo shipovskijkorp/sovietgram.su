@@ -202,6 +202,18 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.hidden("#deleteMessageModal")
         self.expect(self.page.locator(message)).to_have_count(0)
 
+    def test_group_message_readers_dialog(self):
+        ChatParticipant.objects.filter(chat=self.group, user=self.peer).update(read_through_id=self.message.pk)
+        self.go(self.group)
+        message = '.message[data-message-id="' + str(self.message.pk) + '"]'
+        self.page.locator(message).click(button="right")
+        self.click('[data-message-action="readers"]')
+        self.visible("#messageReadersDialog")
+        self.expect(self.page.locator("#messageReadersStatus")).to_have_text("Прочитали: 1")
+        self.expect(self.page.locator("#messageReadersList")).to_contain_text("@peer")
+        self.click("#messageReadersClose")
+        self.hidden("#messageReadersDialog")
+
     def test_chat_search_stickers_attachments_scheduling_and_folders(self):
         self.go(self.direct)
         self.click("#chatSearchToggle")

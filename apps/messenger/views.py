@@ -394,7 +394,9 @@ _LINK_RE = re.compile(
 
 def _visible_message_queryset(chat, user):
     membership = ChatParticipant.objects.get(chat=chat, user=user)
-    queryset = _base_message_queryset(chat).exclude(hidden_for_users__user=user)
+    queryset = _base_message_queryset(chat).exclude(hidden_for_users__user=user).filter(
+        Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
+    )
     if membership.cleared_before_message_id:
         queryset = queryset.filter(id__gt=membership.cleared_before_message_id)
     if (
@@ -3404,6 +3406,49 @@ def typing(request, chat_id):
 
 @login_required
 @require_GET
+def message_readers(request, chat_id, message_id):
+    """Read cursor details for the author of a visible group message."""
+    account_id = request.GET.get("account_id")
+    if account_id is not None and account_id != str(request.user.pk):
+        return JsonResponse({"ok": False, "error": "Аккаунт изменился."}, status=409)
+    chat = _chat_for_user(request.user, chat_id)
+    if chat.type != Chat.Type.GROUP:
+        raise Http404
+    message = get_object_or_404(
+        _visible_message_queryset(chat, request.user),
+        pk=message_id, sender=request.user, is_deleted=False,
+    )
+    try:
+        after = int(request.GET.get("after", "0"))
+        if not 0 <= after <= 9223372036854775807:
+            raise ValueError
+    except (ValueError, TypeError, OverflowError):
+        return JsonResponse({"ok": False, "error": "Некорректный курсор."}, status=400)
+    readers = ChatParticipant.objects.filter(
+        Q(read_through_id__gte=message.pk) | Q(last_read_message_id__gte=message.pk),
+        chat=chat, is_hidden=False, cleared_before_message_id__lt=message.pk,
+    ).exclude(user=request.user).exclude(
+        user_id__in=MessageHiddenForUser.objects.filter(message=message).values("user_id")
+    )
+    if not chat.history_visible_to_new_members:
+        readers = readers.filter(
+            Q(can_see_pre_join_history=True) | Q(joined_at__lte=message.created_at)
+        )
+    total = readers.count()
+    page = list(readers.filter(user_id__gt=after).select_related("user").order_by("user_id")[:51])
+    more = len(page) > 50
+    page = page[:50]
+    response = JsonResponse({
+        "ok": True, "account_id": request.user.pk, "total": total,
+        "readers": [{"name": row.user.display_name, "username": row.user.username} for row in page],
+        "next_after": page[-1].user_id if more else None,
+    })
+    response["Cache-Control"] = "private, no-store"
+    return response
+
+
+@login_required
+@require_GET
 def chat_gallery(request, chat_id):
     account_id = request.GET.get("account_id")
     if account_id is not None and account_id != str(request.user.pk):
@@ -3702,21 +3747,41 @@ def poll_messages(request, chat_id):
     except (TypeError, ValueError, OverflowError):
         return JsonResponse({"ok": False, "error": "Некорректные идентификаторы сообщений."}, status=400)
 
+    # Clients optionally report compact revisions of their mounted window.
+    # This repairs writes committed after a timestamp cursor already passed.
+    known_versions = {}
+    try:
+        raw_versions = request.GET.get("known_versions", "")
+        if len(raw_versions) > 3000:
+            raise ValueError
+        for row in raw_versions.split(",") if raw_versions else []:
+            message_id, revision, reaction = map(int, row.split(":"))
+            if (message_id not in known_ids or message_id in known_versions
+                    or not 0 <= revision <= 9007199254740991
+                    or not 0 <= reaction <= 9223372036854775807):
+                raise ValueError
+            known_versions[message_id] = (revision, reaction)
+    except (ValueError, TypeError, OverflowError):
+        return JsonResponse({"ok": False, "error": "Некорректные версии сообщений."}, status=400)
+
     chat = _chat_for_user(request.user, chat_id)
     membership = _membership(chat, request.user)
     try:
-        after_id = max(0, int(request.GET.get("after", "0")))
+        after_id = max(0, min(int(request.GET.get("after", "0")), 9223372036854775807))
     except (TypeError, ValueError):
         after_id = 0
 
     now = timezone.now()
-    since = parse_datetime(request.GET.get("since", ""))
+    try:
+        since = parse_datetime(request.GET.get("since", ""))
+    except (ValueError, TypeError, OverflowError):
+        since = None
     if since is None:
         since = now
     elif timezone.is_naive(since):
         since = timezone.make_aware(since, timezone.get_current_timezone())
     try:
-        after_update_id = max(0, int(request.GET.get("after_update_id", "0")))
+        after_update_id = max(0, min(int(request.GET.get("after_update_id", "0")), 9223372036854775807))
     except (TypeError, ValueError):
         after_update_id = 0
 
@@ -3734,14 +3799,31 @@ def poll_messages(request, chat_id):
         .order_by("updated_at", "id")[:100]
     )
     _hide_inaccessible_reply_previews(chat, request.user, new_messages)
-    _hide_inaccessible_reply_previews(chat, request.user, updated_messages)
+    # Preserve the cursor of the timestamp page separately from repairs.
+    cursor_messages = list(updated_messages)
     removed_ids = []
+    repair_reaction_ids = set()
     if known_ids:
-        visible_ids = set(
+        mounted = list(
             base.filter(pk__in=known_ids, is_deleted=False)
-            .order_by().values_list("pk", flat=True)
+            .select_related(None).prefetch_related(None)
+            .only("pk", "updated_at", "reaction_version").order_by("pk")
         )
+        visible_ids = {message.pk for message in mounted}
         removed_ids = sorted(known_ids - visible_ids)
+        delivered_ids = {message.pk for message in new_messages + updated_messages}
+        repair_ids = set()
+        for message in mounted:
+            version = known_versions.get(message.pk)
+            if version is None or message.pk in delivered_ids:
+                continue
+            if message.sync_revision > version[0]:
+                repair_ids.add(message.pk)
+            elif message.reaction_version > version[1]:
+                repair_reaction_ids.add(message.pk)
+        if repair_ids:
+            updated_messages.extend(base.filter(pk__in=repair_ids, is_deleted=False).order_by("pk"))
+    _hide_inaccessible_reply_previews(chat, request.user, updated_messages)
 
     # Independent reaction cursor: changing an emoji must not rebuild media
     # or reset playback on the receiving client's existing message element.
@@ -3774,12 +3856,20 @@ def poll_messages(request, chat_id):
     # Both new messages and edits may require multiple polling requests.
     # Only advance past messages actually returned, never past a concurrent send.
     high_watermark = new_messages[-1].pk if new_messages else after_id
-    if len(updated_messages) == 100:
-        updates_cursor_time = updated_messages[-1].updated_at
-        updates_cursor_id = updated_messages[-1].pk
+    if len(cursor_messages) == 100:
+        updates_cursor_time = cursor_messages[-1].updated_at
+        updates_cursor_id = cursor_messages[-1].pk
     else:
-        updates_cursor_time = now
-        updates_cursor_id = 0
+        # Short overlap handles ordinary in-flight commits quickly.
+        # Mounted-window reconciliation also repairs arbitrarily late writes.
+        updates_cursor_time = max(since, now - timedelta(seconds=5))
+        updates_cursor_id = after_update_id if updates_cursor_time == since else 0
+    repair_reaction_ids.difference_update(message.pk for message in reaction_messages)
+    if repair_reaction_ids:
+        reaction_messages.extend(
+            base.prefetch_related(None).prefetch_related("reactions")
+            .filter(pk__in=repair_reaction_ids, is_deleted=False)
+        )
     other_last_read_id = (
         _other_last_read_id(chat, request.user)
         if chat.type == Chat.Type.PRIVATE

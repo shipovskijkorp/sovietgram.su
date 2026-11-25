@@ -541,6 +541,7 @@ def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=No
         "is_pinned": message.pk in pinned_ids,
         "created_at": message.created_at.isoformat(),
         "updated_at": message.updated_at.isoformat(),
+        "revision": message.sync_revision,
         "time": timezone.localtime(message.created_at).strftime("%H:%M"),
         "reply": reply_data,
         "forwarded": {
@@ -570,6 +571,8 @@ def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=No
             "delete": reverse("messenger:delete_message", args=[message.chat_id, message.pk]),
             "forward": reverse("messenger:forward_message", args=[message.chat_id, message.pk]),
             "pin": reverse("messenger:pin_message", args=[message.chat_id, message.pk]),
+            "readers": reverse("messenger:message_readers", args=[message.chat_id, message.pk])
+                if is_own and message.chat.type == Chat.Type.GROUP and not message.is_deleted else "",
         },
     }
 

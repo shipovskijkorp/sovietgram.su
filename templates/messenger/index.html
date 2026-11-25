@@ -368,6 +368,8 @@
             <article id="message-{{ message.pk }}"
                      class="message{% if message.sender_id == request.user.pk %} message--outgoing{% else %} message--incoming{% endif %}{% if message.is_pinned_ui %} is-pinned{% endif %}"
                      data-message-id="{{ message.pk }}"
+                     data-message-revision="{{ message.sync_revision|stringformat:'d' }}"
+                     data-readers-url="{% if selected_chat.type == 'group' and message.sender_id == request.user.pk %}{% url 'messenger:message_readers' selected_chat.pk message.pk %}{% endif %}"
                      data-message-own="{% if message.sender_id == request.user.pk %}true{% else %}false{% endif %}"
                      data-message-text="{{ message.text|escape }}"
                      data-message-kind="{{ message.special_type|default:'' }}"
@@ -831,6 +833,7 @@
   <button type="button" data-message-action="reply"><span class="tg-native-icon tg-native-icon--reply" aria-hidden="true"></span>Ответить</button>
   <button type="button" data-message-action="copy"><span class="tg-native-icon tg-native-icon--copy" aria-hidden="true"></span>Копировать текст</button>
   <button type="button" data-message-action="copy-link"><svg class="message-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a4 4 0 0 0 6 0l4-4a4 4 0 0 0-6-6l-2 2m2 6a4 4 0 0 0-6 0l-4 4a4 4 0 0 0 6 6l2-2"/></svg>Копировать ссылку</button>
+  <button type="button" data-message-action="readers" hidden><svg class="message-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 12 4 4L17 6m-6 10L21 6"/></svg>Кто прочитал</button>
   <button type="button" data-message-action="edit"><span class="tg-native-icon tg-native-icon--edit" aria-hidden="true"></span>Изменить</button>
   <button type="button" data-message-action="forward"><span class="tg-native-icon tg-native-icon--forward" aria-hidden="true"></span>Переслать</button>
   <button type="button" data-message-action="select"><span class="message-context-menu__select-icon" aria-hidden="true">✓</span>Выбрать</button>
@@ -840,6 +843,13 @@
   <button class="message-context-menu__danger" type="button" data-message-action="delete"><span class="tg-native-icon tg-native-icon--clear" aria-hidden="true"></span>Удалить сообщение</button>
 </div>
 
+<dialog class="message-readers-dialog" id="messageReadersDialog" aria-labelledby="messageReadersTitle">
+  <header><strong id="messageReadersTitle">Кто прочитал</strong><button type="button" id="messageReadersClose" aria-label="Закрыть">×</button></header>
+  <p id="messageReadersStatus" role="status"></p>
+  <ul id="messageReadersList"></ul>
+  <button type="button" id="messageReadersMore" class="gallery-open-link" hidden>Показать ещё</button>
+  <small>Показаны текущие участники с доступом к сообщению, чей курсор чтения дошёл до него.</small>
+</dialog>
 <div class="telegram-confirm-backdrop" id="deleteMessageModal" hidden>
   <section class="telegram-confirm" role="dialog" aria-modal="true" aria-labelledby="deleteMessageTitle">
     <div class="telegram-confirm__icon"><span class="tg-native-icon tg-native-icon--clear" aria-hidden="true"></span></div>

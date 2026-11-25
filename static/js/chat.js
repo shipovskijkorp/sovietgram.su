@@ -409,6 +409,8 @@ function buildMessageArticle(message) {
   article.className = `message ${message.is_own ? "message--outgoing" : "message--incoming"}`;
   if (message.is_pinned) article.classList.add("is-pinned");
   article.dataset.messageId = String(message.id);
+  article.dataset.messageRevision = String(message.revision || 0);
+  article.dataset.readersUrl = message.urls?.readers || "";
   article.dataset.messageOwn = String(Boolean(message.is_own));
   article.dataset.messageText = message.text || "";
   article.dataset.messageKind = message.special?.type || "";
@@ -538,6 +540,14 @@ function applyMessageUpdate(message) {
   // Updates can refer to unloaded pages; do not insert a distant old
   // message into the currently loaded, contiguous history window.
   if (!article) return;
+  const revision = Number(message.revision) || 0;
+  const previous = Number(article.dataset.messageRevision) || 0;
+  // A slow poll cannot overwrite a newer edit acknowledged in this tab.
+  if (revision && previous > revision) {
+    window.SovietgramSocial.renderReactions(article, message);
+    return;
+  }
+  if (revision) article.dataset.messageRevision = String(revision);
 
   article.dataset.messageText = message.text || "";
   article.dataset.messageKind = message.special?.type || "";
@@ -549,6 +559,7 @@ function applyMessageUpdate(message) {
     article.dataset.forwardUrl = message.urls.forward || article.dataset.forwardUrl;
     article.dataset.pinUrl = message.urls.pin || article.dataset.pinUrl;
     article.dataset.reactionUrl = message.urls.reaction || article.dataset.reactionUrl;
+    article.dataset.readersUrl = message.urls.readers || "";
   }
   window.SovietgramSocial.renderReactions(article, message);
 
@@ -1257,7 +1268,7 @@ let knownMessageCursor = 0;
 function knownMessageBatch() {
   const ids = historyNodes().map(nodeId).filter(id => Number.isSafeInteger(id) && id > 0).sort((a,b) => a-b);
   const next = ids.filter(id => id > knownMessageCursor);
-  return (next.length ? next : ids).slice(0, 100);
+  return (next.length ? next : ids).slice(0, 40);
 }
 let scrollTimer = 0;
 
@@ -1471,7 +1482,14 @@ async function pollMessages() {
   try {
     const url = new URL(messageStage.dataset.pollUrl, window.location.origin);
     const knownIds = knownMessageBatch();
-    if (knownIds.length) url.searchParams.set("known_ids", knownIds.join(","));
+    if (knownIds.length) {
+      url.searchParams.set("known_ids", knownIds.join(","));
+      const mounted = new Map(historyNodes().map(node => [nodeId(node), node]));
+      url.searchParams.set("known_versions", knownIds.map(id => {
+        const node = mounted.get(id);
+        return [id, node?.dataset.messageRevision || 0, node?.dataset.reactionVersion || 0].join(":");
+      }).join(","));
+    }
     if (messageStage.dataset.accountId) url.searchParams.set("account_id", messageStage.dataset.accountId);
     url.searchParams.set("after", String(newestMessageId));
     url.searchParams.set("since", newestUpdateAt);
