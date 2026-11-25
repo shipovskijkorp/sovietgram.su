@@ -1085,3 +1085,8 @@ body[data-theme="dark"] .community-settings-member-search {
 .community-moderation-dialog button[type=submit] {background:var(--red,#a12732);color:white;border-color:transparent;}
 #communityModerationError {color:var(--red-soft);}
 body[data-theme="dark"] .community-moderation-dialog {background:#251f1b;color:#f2e8dc;color-scheme:dark;}
+
+.community-load-state { margin:12px; padding:12px; border:1px solid var(--line); border-radius:10px; color:var(--ink); background:color-mix(in srgb,var(--red) 5%,transparent); }
+.community-load-state[hidden], .community-load-state button[hidden], .community-settings__delete[hidden], .community-profile__topbar-button[hidden] { display:none!important; }
+.community-load-state p { margin:0; font-size:13px; overflow-wrap:anywhere; }
+.community-load-state button { margin-top:8px; border:1px solid var(--line); color:var(--red); background:transparent; border-radius:8px; padding:7px 11px; font:inherit; cursor:pointer; }

@@ -783,18 +783,7 @@ document.addEventListener("click", (event) => {
   if (chatMenu && !chatMenu.contains(event.target) && event.target !== chatMenuButton) setChatMenu(false);
 });
 
-chatMenu?.querySelector("[data-open-community-settings]")?.addEventListener("click", async () => {
-  setChatMenu(false);
-  if (typeof window.openCommunitySettings === "function") {
-    await window.openCommunitySettings();
-    return;
-  }
-  if (typeof window.openCommunityProfile === "function") {
-    await window.openCommunityProfile();
-    document.getElementById("communityProfileSettingsOpen")?.click();
-  }
-});
-
+// Community navigation is owned by community-profile.js and community-settings.js.
 chatMenu?.querySelectorAll("form[data-confirm-form]").forEach((formNode) => {
   formNode.addEventListener("submit", (event) => {
     const text = formNode.dataset.confirmForm || "";

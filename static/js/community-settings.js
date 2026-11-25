@@ -3,11 +3,15 @@
   const profileBackdrop = document.getElementById("communityProfileBackdrop");
   const panel = document.getElementById("communitySettings");
   const openButton = document.getElementById("communityProfileSettingsOpen");
-  if (!profileRoot || !panel || !openButton) return;
+  if (!profileRoot || !panel) return;
 
   const $ = (id) => document.getElementById(id);
   const overview = $("communitySettingsOverview");
   const closeButton = $("communitySettingsClose");
+  const loadState = $("communitySettingsLoadState");
+  const loadMessage = $("communitySettingsLoadMessage");
+  const retryButton = $("communitySettingsRetry");
+  let loadGeneration = 0;
   const communityName = $("communitySettingsCommunityName");
   const communityMeta = $("communitySettingsCommunityMeta");
   const typeSummary = $("communitySettingsTypeSummary");
@@ -71,7 +75,8 @@
       },
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok || payload.ok === false) throw new Error(errorText(payload));
+    if (!response.ok || response.redirected || payload.ok !== true)
+      throw new Error(errorText(payload, response.redirected ? "Сессия истекла. Обновите страницу." : "Не удалось выполнить действие (" + response.status + ")."));
     return payload;
   }
 
@@ -93,9 +98,9 @@
 
   function setView(name) {
     activeView = name;
-    overview.hidden = name !== "overview";
+    overview.hidden = !settings || name !== "overview";
     subviews.forEach((view) => {
-      view.hidden = view.dataset.communitySettingsView !== name;
+      view.hidden = !settings || view.dataset.communitySettingsView !== name;
     });
     if (name === "members") {
       closeMemberSearch();
@@ -104,27 +109,50 @@
   }
 
   function closeSettings() {
+    loadGeneration++;
     panel.hidden = true;
     panel.setAttribute("aria-hidden", "true");
+    loadState.hidden = true;
+    retryButton.hidden = true;
     setView("overview");
     closeMemberSearch();
     if (inviteForm) inviteForm.hidden = true;
   }
 
   async function openSettings() {
-    if (profileRoot.hidden && typeof window.openCommunityProfile === "function") {
-      await window.openCommunityProfile();
-    }
+    const generation = ++loadGeneration;
+    const menu = $("chatMenu");
+    if (menu) menu.hidden = true;
+    $("chatMenuButton")?.setAttribute("aria-expanded", "false");
+    // The separate profile request must never prevent management from opening.
+    const wasHidden = profileRoot.hidden;
+    profileRoot.hidden = false;
+    profileRoot.setAttribute("aria-hidden", "false");
+    if (profileBackdrop) profileBackdrop.hidden = false;
     panel.hidden = false;
     panel.setAttribute("aria-hidden", "false");
+    settings = null;
     setView("overview");
+    loadState.hidden = false;
+    loadMessage.textContent = "Загрузка управления…";
+    retryButton.hidden = true;
+    if (wasHidden && typeof window.openCommunityProfile === "function") {
+      Promise.resolve(window.openCommunityProfile()).catch(() => {});
+    }
     try {
-      const payload = await fetchJson(profileRoot.dataset.settingsUrl);
+      const payload = await fetchJson(profileRoot.dataset.settingsUrl, {cache: "no-store"});
+      if (generation !== loadGeneration || panel.hidden) return;
+      if (!payload.settings || typeof payload.settings !== "object") throw new Error("Управление недоступно для текущего аккаунта.");
       settings = payload.settings;
       render();
+      setView("overview");
+      loadState.hidden = true;
     } catch (error) {
-      toast(error.message);
-      closeSettings();
+      if (generation !== loadGeneration || panel.hidden) return;
+      settings = null;
+      setView("overview");
+      loadMessage.textContent = error.message || "Не удалось загрузить управление.";
+      retryButton.hidden = false;
     }
   }
 
@@ -170,6 +198,7 @@
     }
     if(signatures){signatures.checked=Boolean(settings.signatures_enabled);signatures.closest("label").hidden=!rights.has("change_info");}
     if(addMember)addMember.hidden=!settings.can_add_members;
+    if(deleteButton)deleteButton.hidden=!settings.can_delete;
     $("communitySettingsModerationSummary").textContent=String(settings.moderation_count||0)+" активных";
   }
 
@@ -320,8 +349,10 @@
       area.style.opacity = "0";
       document.body.appendChild(area);
       area.select();
-      document.execCommand("copy");
-      area.remove();
+      let copied = false;
+      try { copied = document.execCommand("copy"); } catch (_) {}
+      finally { area.remove(); }
+      if (!copied) { toast("Не удалось скопировать ссылку."); return; }
     }
     toast(confirmation);
   }
@@ -570,8 +601,11 @@
         settings = refreshed.settings;
       }
       render();
+      void window.SovietgramSidebar?.refresh?.();
+      return true;
     } catch (error) {
       toast(error.message);
+      return false;
     }
   }
 
@@ -630,7 +664,8 @@
         signal: searchController.signal,
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok || payload.ok === false) throw new Error(errorText(payload));
+      if (!response.ok || response.redirected || payload.ok !== true)
+      throw new Error(errorText(payload, response.redirected ? "Сессия истекла. Обновите страницу." : "Не удалось выполнить действие (" + response.status + ")."));
       candidateList.replaceChildren();
       const people = payload.results || [];
       if (!people.length) return candidateList.appendChild(empty("Никого не найдено."));
@@ -649,8 +684,7 @@
         button.appendChild(copy);
         button.addEventListener("click", async () => {
           button.disabled = true;
-          await memberAction({ action: "add", username: person.username });
-          closeMemberSearch();
+          if (await memberAction({ action: "add", username: person.username })) closeMemberSearch();
           button.disabled = false;
         });
         candidateList.appendChild(button);
@@ -676,7 +710,14 @@
   });
 
   backButtons.forEach((button) => button.addEventListener("click", () => setView("overview")));
-  openButton.addEventListener("click", openSettings);
+  // A single handler for both entry points, independent of chat.js.
+  document.addEventListener("click", event => {
+    const trigger = event.target.closest?.("[data-open-community-settings], #communityProfileSettingsOpen");
+    if (!trigger) return;
+    event.preventDefault();
+    void openSettings();
+  });
+  retryButton?.addEventListener("click", () => { void openSettings(); });
   closeButton?.addEventListener("click", closeSettings);
   profileBackdrop?.addEventListener("click", closeSettings);
 
@@ -793,7 +834,8 @@
   });
 
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape" || panel.hidden) return;
+    if (event.key !== "Escape" || panel.hidden || profileRoot.hidden || document.querySelector("dialog[open], #userProfileOverlay:not([hidden]), #imageViewer:not([hidden])")) return;
+    event.preventDefault();
     event.stopImmediatePropagation();
     if (activeView !== "overview") {
       setView("overview");
@@ -803,5 +845,6 @@
   }, true);
 
   window.openCommunitySettings = openSettings;
-  window.communitySettingsVisible = () => !panel.hidden;
+  window.closeCommunitySettings = closeSettings;
+  window.communitySettingsVisible = () => !profileRoot.hidden && !panel.hidden;
 })();

@@ -21,6 +21,10 @@
   </header>
 
   <div class="community-profile__view" id="communityProfileView">
+    <div class="community-load-state" id="communityProfileLoadState" hidden>
+      <p id="communityProfileLoadMessage" role="status"></p>
+      <button id="communityProfileRetry" type="button" hidden>Повторить загрузку</button>
+    </div>
     <section class="community-profile__hero">
       <button class="community-profile__avatar-button" id="communityProfileAvatar" type="button" aria-label="Открыть аватар">
         <img id="communityProfileAvatarImage" alt="" hidden>
@@ -150,6 +154,10 @@
       <span></span>
     </header>
 
+    <div class="community-load-state" id="communitySettingsLoadState" hidden>
+      <p id="communitySettingsLoadMessage" role="status"></p>
+      <button id="communitySettingsRetry" type="button" hidden>Повторить загрузку</button>
+    </div>
     <div class="community-settings__overview" id="communitySettingsOverview">
       <section class="community-settings__identity">
         <strong id="communitySettingsCommunityName">{{ selected_chat.display_name_ui }}</strong>

@@ -49,6 +49,10 @@
   const pickerClose = $("communityMemberPickerClose");
   const pickerSearch = $("communityMemberPickerSearch");
   const pickerResults = $("communityMemberPickerResults");
+  const profileLoadState = $("communityProfileLoadState");
+  const profileLoadMessage = $("communityProfileLoadMessage");
+  const profileRetry = $("communityProfileRetry");
+  const profileActions = [avatar, muteButton, archiveButton, leaveButton, searchButton, usernameRow, addMember, editButton];
   const tabs = Array.from(root.querySelectorAll("[data-community-profile-tab]"));
   const panels = Array.from(root.querySelectorAll("[data-community-profile-panel]"));
   const mediaTab = root.querySelector('[data-community-profile-tab="media"]');
@@ -82,8 +86,8 @@
       headers: Object.assign({ "X-Requested-With": "XMLHttpRequest" }, opts.headers || {}),
     }));
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok || payload.ok === false) {
-      const error = new Error(errorText(payload));
+    if (!response.ok || response.redirected || payload.ok !== true) {
+      const error = new Error(errorText(payload, response.redirected ? "Сессия истекла. Обновите страницу." : "Не удалось выполнить действие (" + response.status + ")."));
       error.payload = payload;
       throw error;
     }
@@ -122,6 +126,7 @@
       profileRefreshTimer = 0;
       closePicker();
       showEditor(false);
+      window.closeCommunitySettings?.();
     }
   }
   function setTab(tabName) {
@@ -295,7 +300,10 @@
     syncVisibility();
   }
   function renderProfile(profile) {
+    if (!profile || typeof profile !== "object" || !profile.id) throw new Error("Сервер не вернул информацию о сообществе.");
     opened = profile;
+    profileLoadState.hidden = true;
+    for (const control of profileActions) if (control) control.disabled = false;
     name.textContent = profile.title;
     status.textContent = profile.status;
     created.textContent = "Создано " + profile.created_at;
@@ -308,6 +316,8 @@
     usernameRow.hidden = !profile.username;
     username.textContent = profile.username ? "@" + profile.username : "";
     editButton.hidden = !profile.can_edit_info;
+    const manageButton = $("communityProfileSettingsOpen");
+    if (manageButton) manageButton.hidden = !profile.can_manage;
     muteLabel.textContent = profile.is_muted ? "Включить уведомления" : "Выключить уведомления";
     archiveLabel.textContent = profile.is_archived ? "Вернуть из архива" : "В архив";
     leaveButton.hidden = !profile.can_leave;
@@ -328,8 +338,10 @@
       return payload.profile;
     } catch (error) {
       if (!silent) {
-        toast(error.message || "Не удалось открыть информацию.");
-        setOpen(false);
+        profileLoadState.hidden = false;
+        profileLoadMessage.textContent = error.message || "Не удалось открыть информацию.";
+        profileRetry.hidden = false;
+        if (!opened) for (const control of profileActions) if (control) control.disabled = true;
       }
       return null;
     } finally {
@@ -337,8 +349,17 @@
     }
   }
   async function openCommunityProfile() {
+    const menu = $("chatMenu");
+    if (menu) menu.hidden = true;
+    $("chatMenuButton")?.setAttribute("aria-expanded", "false");
     setOpen(true);
     showEditor(false);
+    if (!opened) {
+      profileLoadState.hidden = false;
+      profileLoadMessage.textContent = "Загрузка информации…";
+      profileRetry.hidden = true;
+      for (const control of profileActions) if (control) control.disabled = true;
+    }
     const profile = await refreshProfile();
     if (profile && !profileRefreshTimer) {
       profileRefreshTimer = window.setInterval(() => {
@@ -350,8 +371,12 @@
     }
   }
   window.openCommunityProfile = openCommunityProfile;
-  document.querySelectorAll("[data-community-profile-open]").forEach((button) => {
-    button.addEventListener("click", (event) => { event.preventDefault(); openCommunityProfile(); });
+  profileRetry?.addEventListener("click", () => { void openCommunityProfile(); });
+  document.addEventListener("click", event => {
+    const button = event.target.closest?.("[data-community-profile-open]");
+    if (!button) return;
+    event.preventDefault();
+    void openCommunityProfile();
   });
 
   function showEditor(open) {
@@ -415,7 +440,11 @@
     try {
       const payload = await postForm(opened.urls.action, { action: action });
       if (payload.left && payload.redirect_url) return window.location.assign(payload.redirect_url);
-      if (payload.profile) renderProfile(payload.profile);
+      if (payload.profile) {
+        renderProfile(payload.profile);
+        document.dispatchEvent(new CustomEvent("sovietgram:chat-mute-state", {detail:{isMuted: Boolean(payload.profile.is_muted)}}));
+        void window.SovietgramSidebar?.refresh?.();
+      }
     } catch (error) { toast(error.message); }
   }
   muteButton.addEventListener("click", () => runAction("mute"));
@@ -440,8 +469,10 @@
       input.style.opacity = "0";
       document.body.appendChild(input);
       input.select();
-      document.execCommand("copy");
-      input.remove();
+      let copied = false;
+      try { copied = document.execCommand("copy"); } catch (_) {}
+      finally { input.remove(); }
+      if (!copied) { toast("Не удалось скопировать адрес."); return; }
     }
     toast("Адрес скопирован.");
   });
@@ -510,7 +541,8 @@
   closeButton.addEventListener("click", () => setOpen(false));
   backdrop.addEventListener("click", () => setOpen(false));
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return;
+    if (event.key !== "Escape" || root.hidden || window.communitySettingsVisible?.()) return;
+    if (document.querySelector("dialog[open], #imageViewer:not([hidden]), #userProfileOverlay:not([hidden])")) return;
     if (!picker.hidden) return closePicker();
     if (!editor.hidden) return showEditor(false);
     if (!root.hidden) setOpen(false);

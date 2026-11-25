@@ -236,6 +236,9 @@
     const profileBackdrop = document.getElementById("profileMenuBackdrop");
     profileMenu?.classList.remove("is-open");
     profileBackdrop?.classList.remove("is-open");
+    profileMenu?.setAttribute("aria-hidden", "true");
+    profileBackdrop?.setAttribute("aria-hidden", "true");
+    document.getElementById("profileMenuButton")?.setAttribute("aria-expanded", "false");
 
     root.hidden = false;
     document.body.classList.add("settings-open");

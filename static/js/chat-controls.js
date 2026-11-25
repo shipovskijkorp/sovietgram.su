@@ -220,8 +220,8 @@
       body
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok || payload.ok === false || (values?.client_message_id && payload.ok !== true)) {
-      const error = new Error(payload.error || "Не удалось выполнить действие.");
+    if (!response.ok || response.redirected || payload.ok !== true) {
+      const error = new Error(payload.error || (response.redirected ? "Сессия истекла. Обновите страницу." : "Не удалось выполнить действие (" + response.status + ")."));
       error.status = response.status;
       throw error;
     }
@@ -260,6 +260,7 @@
       notify(payload.message || (
         payload.is_muted ? "Уведомления отключены." : "Уведомления включены."
       ));
+      void window.SovietgramSidebar?.refresh?.();
     } catch (error) {
       notify(error.message);
     } finally {
@@ -499,11 +500,12 @@
   }
 
   function updateSelectionUi() {
-    // Polling can remove messages selected in another tab/device.
+    // Entering via the menu starts with a valid empty selection.
+    const hadSelection = selectedArticles.size > 0;
     for (const article of selectedArticles) {
       if (!article.isConnected) selectedArticles.delete(article);
     }
-    if (!selectedArticles.size) selectionMode = false;
+    if (hadSelection && !selectedArticles.size) selectionMode = false;
     const count = selectedArticles.size;
     if (selectionCount) selectionCount.textContent = String(count);
     if (selectionBar) selectionBar.hidden = !selectionMode;
@@ -765,6 +767,7 @@
       } else {
         paragraph?.remove();
       }
+      window.updateSovietgramChatMessage?.(message);
       closeEditModal();
     } catch (error) {
       notify(error.message);
@@ -1099,6 +1102,8 @@
   }, true);
 
   document.addEventListener("keydown", (event) => {
+    // Higher-level overlays own keyboard shortcuts while open.
+    if (document.querySelector("dialog[open], #communityProfile:not([hidden]), #telegramSettings:not([hidden]), #userProfileOverlay:not([hidden]), #imageViewer:not([hidden])")) return;
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
       event.preventDefault();
       event.stopImmediatePropagation();
