@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import archive_controls, community_profiles, views, scheduled, notifications, folders, stickers, link_previews
+from . import archive_controls, community_profiles, views, scheduled, notifications, folders, stickers, link_previews, moderation
 
 app_name = "messenger"
 
@@ -31,6 +31,7 @@ urlpatterns = [
     path("chat/<int:chat_id>/profile/settings/", community_profiles.community_settings, name="community_settings"),
     path("chat/<int:chat_id>/profile/invites/", community_profiles.community_invite_action, name="community_invite_action"),
     path("chat/<int:chat_id>/profile/join-requests/", community_profiles.community_join_request_action, name="community_join_request_action"),
+    path("chat/<int:chat_id>/profile/moderation/", moderation.community_moderation, name="community_moderation"),
     path("chat/<int:chat_id>/profile/update/", community_profiles.community_profile_update, name="community_profile_update"),
     path("chat/<int:chat_id>/profile/members/", community_profiles.community_member_action, name="community_member_action"),
     path("chat/<int:chat_id>/profile/member-candidates/", community_profiles.community_member_candidates, name="community_member_candidates"),

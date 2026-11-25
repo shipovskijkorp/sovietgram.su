@@ -21,11 +21,16 @@ from .models import (
     ChatAdminLog,
     ChatInviteLink,
     ChatJoinRequest,
+    ChatMemberModeration,
     ChatParticipant,
     MessageAttachment,
 )
 from .services import attachment_url, invited_membership_defaults, set_membership_archived
 from .ratelimit import rate_limit
+from .community_permissions import (
+    ADMIN_RIGHTS, MEMBER_DENIALS, active_sanctions, admin_rights,
+    can_add_members, can_moderate, has_admin_right, is_banned,
+)
 
 User = get_user_model()
 
@@ -172,9 +177,7 @@ def _can_manage(membership):
 
 
 def _can_add_members(chat, membership):
-    return _can_manage(membership) or (
-        chat.type == Chat.Type.GROUP and chat.members_can_add_members
-    )
+    return can_add_members(chat, membership)
 
 
 def _clean_public_username(chat, raw):
@@ -209,15 +212,7 @@ def _log(chat, actor, action, description, target_user=None):
 def _member_payload(actor, membership):
     user = membership.user
     actor_is_owner = actor.role == ChatParticipant.Role.OWNER
-    actor_is_admin = actor.role == ChatParticipant.Role.ADMIN
-    removable = (
-        user.pk != actor.user_id
-        and membership.role != ChatParticipant.Role.OWNER
-        and (
-            actor_is_owner
-            or (actor_is_admin and membership.role == ChatParticipant.Role.MEMBER)
-        )
-    )
+    removable = can_moderate(actor, membership)
     changeable = (
         actor_is_owner
         and user.pk != actor.user_id
@@ -245,6 +240,10 @@ def _member_payload(actor, membership):
         "profile_url": reverse("accounts:public_profile", args=[user.username]),
         "is_self": user.pk == actor.user_id,
         "can_remove": removable,
+        "can_ban": removable,
+        "can_restrict": removable and membership.role == ChatParticipant.Role.MEMBER and actor.chat.type == Chat.Type.GROUP,
+        "can_edit_admin_rights": actor_is_owner and membership.role == ChatParticipant.Role.ADMIN,
+        "admin_rights": admin_rights(membership) if actor_is_owner or actor.user_id == user.pk else [],
         "can_change_role": changeable,
         "can_transfer_owner": transferable,
     }
@@ -321,6 +320,7 @@ def _profile_payload(request, chat):
         "viewer_role": actor.role,
         "viewer_role_label": actor.get_role_display(),
         "can_manage": can_manage,
+        "can_edit_info": has_admin_right(actor, "change_info"),
         "can_add_members": _can_add_members(chat, actor),
         "can_leave": actor.role != ChatParticipant.Role.OWNER,
         "is_muted": actor.notifications_muted,
@@ -339,6 +339,7 @@ def _profile_payload(request, chat):
             "settings": reverse("messenger:community_settings", args=[chat.pk]),
             "invite_action": reverse("messenger:community_invite_action", args=[chat.pk]),
             "join_request_action": reverse("messenger:community_join_request_action", args=[chat.pk]),
+            "moderation": reverse("messenger:community_moderation", args=[chat.pk]),
         },
     }
 
@@ -379,7 +380,7 @@ def _settings_payload(request, chat):
         _invite_payload(item)
         for item in ChatInviteLink.objects.filter(chat=chat)
         .select_related("creator")[:50]
-    ]
+    ] if has_admin_right(actor, "invite_users") else []
     logs = [
         {
             "id": item.pk,
@@ -394,6 +395,8 @@ def _settings_payload(request, chat):
     ]
     pending = ChatJoinRequest.objects.filter(chat=chat, status=ChatJoinRequest.Status.PENDING).select_related("user", "invite")
     pending = pending.exclude(user_id__in=ChatParticipant.objects.filter(chat=chat).values("user_id"))
+    if not has_admin_right(actor, "invite_users"):
+        pending = pending.none()
     pending_count = pending.count()
     join_requests = [
         {"id": row.pk, "name": row.user.display_name, "username": row.user.username,
@@ -402,6 +405,18 @@ def _settings_payload(request, chat):
          "revision": row.created_at.isoformat()}
         for row in pending[:100]
     ]
+    moderation_rows = []
+    moderation_count = 0
+    if has_admin_right(actor, "moderate_members"):
+        sanctions = list(active_sanctions(chat).select_related("user"))
+        moderation_count = len(sanctions)
+        moderation_rows = [
+            {"id": row.pk, "user_id": row.user_id, "name": row.user.display_name,
+             "username": row.user.username, "banned": row.banned, "permissions": row.denied_permissions,
+             "expires_at": row.expires_at.isoformat() if row.expires_at else "",
+             "reason": row.reason}
+            for row in sanctions
+        ]
     restrictions = [
         not chat.members_can_send_messages,
         not chat.members_can_send_media,
@@ -416,6 +431,12 @@ def _settings_payload(request, chat):
         "username": chat.username or "",
         "is_public": bool(chat.username),
         "viewer_role": actor.role,
+        "admin_rights": admin_rights(actor),
+        "admin_right_labels": ADMIN_RIGHTS,
+        "member_denial_labels": MEMBER_DENIALS,
+        "can_add_members": _can_add_members(chat, actor),
+        "moderation": moderation_rows,
+        "moderation_count": moderation_count,
         "can_delete": actor.role == ChatParticipant.Role.OWNER,
         "history_visible_to_new_members": chat.history_visible_to_new_members,
         "permissions": {
@@ -442,6 +463,7 @@ def _settings_payload(request, chat):
             "settings": reverse("messenger:community_settings", args=[chat.pk]),
             "invite_action": reverse("messenger:community_invite_action", args=[chat.pk]),
             "join_request_action": reverse("messenger:community_join_request_action", args=[chat.pk]),
+            "moderation": reverse("messenger:community_moderation", args=[chat.pk]),
             "member_action": reverse("messenger:community_member_action", args=[chat.pk]),
             "member_candidates": reverse("messenger:community_member_candidates", args=[chat.pk]),
             "profile": reverse("messenger:community_profile", args=[chat.pk]),
@@ -466,11 +488,13 @@ def community_profile(request, chat_id):
 
 @login_required
 @require_POST
+@transaction.atomic
 def community_profile_update(request, chat_id):
     chat = _collective_chat_for_user(request.user, chat_id)
-    membership = _membership(chat, request.user)
-    if not _can_manage(membership):
-        return _json_error("Изменять информацию могут только администраторы.", status=403)
+    chat = get_object_or_404(Chat.objects.select_for_update(), pk=chat.pk)
+    membership = get_object_or_404(ChatParticipant, chat=chat, user=request.user, is_hidden=False)
+    if not has_admin_right(membership, "change_info"):
+        return _json_error("Недостаточно прав для изменения информации.", status=403)
 
     form = CommunityProfileForm(request.POST, request.FILES, chat=chat)
     if not form.is_valid():
@@ -520,9 +544,12 @@ def community_profile_update(request, chat_id):
 
 @login_required
 @require_http_methods(["GET", "POST"])
+@transaction.atomic
 def community_settings(request, chat_id):
     chat = _collective_chat_for_user(request.user, chat_id)
-    membership = _membership(chat, request.user)
+    if request.method == "POST":
+        chat = get_object_or_404(Chat.objects.select_for_update(), pk=chat.pk)
+    membership = get_object_or_404(ChatParticipant, chat=chat, user=request.user, is_hidden=False)
     if not _can_manage(membership):
         return _json_error("Управление доступно только администраторам.", status=403)
 
@@ -530,6 +557,9 @@ def community_settings(request, chat_id):
         return JsonResponse({"ok": True, "settings": _settings_payload(request, chat)})
 
     section = request.POST.get("section", "").strip()
+    right = {"type": "change_info", "permissions": "manage_permissions", "signatures": "change_info"}.get(section)
+    if right and not has_admin_right(membership, right):
+        return _json_error("Недостаточно прав для изменения этих настроек.", status=403)
     if section == "type":
         visibility = request.POST.get("visibility", "private")
         raw_username = request.POST.get("username", "")
@@ -610,8 +640,8 @@ def community_invite_action(request, chat_id):
     chat = _collective_chat_for_user(request.user, chat_id)
     chat = Chat.objects.select_for_update().get(pk=chat.pk)
     membership = get_object_or_404(ChatParticipant.objects.select_for_update(), chat=chat, user=request.user)
-    if not _can_manage(membership):
-        return _json_error("Управлять ссылками могут только администраторы.", status=403)
+    if not has_admin_right(membership, "invite_users"):
+        return _json_error("Недостаточно прав для управления приглашениями.", status=403)
 
     action = request.POST.get("action", "").strip()
     if action == "create":
@@ -663,6 +693,9 @@ def join_invite(request, token):
         messages.error(request, "Ссылка-приглашение недействительна или устарела.")
         return redirect("messenger:home")
     chat = invite.chat
+    if is_banned(chat, request.user.pk):
+        messages.error(request, "Вы заблокированы в этом сообществе.")
+        return redirect("messenger:home")
     if request.method == "GET":
         if ChatParticipant.objects.filter(chat=chat, user=request.user, is_hidden=False).exists():
             return redirect("messenger:chat", chat_id=chat.pk)
@@ -682,6 +715,9 @@ def join_invite(request, token):
         invite = ChatInviteLink.objects.select_for_update().filter(pk=invite.pk, chat=chat).first()
         if invite is None or not invite.is_active:
             messages.error(request, "Ссылка-приглашение недействительна или устарела.")
+            return redirect("messenger:home")
+        if is_banned(chat, request.user.pk):
+            messages.error(request, "Вы заблокированы в этом сообществе.")
             return redirect("messenger:home")
         membership = ChatParticipant.objects.select_for_update().filter(chat=chat, user=request.user).first()
         if membership is None and invite.requires_approval:
@@ -737,8 +773,8 @@ def community_join_request_action(request, chat_id):
     with transaction.atomic():
         chat = Chat.objects.select_for_update().get(pk=chat.pk)
         actor = get_object_or_404(ChatParticipant.objects.select_for_update(), chat=chat, user=request.user, is_hidden=False)
-        if not _can_manage(actor):
-            return _json_error("Рассматривать заявки могут только администраторы.", status=403)
+        if not has_admin_right(actor, "invite_users"):
+            return _json_error("Недостаточно прав для рассмотрения заявок.", status=403)
         row = get_object_or_404(ChatJoinRequest.objects.select_for_update(), pk=request_id, chat=chat)
         if request.POST.get("revision") != row.created_at.isoformat():
             return _json_error("Заявка изменилась. Обновите список.", status=409)
@@ -748,6 +784,8 @@ def community_join_request_action(request, chat_id):
         if row.status != ChatJoinRequest.Status.PENDING:
             return _json_error("Заявка уже рассмотрена или отменена.", status=409)
         if action == "approve":
+            if is_banned(chat, row.user_id):
+                return _json_error("Пользователь заблокирован в сообществе.", status=403)
             invite = ChatInviteLink.objects.select_for_update().filter(pk=row.invite_id, chat=chat).first()
             if invite is None or not invite.is_active:
                 return _json_error("Ссылка больше не действует. Отклоните заявку или предложите новую ссылку.", status=409)
@@ -820,7 +858,8 @@ def community_member_candidates(request, chat_id):
 
     query = request.GET.get("q", "").strip().lstrip("@")[:150]
     existing_ids = ChatParticipant.objects.filter(chat=chat).values_list("user_id", flat=True)
-    users = User.objects.filter(is_active=True).exclude(pk__in=existing_ids)
+    banned_ids = active_sanctions(chat).filter(banned=True).values_list("user_id", flat=True)
+    users = User.objects.filter(is_active=True).exclude(pk__in=existing_ids).exclude(pk__in=banned_ids)
     if query:
         users = users.filter(
             Q(username__icontains=query)
@@ -858,14 +897,19 @@ def community_member_candidates(request, chat_id):
 
 @login_required
 @require_POST
+@transaction.atomic
 def community_member_action(request, chat_id):
     chat = _collective_chat_for_user(request.user, chat_id)
-    actor = _membership(chat, request.user)
+    chat = Chat.objects.select_for_update().get(pk=chat.pk)
+    actor = get_object_or_404(ChatParticipant.objects.select_for_update(), chat=chat, user=request.user, is_hidden=False)
     action = request.POST.get("action", "").strip()
 
     if action == "add":
         if not _can_add_members(chat, actor):
             return _json_error("Добавлять участников здесь запрещено.", status=403)
+    elif action == "remove":
+        if not has_admin_right(actor, "moderate_members"):
+            return _json_error("Недостаточно прав для удаления участников.", status=403)
     elif not _can_manage(actor):
         return _json_error("Управлять участниками могут только администраторы.", status=403)
 
@@ -881,6 +925,8 @@ def community_member_action(request, chat_id):
     if action == "add":
         if target is not None:
             return _json_error("Пользователь уже состоит здесь.")
+        if is_banned(chat, target_user.pk):
+            return _json_error("Пользователь заблокирован в сообществе.", status=403)
         if is_blocked_between(request.user, target_user):
             return _json_error("Пользователь недоступен из-за блокировки.", status=403)
         if not privacy_allows(target_user, request.user, "invites"):
@@ -945,9 +991,12 @@ def community_member_action(request, chat_id):
                 return _json_error("Этот пользователь уже владелец.", status=409)
 
             locked_target.role = ChatParticipant.Role.OWNER
-            locked_target.save(update_fields=("role",))
+            locked_target.admin_permissions = None
+            locked_target.save(update_fields=("role", "admin_permissions"))
             locked_actor.role = ChatParticipant.Role.ADMIN
-            locked_actor.save(update_fields=("role",))
+            locked_actor.admin_permissions = None
+            locked_actor.save(update_fields=("role", "admin_permissions"))
+            ChatMemberModeration.objects.filter(chat=chat, user=target_user).delete()
             _log(
                 chat,
                 request.user,
@@ -967,8 +1016,12 @@ def community_member_action(request, chat_id):
         new_role = request.POST.get("role", "")
         if new_role not in {ChatParticipant.Role.ADMIN, ChatParticipant.Role.MEMBER}:
             return _json_error("Неизвестная роль.")
-        target.role = new_role
-        target.save(update_fields=("role",))
+        if target.role != new_role:
+            target.role = new_role
+            target.admin_permissions = None
+            target.save(update_fields=("role", "admin_permissions"))
+        if new_role == ChatParticipant.Role.ADMIN:
+            ChatMemberModeration.objects.filter(chat=chat, user=target_user).delete()
         _log(
             chat,
             request.user,

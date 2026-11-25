@@ -288,7 +288,7 @@
   }
 
   function isModerator() {
-    return chatRole === "owner" || chatRole === "admin";
+    return conversation.dataset.canModerateMessages === "true";
   }
 
   function canDeleteArticle(article) {

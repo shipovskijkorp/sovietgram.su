@@ -9,6 +9,7 @@ from apps.accounts.privacy import privacy_allows
 
 from .markdown import render_message_markdown
 from .folder_rules import keep_in_archive_for_folder
+from .community_permissions import has_admin_right
 from .models import (
     Chat,
     ChatParticipant,
@@ -375,18 +376,8 @@ def serialize_special_content(message, current_user):
     if special_type == Message.SpecialType.ARTICLE:
         can_edit = message.sender_id == current_user.pk
         if not can_edit and message.chat.type != Chat.Type.PRIVATE:
-            role = (
-                ChatParticipant.objects.filter(
-                    chat=message.chat,
-                    user=current_user,
-                )
-                .values_list("role", flat=True)
-                .first()
-            )
-            can_edit = role in {
-                ChatParticipant.Role.OWNER,
-                ChatParticipant.Role.ADMIN,
-            }
+            member = ChatParticipant.objects.filter(chat=message.chat, user=current_user).first()
+            can_edit = has_admin_right(member, "edit_messages")
         return {
             "type": "article",
             "title": str(data.get("title", ""))[:200],

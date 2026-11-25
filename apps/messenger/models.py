@@ -101,6 +101,8 @@ class ChatParticipant(models.Model):
         default=Role.MEMBER,
         db_index=True,
     )
+    # None preserves full privileges for existing administrators; [] is explicitly no privileges.
+    admin_permissions = models.JSONField(default=None, null=True, blank=True)
     can_see_pre_join_history = models.BooleanField(default=True)
     joined_at = models.DateTimeField(auto_now_add=True)
     last_read_message = models.ForeignKey(
@@ -538,3 +540,21 @@ class ChatJoinRequest(models.Model):
         ordering = ("created_at", "pk")
         constraints = [models.UniqueConstraint(fields=("chat", "user"), name="unique_chat_join_request")]
         indexes = [models.Index(fields=("chat", "status", "created_at"), name="sg_join_chat_status_idx")]
+
+
+class ChatMemberModeration(models.Model):
+    """Community-local sanctions survive membership removal and rejoining."""
+    chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="member_moderation")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="community_moderation")
+    banned = models.BooleanField(default=False)
+    denied_permissions = models.JSONField(default=list, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    reason = models.CharField(max_length=200, blank=True, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+                              related_name="community_moderation_actions")
+
+    class Meta:
+        ordering = ("-updated_at", "-pk")
+        constraints = [models.UniqueConstraint(fields=("chat", "user"), name="unique_chat_member_moderation")]
+        indexes = [models.Index(fields=("chat", "banned", "expires_at"), name="sg_chat_moderation_idx")]

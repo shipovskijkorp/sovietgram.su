@@ -103,6 +103,7 @@
           data-special-send-url="{% url 'messenger:send_special_message' selected_chat.pk %}"
           data-chat-type="{{ selected_chat.type }}"
           data-chat-role="{{ active_membership.role }}"
+          data-can-moderate-messages="{{ can_moderate_messages|yesno:'true,false' }}"
           data-chat-saved="{{ selected_chat.is_saved_ui|yesno:'true,false' }}"
           data-chat-muted="{{ active_membership.notifications_muted|yesno:'true,false' }}"
           data-chat-protected="{{ selected_chat.protect_content|yesno:'true,false' }}"
@@ -796,7 +797,7 @@
   <button type="button" data-message-action="edit"><span class="tg-native-icon tg-native-icon--edit" aria-hidden="true"></span>Изменить</button>
   <button type="button" data-message-action="forward"><span class="tg-native-icon tg-native-icon--forward" aria-hidden="true"></span>Переслать</button>
   <button type="button" data-message-action="select"><span class="message-context-menu__select-icon" aria-hidden="true">✓</span>Выбрать</button>
-  {% if selected_chat.type == 'private' or active_membership.role != 'member' or selected_chat.type == 'group' and selected_chat.members_can_pin_messages %}
+  {% if can_pin_messages %}
   <button type="button" data-message-action="pin"><span class="tg-native-icon tg-native-icon--pin" aria-hidden="true"></span><b id="messagePinLabel">Закрепить</b></button>
   {% endif %}
   <button class="message-context-menu__danger" type="button" data-message-action="delete"><span class="tg-native-icon tg-native-icon--clear" aria-hidden="true"></span>Удалить сообщение</button>

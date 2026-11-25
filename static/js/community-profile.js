@@ -307,7 +307,7 @@
     description.textContent = profile.description || "";
     usernameRow.hidden = !profile.username;
     username.textContent = profile.username ? "@" + profile.username : "";
-    editButton.hidden = !profile.can_manage;
+    editButton.hidden = !profile.can_edit_info;
     muteLabel.textContent = profile.is_muted ? "Включить уведомления" : "Выключить уведомления";
     archiveLabel.textContent = profile.is_archived ? "Вернуть из архива" : "В архив";
     leaveButton.hidden = !profile.can_leave;
@@ -357,7 +357,7 @@
   function showEditor(open) {
     view.hidden = open;
     editor.hidden = !open;
-    editButton.hidden = open || !(opened && opened.can_manage);
+    editButton.hidden = open || !(opened && opened.can_edit_info);
     root.classList.toggle("is-editing", open);
     if (open && opened) fillEditor(opened);
   }

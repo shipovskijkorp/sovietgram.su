@@ -1060,3 +1060,28 @@ body[data-theme="dark"] .community-settings-member-search {
   .community-settings { position: fixed; inset: 0; }
   .community-settings__overview { padding-bottom: max(18px, env(safe-area-inset-bottom)); }
 }
+
+/* Community-local administrator permissions and member sanctions. */
+.community-settings-row[hidden],.community-moderation-dialog [hidden] {display:none!important;}
+.community-settings-person__actions {flex-wrap:wrap;justify-content:flex-end;}
+.community-settings-person__actions .is-danger {color:var(--red-soft);}
+.moderation-filters {display:flex;flex-wrap:wrap;gap:6px;padding:8px 12px;}
+.moderation-filters input,.moderation-filters select,.community-moderation-dialog select,.community-moderation-dialog input:not([type=checkbox]) {font:inherit;font-size:12px;box-sizing:border-box;min-width:0;padding:7px;border:1px solid var(--line);border-radius:7px;background:transparent;color:inherit;}
+.moderation-filters input {flex:1;}
+.community-moderation-row {display:grid;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line);overflow-wrap:anywhere;}
+.community-moderation-row small {font-size:12px;opacity:.8;}
+.community-moderation-row .community-settings-invite__actions {display:flex;flex-wrap:wrap;gap:6px;}
+.community-moderation-dialog {width:min(440px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto;box-sizing:border-box;padding:16px;background:var(--panel,#fffaf1);color:var(--ink);border:1px solid var(--line);border-radius:14px;}
+.community-moderation-dialog::backdrop {background:#0008;}
+.community-moderation-dialog form {display:grid;gap:10px;}
+.community-moderation-dialog header,.community-moderation-dialog footer {display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.community-moderation-dialog h2 {font-size:17px;margin:0;}
+.community-moderation-dialog p {font-size:13px;margin:0;line-height:1.5;}
+.community-moderation-dialog label {display:grid;gap:5px;font-size:12px;}
+#communityModerationRights {display:grid;gap:8px;}
+.community-moderation-dialog .moderation-right {display:flex;align-items:center;gap:8px;}
+.moderation-right input {accent-color:var(--red);width:16px;height:16px;flex:0 0 auto;}
+.community-moderation-dialog button {font:inherit;font-size:12px;padding:7px 10px;cursor:pointer;border:1px solid var(--line);border-radius:7px;background:transparent;color:inherit;}
+.community-moderation-dialog button[type=submit] {background:var(--red,#a12732);color:white;border-color:transparent;}
+#communityModerationError {color:var(--red-soft);}
+body[data-theme="dark"] .community-moderation-dialog {background:#251f1b;color:#f2e8dc;color-scheme:dark;}

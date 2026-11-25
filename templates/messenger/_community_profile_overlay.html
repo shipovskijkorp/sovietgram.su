@@ -220,6 +220,10 @@
           </span>
           <b>›</b>
         </button>
+        <button class="community-settings-row" type="button" data-community-settings-open="moderation">
+          <span class="community-settings-row__icon"><span class="tg-native-icon tg-native-icon--lock" aria-hidden="true"></span></span>
+          <span class="community-settings-row__copy"><strong>Заблокированные и ограниченные</strong><small id="communitySettingsModerationSummary"></small></span><b>›</b>
+        </button>
         <button class="community-settings-row" type="button" data-community-settings-open="log">
           <span class="community-settings-row__icon"><span class="tg-native-icon tg-native-icon--info" aria-hidden="true"></span></span>
           <span class="community-settings-row__copy">
@@ -346,6 +350,30 @@
       <div class="community-settings-list" id="communitySettingsMemberList"></div>
     </section>
 
+    <section class="community-settings__subview" data-community-settings-view="moderation" hidden>
+      <header class="community-settings__subheader">
+        <button type="button" data-community-settings-back aria-label="Назад"><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span></button>
+        <strong>Блокировки и ограничения</strong><button type="button" class="community-settings__header-action" id="communityModerationRefresh">Обновить</button>
+      </header>
+      <div class="moderation-filters">
+        <input type="search" id="communityModerationSearch" placeholder="Поиск участника" aria-label="Поиск участника">
+        <select id="communityModerationFilter" aria-label="Тип ограничения"><option value="all">Все</option><option value="ban">Заблокированные</option><option value="restrict">Ограниченные</option></select>
+      </div>
+      <div id="communityModerationList" class="community-settings-list"></div>
+    </section>
+    <dialog id="communityModerationDialog" class="community-moderation-dialog" aria-labelledby="communityModerationTitle">
+      <form id="communityModerationForm">
+        <header><h2 id="communityModerationTitle">Управление участником</h2><button id="communityModerationClose" type="button" aria-label="Закрыть">×</button></header>
+        <p id="communityModerationTarget"></p>
+        <div id="communityModerationRights"></div>
+        <label id="communityModerationDurationRow">Срок
+          <select id="communityModerationDuration"><option value="1h">1 час</option><option value="8h">8 часов</option><option value="1d">1 день</option><option value="7d">7 дней</option><option value="30d">30 дней</option><option value="forever">Навсегда</option></select>
+        </label>
+        <label id="communityModerationReasonRow">Причина (необязательно)<input id="communityModerationReason" maxlength="200" autocomplete="off"></label>
+        <p id="communityModerationError" role="alert" hidden></p>
+        <footer><button type="button" id="communityModerationCancel">Отмена</button><button type="submit" id="communityModerationSubmit">Сохранить</button></footer>
+      </form>
+    </dialog>
     <section class="community-settings__subview" data-community-settings-view="log" hidden>
       <header class="community-settings__subheader">
         <button type="button" data-community-settings-back><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span></button>

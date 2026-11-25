@@ -161,7 +161,16 @@
     if(joinSummary)joinSummary.textContent = String(settings.pending_join_count || 0) + " ожидают";
     adminSummary.textContent = String(settings.admin_count || 0);
     memberSummary.textContent = String(settings.member_count || 0);
-    if (signatures) signatures.checked = Boolean(settings.signatures_enabled);
+    const rights=new Set(settings.admin_rights||[]);
+    const required={type:"change_info",permissions:"manage_permissions",invites:"invite_users","join-requests":"invite_users",moderation:"moderate_members"};
+    for(const [view,right] of Object.entries(required)){
+      const control=panel.querySelector('[data-community-settings-open="'+view+'"]');
+      if(control)control.hidden=!rights.has(right);
+      if(activeView===view&&!rights.has(right))setView("overview");
+    }
+    if(signatures){signatures.checked=Boolean(settings.signatures_enabled);signatures.closest("label").hidden=!rights.has("change_info");}
+    if(addMember)addMember.hidden=!settings.can_add_members;
+    $("communitySettingsModerationSummary").textContent=String(settings.moderation_count||0)+" активных";
   }
 
   function renderTypeForm() {
@@ -242,6 +251,19 @@
       roleButton.title = member.role === "admin" ? "Снять администратора" : "Назначить администратором";
       roleButton.addEventListener("click", () => changeMemberRole(member));
       actions.appendChild(roleButton);
+    }
+
+    if(member.can_edit_admin_rights){
+      const rights=document.createElement("button");rights.type="button";rights.className="community-settings-person__role";
+      rights.textContent="Права";rights.addEventListener("click",()=>openModerationEditor(member,"admin_rights"));actions.appendChild(rights);
+    }
+    if(mode==="members"&&member.can_restrict){
+      const restrict=document.createElement("button");restrict.type="button";restrict.className="community-settings-person__role";
+      restrict.textContent="Ограничить";restrict.addEventListener("click",()=>openModerationEditor(member,"restrict"));actions.appendChild(restrict);
+    }
+    if(mode==="members"&&member.can_ban){
+      const ban=document.createElement("button");ban.type="button";ban.className="community-settings-person__role is-danger";
+      ban.textContent="Бан";ban.addEventListener("click",()=>openModerationEditor(member,"ban"));actions.appendChild(ban);
     }
 
     if (member.can_transfer_owner) {
@@ -403,6 +425,99 @@
   }
   $("communitySettingsJoinRefresh")?.addEventListener("click",refreshJoinRequests);
 
+  const modDialog=$("communityModerationDialog");
+  const modForm=$("communityModerationForm");
+  let moderationTarget=null, moderationAction="", moderationBusy=false;
+  function sanctionLabel(row){
+    if(row.banned)return "Заблокирован";
+    const labels=settings?.member_denial_labels||{};
+    return (row.permissions||[]).map(key=>labels[key]||key).join(" · ");
+  }
+  function renderModeration(){
+    const list=$("communityModerationList");if(!list)return;
+    const query=($("communityModerationSearch").value||"").trim().toLowerCase().replace(/^@/,"");
+    const filter=$("communityModerationFilter").value;
+    const rows=(settings?.moderation||[]).filter(row=>
+      (filter==="all"||(filter==="ban")===row.banned)&&
+      (!query||(row.name+" "+row.username).toLowerCase().includes(query)));
+    list.replaceChildren();
+    if(!rows.length){list.appendChild(empty("Активных ограничений не найдено."));return;}
+    for(const row of rows){
+      const item=document.createElement("article");item.className="community-moderation-row";
+      const name=document.createElement("strong");name.textContent=row.name+" · @"+row.username;
+      const detail=document.createElement("small");
+      detail.textContent=sanctionLabel(row)+" · "+(row.expires_at?"До "+new Date(row.expires_at).toLocaleString():"Навсегда");
+      const reason=document.createElement("small");reason.textContent=row.reason||"";reason.hidden=!row.reason;
+      const actions=document.createElement("div");actions.className="community-settings-invite__actions";
+      const lift=document.createElement("button");lift.type="button";lift.textContent=row.banned?"Разблокировать":"Снять ограничения";lift.disabled=moderationBusy;
+      lift.addEventListener("click",()=>{if(window.confirm("Снять ограничения с @"+row.username+"?"))void applyModeration("lift",row.user_id);});
+      actions.appendChild(lift);
+      const member=(settings?.members||[]).find(person=>person.user_id===row.user_id);
+      if(row.banned||member?.can_restrict){
+        const edit=document.createElement("button");edit.type="button";edit.textContent="Изменить";edit.disabled=moderationBusy;
+        edit.addEventListener("click",()=>openModerationEditor(member||row,row.banned?"ban":"restrict",row));actions.appendChild(edit);
+      }
+      item.append(name,detail,reason,actions);list.appendChild(item);
+    }
+    // Every active sanction is available in this list, including former members.
+  }
+  function openModerationEditor(member,action,existing=null){
+    if(moderationBusy)return;
+    moderationTarget=member;moderationAction=action;
+    $("communityModerationTitle").textContent=action==="admin_rights"?"Права администратора":action==="ban"?"Заблокировать участника":"Ограничить участника";
+    $("communityModerationTarget").textContent=(member.display_name||member.name)+" · @"+member.username;
+    $("communityModerationError").hidden=true;
+    const rights=$("communityModerationRights");rights.replaceChildren();
+    const labels=action==="admin_rights"?settings.admin_right_labels:action==="restrict"?settings.member_denial_labels:{};
+    const current=action==="admin_rights"?member.admin_rights:existing?.permissions||[];
+    for(const [key,label] of Object.entries(labels||{})){
+      const field=document.createElement("label");field.className="moderation-right";
+      const input=document.createElement("input");input.type="checkbox";input.value=key;input.checked=(current||[]).includes(key);
+      const copy=document.createElement("span");copy.textContent=label;field.append(input,copy);rights.appendChild(field);
+    }
+    $("communityModerationDurationRow").hidden=action==="admin_rights";
+    $("communityModerationReasonRow").hidden=action==="admin_rights";
+    $("communityModerationDuration").value=action==="ban"?"forever":"1d";
+    $("communityModerationReason").value=existing?.reason||"";
+    if(action==="ban"){
+      const info=document.createElement("p");info.textContent="Участник потеряет доступ к сообществу. До окончания бана он не сможет вступить снова.";rights.appendChild(info);
+    }
+    if(!modDialog.open)modDialog.showModal();
+  }
+  async function applyModeration(action,userId,fields={}){
+    if(moderationBusy||!settings?.urls?.moderation)return;
+    moderationBusy=true;
+    $("communityModerationSubmit").disabled=true;renderModeration();
+    try{
+      const result=await post(settings.urls.moderation,{
+        account_id:document.getElementById("messageStage")?.dataset.accountId,
+        action,user_id:userId,...fields
+      });
+      settings=result.settings;render();if(modDialog.open)modDialog.close();
+      toast("Изменения сохранены.");void window.SovietgramSidebar?.refresh();
+    }catch(error){
+      if(modDialog.open){const node=$("communityModerationError");node.textContent=error.message;node.hidden=false;}
+      else toast(error.message);
+    }finally{moderationBusy=false;$("communityModerationSubmit").disabled=false;renderModeration();}
+  }
+  modForm?.addEventListener("submit",event=>{
+    event.preventDefault();if(!moderationTarget)return;
+    const permissions=Array.from($("communityModerationRights").querySelectorAll("input:checked")).map(input=>input.value);
+    void applyModeration(moderationAction,moderationTarget.user_id,{
+      permissions:JSON.stringify(permissions),duration:$("communityModerationDuration").value,reason:$("communityModerationReason").value,
+    });
+  });
+  for(const id of ["communityModerationClose","communityModerationCancel"])$(id)?.addEventListener("click",()=>{if(!moderationBusy)modDialog.close();});
+  modDialog?.addEventListener("cancel",event=>{if(moderationBusy)event.preventDefault();});
+  $("communityModerationSearch")?.addEventListener("input",renderModeration);
+  $("communityModerationFilter")?.addEventListener("change",renderModeration);
+  async function refreshModeration(){
+    if(moderationBusy)return;
+    try{const payload=await fetchJson(profileRoot.dataset.settingsUrl,{cache:"no-store"});settings=payload.settings;render();}
+    catch(error){toast(error.message);}
+  }
+  $("communityModerationRefresh")?.addEventListener("click",refreshModeration);
+
   function renderLog() {
     if (!logList) return;
     logList.replaceChildren();
@@ -433,6 +548,7 @@
     renderJoinRequests();
     renderAdmins();
     renderMembers();
+    renderModeration();
     renderLog();
   }
 
@@ -552,6 +668,7 @@
       if (next === "permissions") renderPermissionsForm();
       if (next === "invites") renderInvites();
       if (next === "join-requests") void refreshJoinRequests();
+      if (next === "moderation") void refreshModeration();
       if (next === "admins") renderAdmins();
       if (next === "members") renderMembers();
       if (next === "log") renderLog();

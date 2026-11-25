@@ -62,6 +62,7 @@ from apps.accounts.privacy import (
 )
 
 from .forms import CommunityForm, EditMessageForm, MessageForm
+from .community_permissions import can_pin_messages, has_admin_right, is_banned, member_denials
 from .folder_rules import decorate_folder_categories, matching_chats, requested_folder
 from .markdown import render_message_markdown
 from .models import (
@@ -465,10 +466,7 @@ def _can_delete_message_for_everyone(chat, membership, message):
         return True
     return (
         message.sender_id == membership.user_id
-        or membership.role in {
-            ChatParticipant.Role.OWNER,
-            ChatParticipant.Role.ADMIN,
-        }
+        or has_admin_right(membership, "delete_messages")
     )
 
 
@@ -479,14 +477,22 @@ def _posting_restriction(
     has_attachments=False,
     check_slow_mode=True,
 ):
-    if membership.role in {ChatParticipant.Role.OWNER, ChatParticipant.Role.ADMIN}:
+    if has_admin_right(membership, "post_messages"):
         return None
 
     if chat.type == Chat.Type.CHANNEL:
-        return ("Публиковать в канале могут только администраторы.", 0)
+        return ("Публикация в канале недоступна.", 0)
 
     if chat.type != Chat.Type.GROUP:
         return None
+
+    denied = member_denials(chat, membership)
+    if text and "send_text" in denied:
+        return ("Вам запрещено отправлять текстовые сообщения в этой группе.", 0)
+    if has_attachments and "send_media" in denied:
+        return ("Вам запрещено отправлять медиа и файлы в этой группе.", 0)
+    if text and "send_links" in denied and _LINK_RE.search(text):
+        return ("Вам запрещено отправлять ссылки в этой группе.", 0)
 
     if text and not chat.members_can_send_messages:
         return ("Администраторы запретили участникам отправлять текстовые сообщения.", 0)
@@ -736,10 +742,7 @@ def _posting_capabilities(chat, membership, user):
     can_voice = True
     reason = ""
 
-    if membership.role not in {
-        ChatParticipant.Role.OWNER,
-        ChatParticipant.Role.ADMIN,
-    }:
+    if not has_admin_right(membership, "post_messages"):
         if chat.type == Chat.Type.CHANNEL:
             can_text = can_media = can_voice = False
             reason = "Публиковать в канале могут только администраторы."
@@ -749,6 +752,13 @@ def _posting_capabilities(chat, membership, user):
             can_voice = can_media
             if not can_text and not can_media:
                 reason = "Администраторы запретили отправлять сообщения и медиа."
+            denied = member_denials(chat, membership)
+            if "send_text" in denied:
+                can_text = False
+            if "send_media" in denied:
+                can_media = can_voice = False
+            if denied.intersection({"send_text", "send_media"}):
+                reason = "На вашу отправку сообщений наложены ограничения."
 
     if (
         chat.type == Chat.Type.PRIVATE
@@ -1019,6 +1029,8 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
         {
             "active_membership": membership,
             "can_post": can_post,
+            "can_pin_messages": can_pin_messages(selected_chat, membership),
+            "can_moderate_messages": has_admin_right(membership, "delete_messages"),
             "can_send_text": can_send_text,
             "can_send_media": can_send_media,
             "can_record_voice": can_record_voice,
@@ -1492,6 +1504,9 @@ def join_public_chat(request, username):
             username__iexact=username,
             type__in=(Chat.Type.GROUP, Chat.Type.CHANNEL),
         )
+        if is_banned(chat, request.user.pk):
+            messages.error(request, "Вы заблокированы в этом сообществе.")
+            return redirect("messenger:home")
         membership, created = ChatParticipant.objects.get_or_create(
             chat=chat,
             user=request.user,
@@ -2041,7 +2056,20 @@ def send_message(request, chat_id):
     with transaction.atomic():
         # Allocate IDs under the chat row lock so a later ID cannot become
         # visible to polling before an earlier send in the same chat commits.
-        Chat.objects.select_for_update().only("id").get(pk=chat.pk)
+        chat = Chat.objects.select_for_update().get(pk=chat.pk)
+        membership = ChatParticipant.objects.filter(chat=chat, user=request.user, is_hidden=False).first()
+        if membership is None:
+            raise Http404
+        restriction = _posting_restriction(chat, membership, text=form.cleaned_data["text"],
+                                           has_attachments=bool(form.cleaned_data["attachments"] or sticker))
+        if restriction:
+            if wants_json:
+                response = JsonResponse({"ok": False, "error": restriction[0]}, status=403)
+                if restriction[1]:
+                    response["Retry-After"] = str(restriction[1])
+                return response
+            messages.error(request, restriction[0])
+            return redirect("messenger:chat", chat_id=chat.pk)
         message = Message.objects.create(
             chat=chat,
             sender=request.user,
@@ -2177,7 +2205,17 @@ def send_special_message(request, chat_id):
     with transaction.atomic():
         # Allocate IDs under the chat row lock so a later ID cannot become
         # visible to polling before an earlier send in the same chat commits.
-        Chat.objects.select_for_update().only("id").get(pk=chat.pk)
+        chat = Chat.objects.select_for_update().get(pk=chat.pk)
+        membership = ChatParticipant.objects.filter(chat=chat, user=request.user, is_hidden=False).first()
+        if membership is None:
+            raise Http404
+        restriction = _posting_restriction(chat, membership,
+            text=_special_restriction_text(special_type, special_data, search_text))
+        if restriction:
+            response = JsonResponse({"ok": False, "error": restriction[0]}, status=403)
+            if restriction[1]:
+                response["Retry-After"] = str(restriction[1])
+            return response
         message = Message.objects.create(
             chat=chat,
             sender=request.user,
@@ -2219,8 +2257,11 @@ def send_special_message(request, chat_id):
 
 @login_required
 @require_POST
+@transaction.atomic
 def special_message_action(request, chat_id, message_id):
     chat = _chat_for_user(request.user, chat_id)
+    chat = get_object_or_404(Chat.objects.select_for_update(), pk=chat.pk)
+    get_object_or_404(ChatParticipant, chat=chat, user=request.user, is_hidden=False)
     membership = _membership(chat, request.user)
     action = request.POST.get("action", "").strip()
 
@@ -2244,10 +2285,7 @@ def special_message_action(request, chat_id, message_id):
             if action == "close":
                 if not (
                     message.sender_id == request.user.pk
-                    or membership.role in {
-                        ChatParticipant.Role.OWNER,
-                        ChatParticipant.Role.ADMIN,
-                    }
+                    or has_admin_right(membership, "edit_messages")
                 ):
                     return JsonResponse(
                         {
@@ -2408,10 +2446,7 @@ def special_message_action(request, chat_id, message_id):
             if (
                 not can_edit
                 and chat.type != Chat.Type.PRIVATE
-                and membership.role in {
-                    ChatParticipant.Role.OWNER,
-                    ChatParticipant.Role.ADMIN,
-                }
+                and has_admin_right(membership, "edit_messages")
             ):
                 can_edit = True
             if not can_edit:
@@ -2478,8 +2513,11 @@ def special_message_action(request, chat_id, message_id):
 
 @login_required
 @require_POST
+@transaction.atomic
 def edit_message(request, chat_id, message_id):
     chat = _chat_for_user(request.user, chat_id)
+    chat = get_object_or_404(Chat.objects.select_for_update(), pk=chat.pk)
+    get_object_or_404(ChatParticipant, chat=chat, user=request.user, is_hidden=False)
     message = get_object_or_404(
         _visible_message_queryset(chat, request.user),
         pk=message_id,
@@ -2528,8 +2566,11 @@ def edit_message(request, chat_id, message_id):
 
 @login_required
 @require_POST
+@transaction.atomic
 def delete_message(request, chat_id, message_id):
     chat = _chat_for_user(request.user, chat_id)
+    chat = get_object_or_404(Chat.objects.select_for_update(), pk=chat.pk)
+    get_object_or_404(ChatParticipant, chat=chat, user=request.user, is_hidden=False)
     membership = _membership(chat, request.user)
     message = get_object_or_404(
         _visible_message_queryset(chat, request.user),
@@ -2701,7 +2742,18 @@ def forward_message(request, chat_id, message_id):
         origin_username = ""
 
     with transaction.atomic():
-        Chat.objects.select_for_update().only("id").get(pk=target_chat.pk)
+        target_chat = Chat.objects.select_for_update().get(pk=target_chat.pk)
+        target_membership = ChatParticipant.objects.filter(chat=target_chat, user=request.user, is_hidden=False).first()
+        if target_membership is None:
+            raise Http404
+        restriction = _posting_restriction(target_chat, target_membership,
+            text=_special_restriction_text(source.special_type, source.special_data, source.text),
+            has_attachments=source.attachments.exists())
+        if restriction:
+            response = JsonResponse({"ok": False, "error": restriction[0]}, status=403)
+            if restriction[1]:
+                response["Retry-After"] = str(restriction[1])
+            return response
         forwarded = Message.objects.create(
             chat=target_chat,
             sender=request.user,
@@ -2735,26 +2787,14 @@ def forward_message(request, chat_id, message_id):
 
 @login_required
 @require_POST
+@transaction.atomic
 def pin_message(request, chat_id, message_id):
     chat = _chat_for_user(request.user, chat_id)
+    chat = get_object_or_404(Chat.objects.select_for_update(), pk=chat.pk)
+    get_object_or_404(ChatParticipant, chat=chat, user=request.user, is_hidden=False)
     membership = _membership(chat, request.user)
-    if chat.type == Chat.Type.CHANNEL and membership.role not in {
-        ChatParticipant.Role.OWNER,
-        ChatParticipant.Role.ADMIN,
-    }:
-        return JsonResponse(
-            {"ok": False, "error": "Закреплять сообщения в канале могут только администраторы."},
-            status=403,
-        )
-    if (
-        chat.type == Chat.Type.GROUP
-        and membership.role == ChatParticipant.Role.MEMBER
-        and not chat.members_can_pin_messages
-    ):
-        return JsonResponse(
-            {"ok": False, "error": "Администраторы запретили участникам закреплять сообщения."},
-            status=403,
-        )
+    if not can_pin_messages(chat, membership):
+        return JsonResponse({"ok": False, "error": "Закрепление сообщений запрещено."}, status=403)
     message = get_object_or_404(
         _visible_message_queryset(chat, request.user),
         pk=message_id,
