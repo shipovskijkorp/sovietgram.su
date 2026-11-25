@@ -2,6 +2,7 @@ from pathlib import Path
 
 from django import forms
 from django.core.files.uploadedfile import UploadedFile
+from django.contrib.auth import authenticate
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
 
 from .models import User
@@ -27,9 +28,22 @@ class IdentifierAuthenticationForm(AuthenticationForm):
     )
 
 
+    otp = forms.CharField(
+        label="Код двухфакторной защиты (если включена)", required=False, max_length=64,
+        widget=forms.PasswordInput(attrs={"autocomplete": "one-time-code", "placeholder": "Код приложения или резервный код"}),
+    )
+
     def clean(self):
         try:
-            return super().clean()
+            username = self.cleaned_data.get("username")
+            password = self.cleaned_data.get("password")
+            if username is not None and password is not None:
+                self.user_cache = authenticate(self.request, username=username, password=password,
+                                               otp=self.cleaned_data.get("otp"))
+                if self.user_cache is None:
+                    raise self.get_invalid_login_error()
+                self.confirm_login_allowed(self.user_cache)
+            return self.cleaned_data
         except forms.ValidationError:
             # Show a useful hint only to someone who knows the pending
             # account's correct password (no email enumeration).
@@ -51,6 +65,13 @@ class IdentifierAuthenticationForm(AuthenticationForm):
                         code="email_not_verified",
                     )
             raise
+
+
+class SovietgramAdminAuthenticationForm(IdentifierAuthenticationForm):
+    def confirm_login_allowed(self, user):
+        super().confirm_login_allowed(user)
+        if not user.is_staff:
+            raise self.get_invalid_login_error()
 
 
 class RegisterForm(UserCreationForm):

@@ -67,6 +67,9 @@ def account_slots(request):
             continue
 
         if user_id == current_id:
+            if not constant_time_compare(str(request.session.get(HASH_SESSION_KEY, "")), user.get_session_auth_hash()):
+                changed = True
+                continue
             stored_hash = user.get_session_auth_hash()
             item = _entry(user, backend)
         elif not constant_time_compare(stored_hash, user.get_session_auth_hash()):
@@ -85,7 +88,9 @@ def account_slots(request):
         str(item.get("user_id")) for item in cleaned
     }:
         backend = request.session.get(BACKEND_SESSION_KEY)
-        if backend:
+        if backend and constant_time_compare(
+            str(request.session.get(HASH_SESSION_KEY, "")), request.user.get_session_auth_hash()
+        ) and User.objects.filter(pk=request.user.pk, password=request.user.password, security_version=request.user.security_version).exists():
             current = _entry(request.user, backend)
             cleaned.insert(0, current)
             slots.insert(0, {"user": request.user, "is_current": True})

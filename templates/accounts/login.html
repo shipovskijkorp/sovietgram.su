@@ -37,6 +37,10 @@
         {% for error in form.password.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
       </label>
 
+      <label class="field">
+        <span>{{ form.otp.label }}</span>{{ form.otp }}
+        {% for error in form.otp.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </label>
       {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
       <button class="primary-button" type="submit">Войти</button>
     </form>

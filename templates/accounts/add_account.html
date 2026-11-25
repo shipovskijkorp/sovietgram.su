@@ -54,6 +54,10 @@
           {{ login_form.password }}
           {% for error in login_form.password.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
         </label>
+        <label class="field">
+          <span>{{ login_form.otp.label }}</span>{{ login_form.otp }}
+          {% for error in login_form.otp.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        </label>
         <button class="primary-button" type="submit">Добавить и переключиться</button>
       </form>
       <p class="auth-switch"><a href="{% url 'accounts:password_reset' %}">Забыли пароль?</a></p>

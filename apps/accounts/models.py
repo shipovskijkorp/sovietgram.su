@@ -5,6 +5,7 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.crypto import salted_hmac
 
 
 class User(AbstractUser):
@@ -72,6 +73,27 @@ class User(AbstractUser):
         "удаление аккаунта после неактивности",
         default=365,
     )
+
+    security_version = models.PositiveBigIntegerField(default=0, editable=False)
+    two_factor_secret = models.TextField(blank=True, default="", editable=False)
+    two_factor_recovery_hashes = models.JSONField(default=list, blank=True, editable=False)
+    two_factor_last_step = models.BigIntegerField(default=-1, editable=False)
+    two_factor_failures = models.PositiveSmallIntegerField(default=0, editable=False)
+    two_factor_failure_window = models.DateTimeField(null=True, blank=True, editable=False)
+
+    @property
+    def two_factor_enabled(self):
+        return bool(self.two_factor_secret)
+
+    def _get_session_auth_hash(self, secret=None):
+        # Preserve existing sessions until the account changes its 2FA settings.
+        if not self.security_version:
+            return super()._get_session_auth_hash(secret=secret)
+        return salted_hmac(
+            "sovietgram.session-auth.security-version.v1",
+            f"{self.password}|{self.security_version}",
+            secret=secret, algorithm="sha256",
+        ).hexdigest()
 
     @property
     def display_name(self):

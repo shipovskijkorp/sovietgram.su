@@ -2,6 +2,10 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
 from .models import User
+from .forms import SovietgramAdminAuthenticationForm
+
+admin.site.login_form = SovietgramAdminAuthenticationForm
+admin.site.login_template = "accounts/login.html"
 
 
 @admin.register(User)
