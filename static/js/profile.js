@@ -135,6 +135,7 @@ const peerProfileElements = Object.fromEntries([
   "BlockLabel", "MenuBlock", "MenuBlockLabel", "CommonGroups", "CommonGroupsLabel", "CommonGroupsList",
 ].map(key => [key, document.getElementById("userProfile" + key)]));
 let peerProfileActionBusy = false;
+let peerProfileActionVersion = 0;
 
 const userProfileEditForm = document.getElementById("userProfileEditForm");
 const userProfileEditBack = document.getElementById("userProfileEditBack");
@@ -205,8 +206,14 @@ async function copyProfileText(text, successText = "Скопировано") {
     input.style.opacity = "0";
     document.body.appendChild(input);
     input.select();
-    document.execCommand("copy");
-    input.remove();
+    let copied = false;
+    try { copied = document.execCommand("copy"); }
+    catch (_error) { /* Clipboard access can be denied. */ }
+    finally { input.remove(); }
+    if (!copied) {
+      showProfileToast("Не удалось скопировать. Скопируйте ссылку вручную.");
+      return;
+    }
   }
   showProfileToast(successText);
 }
@@ -357,6 +364,8 @@ async function refreshProfilePresence() {
   const profileUrl = openedProfile?.profile_url;
   if (!profileUrl || userProfileOverlay?.hidden || document.hidden || profileRefreshBusy || peerProfileActionBusy) return;
   profileRefreshBusy = true;
+  const target = openedProfile;
+  const actionVersion = peerProfileActionVersion;
   try {
     const response = await fetch(profileUrl, {
       headers: { "X-Requested-With": "XMLHttpRequest" },
@@ -365,8 +374,8 @@ async function refreshProfilePresence() {
     });
     if (!response.ok) return;
     const fresh = await response.json();
-    if (!fresh.ok || !openedProfile || userProfileOverlay.hidden || peerProfileActionBusy
-        || openedProfile.profile_url !== profileUrl) return;
+    if (!fresh.ok || openedProfile !== target || userProfileOverlay.hidden || peerProfileActionBusy
+        || peerProfileActionVersion !== actionVersion || openedProfile.profile_url !== profileUrl) return;
     if (fresh.viewer_id != null && document.body?.dataset?.accountId &&
         String(fresh.viewer_id) !== document.body.dataset.accountId) {
       await closeUserProfile();
@@ -659,6 +668,8 @@ function renderPeerProfileActions(profile) {
   if (e.ContactLabel) e.ContactLabel.textContent = contactText;
   if (e.MenuContact) e.MenuContact.hidden = !showContact;
   if (e.MenuContactLabel) e.MenuContactLabel.textContent = contactText;
+  if (!direct?.action_url && e.MuteMenu && !e.MuteMenu.hidden) closePeerProfileMenus();
+  if (!direct?.action_url && e.TimerOptions) e.TimerOptions.hidden = true;
   if (e.Mute) {
     e.Mute.hidden = !direct?.action_url;
     e.Mute.classList.toggle("is-muted", Boolean(direct?.is_muted));
@@ -1012,13 +1023,18 @@ async function openUserProfile(url) {
     if (!response.ok) throw new Error("profile fetch failed");
     const profile = await response.json();
     if (!profile.ok) throw new Error("invalid profile payload");
+    if (profile.viewer_id != null && document.body?.dataset?.accountId &&
+        String(profile.viewer_id) !== document.body.dataset.accountId) {
+      throw new Error("Аккаунт изменился. Обновите страницу.");
+    }
     if (!profile.profile_url) profile.profile_url = url;
     renderUserProfile(profile);
     updateProfileHistory(profile.username || "");
     startProfileRefresh();
   } catch (_error) {
     updateProfileHistory("");
-    showProfileToast("Не удалось открыть профиль.");
+    showProfileToast(_error?.message === "Аккаунт изменился. Обновите страницу."
+      ? _error.message : "Не удалось открыть профиль.");
   }
 }
 
@@ -1271,6 +1287,7 @@ async function runPeerProfileAction(url, values, onSuccess) {
   if (!openedProfile || !url || peerProfileActionBusy) return;
   const target = openedProfile;
   peerProfileActionBusy = true;
+  peerProfileActionVersion++;
   closePeerProfileMenus();
   try {
     const payload = await postPeerProfileAction(url, values);
