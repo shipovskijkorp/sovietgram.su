@@ -1,4 +1,4 @@
-<dialog id="stickerDialog" class="sticker-dialog" data-url="{% url 'messenger:sticker_packs' %}" data-account-id="{{ request.user.pk }}" aria-labelledby="stickerDialogTitle">
+<dialog id="stickerDialog" class="sticker-dialog" data-url="{% url 'messenger:sticker_packs' %}" data-account-id="{{ request.user.pk }}"{% if selected_chat and can_send_media %} data-send-url="{% url 'messenger:send_message' selected_chat.pk %}" data-chat-id="{{ selected_chat.pk }}"{% endif %} aria-labelledby="stickerDialogTitle">
   <header><h2 id="stickerDialogTitle">Стикеры</h2><button type="button" id="stickerDialogClose" aria-label="Закрыть">×</button></header>
   <p class="sticker-hint" id="stickerHint">Ваши личные наборы стикеров.</p>
   <p class="sticker-error" id="stickerError" role="status" hidden></p>

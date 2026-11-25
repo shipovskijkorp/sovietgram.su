@@ -1029,8 +1029,6 @@ window.addEventListener("beforeunload", () => {
   navigator.sendBeacon?.(messageStage.dataset.draftUrl, data);
 });
 
-const stickerSendKeys = window.SovietgramSendRetry.batch();
-let textSendBusy = false; // Existing sticker transport lock.
 const pendingTextList = document.getElementById("pendingTextMessages");
 const queueScope = "sovietgram.outbox.v1." + (messageStage?.dataset.accountId || "") + "." + (conversation?.dataset.chatId || "");
 let textOutbox = null;
@@ -1932,43 +1930,6 @@ window.SovietgramChat = {
   },
   syncNow: pollMessages,
   sendSilently: () => sendTextMessage(true),
-  async sendSticker(stickerId, silent = false) {
-    if (!form || conversation?.dataset.canSendMedia !== "true" || textSendBusy) return false;
-    textSendBusy = true;
-    const previousDisabled = sendButton.disabled;
-    sendButton.disabled = true;
-    const sentReply = replyToInput?.value || "";
-    const data = new FormData();
-    const csrf = form.querySelector("[name='csrfmiddlewaretoken']")?.value || "";
-    const scope = "sovietgram.pending-sticker."+messageStage.dataset.accountId+"."+conversation.dataset.chatId;
-    try {
-      data.set("csrfmiddlewaretoken", csrf);
-      data.set("account_id", messageStage.dataset.accountId);
-      data.set("sticker_id", String(stickerId));
-      data.set("attachment_mode", "media");
-      if (sentReply) data.set("reply_to", sentReply);
-      if (silent) data.set("silent", "1");
-      data.set("client_message_id", await window.SovietgramSendRetry.textKey(scope,
-        [stickerId, sentReply, silent], stickerSendKeys));
-      const response = await window.SovietgramSendRetry.fetchSend(form.action, {
-        method:"POST", body:data, headers:{"X-Requested-With":"XMLHttpRequest"}, credentials:"same-origin",
-      });
-      const payload = await response.json().catch(()=>({}));
-      if (!response.ok || !payload.ok) throw new Error(errorText(payload,"Не удалось отправить стикер."));
-      window.SovietgramSendRetry.clearText(scope,stickerSendKeys);
-      renderMessage(payload.message);
-      if ((replyToInput?.value || "") === sentReply) clearReplyState();
-      if (!historyHasNewer) requestAnimationFrame(()=>scrollToBottom(true));
-      void window.SovietgramSidebar?.refresh();
-      return true;
-    } catch(error) {
-      notify(error.message || "Не удалось отправить стикер. Повторите отправку.");
-      return false;
-    } finally {
-      textSendBusy = false;
-      sendButton.disabled = previousDisabled;
-    }
-  },
   clearScheduledDraft(originalText, originalReply) {
     if (!messageInput || messageInput.value !== originalText ||
         (replyToInput?.value || "") !== originalReply) return;

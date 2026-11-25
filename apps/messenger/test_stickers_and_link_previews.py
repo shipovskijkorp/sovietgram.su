@@ -119,6 +119,14 @@ class StickerLibraryTests(TestCase):
         outsider.force_login(self.outsider)
         self.assertEqual(outsider.get(url).status_code, 404)
 
+    def test_chat_sticker_dialog_has_explicit_send_endpoint(self):
+        page = self.client.get(reverse("messenger:chat", args=[self.chat.pk]))
+        self.assertContains(page, f'data-send-url="{reverse("messenger:send_message", args=[self.chat.pk])}"')
+        self.assertContains(page, f'data-chat-id="{self.chat.pk}"')
+        response = self.send(attachment_mode="media", reply_to="", silent="1")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["message"]["attachments"][0]["kind"], "sticker")
+
     def test_save_received_sticker_and_protected_chat(self):
         response = self.send()
         self.assertEqual(response.status_code, 200, response.content)

@@ -1,13 +1,114 @@
 /* Account-scoped sticker library and direct sending. */
 (() => {
+  // Sticker delivery must not depend on the initialization of chat.js.
+  // Only the optional rendering step uses the chat module.
+  function sendError(response, payload) {
+    if (response.redirected || response.status === 401)
+      return "Сессия истекла. Обновите страницу и войдите снова.";
+    if (typeof payload?.error === "string" && payload.error) return payload.error;
+    const fields = Object.values(payload?.errors || {}).flat();
+    const first = fields.find(field => typeof field?.message === "string" && field.message);
+    if (first) return first.message;
+    if (response.status === 403) return "Отправка запрещена или сессия устарела (403). Обновите страницу.";
+    if (response.status === 404) return "Чат или стикер больше недоступен (404).";
+    if (response.status === 409) return "Конфликт отправки (409). Обновите страницу.";
+    if (response.status === 429) return "Слишком много отправок. Повторите позже (429).";
+    if (response.status >= 500) return "Ошибка сервера (" + response.status + "). Повторите отправку.";
+    return "Сервер не подтвердил отправку (" + response.status + "). Повторите попытку.";
+  }
+
+  function createStickerSender({retry, csrf, url, accountId, chatId}) {
+    if (!retry?.batch || !retry?.textKey || !retry?.fetchSend || !retry?.clearText)
+      throw new Error("Не загрузился модуль отправки. Обновите страницу (Ctrl+F5).");
+    if (!url || !/^\d+$/.test(String(accountId)) || !/^\d+$/.test(String(chatId)))
+      throw new Error("Откройте доступную переписку для отправки стикера.");
+    const stickerSendKeys = retry.batch();
+    const scope = "sovietgram.pending-sticker." + accountId + "." + chatId;
+    let sending = false;
+
+    return async function sendSticker(stickerId, reply = "", silent = false) {
+      if (sending) throw new Error("Предыдущий стикер ещё отправляется.");
+      if (!/^\d+$/.test(String(stickerId))) throw new Error("Стикер недоступен.");
+      if (!csrf) throw new Error("Не найден токен защиты сессии. Обновите страницу.");
+      sending = true;
+      try {
+        const data = new FormData();
+        data.set("csrfmiddlewaretoken", csrf);
+        data.set("account_id", String(accountId));
+        data.set("sticker_id", String(stickerId));
+        data.set("attachment_mode", "media");
+        if (reply) data.set("reply_to", String(reply));
+        if (silent) data.set("silent", "1");
+        // Preserve the existing key format and exact request body for retries
+        // of sends initiated by an older version of the client.
+        data.set("client_message_id", await retry.textKey(
+          scope, [stickerId, String(reply || ""), Boolean(silent)], stickerSendKeys,
+        ));
+        let response;
+        try {
+          response = await retry.fetchSend(url, {
+            method: "POST", body: data, credentials: "same-origin",
+            headers: {"X-Requested-With": "XMLHttpRequest"},
+          });
+        } catch (_) {
+          throw new Error("Нет ответа сервера. Повторите отправку того же стикера.");
+        }
+        const payload = await response.json().catch(() => ({}));
+        if (response.redirected || !response.ok || payload.ok !== true || !payload.message?.id)
+          throw new Error(sendError(response, payload));
+        // Acknowledgement is independent of DOM rendering and sidebar refresh.
+        retry.clearText(scope, stickerSendKeys);
+        return payload.message;
+      } finally { sending = false; }
+    };
+  }
+
+  window.SovietgramStickerSend = {createStickerSender, sendError};
+
   const $=id=>document.getElementById(id);
   const dialog=$("stickerDialog");
   if(!dialog)return;
   const tabs=$("stickerPackTabs"),grid=$("stickerGrid"),actions=$("stickerPackActions");
   const upload=$("stickerUploadForm"),file=$("stickerFile"),emoji=$("stickerEmoji"),hint=$("stickerHint"),errorNode=$("stickerError");
   const save=$("stickerSaveIncoming"),silentRow=$("stickerSilentRow");
-  const csrf=document.querySelector("[name='csrfmiddlewaretoken']")?.value||"";
+  const csrf=$("messageForm")?.querySelector("[name='csrfmiddlewaretoken']")?.value
+    || document.querySelector("[name='csrfmiddlewaretoken']")?.value || "";
+  let stickerSender = null;
   let packs=[],favorites=[],recent=[],selected=null,mode="manage",attachmentId=null,removing=false,busy=false;
+
+  function currentSender() {
+    if (!stickerSender) {
+      stickerSender = createStickerSender({
+        retry: window.SovietgramSendRetry,
+        csrf, url: dialog.dataset.sendUrl,
+        accountId: dialog.dataset.accountId, chatId: dialog.dataset.chatId,
+      });
+    }
+    return stickerSender;
+  }
+
+  function showSentSticker(message, sentReply) {
+    const reply = $("replyToInput");
+    if (reply && reply.value === sentReply) {
+      reply.value = "";
+      const preview = $("composerReply");
+      if (preview) preview.hidden = true;
+    }
+    try {
+      // Do not call acceptSentMessage: that also clears the text draft.
+      if (typeof window.renderSovietgramChatMessage !== "function") throw new Error("Chat renderer unavailable");
+      window.renderSovietgramChatMessage(message);
+    } catch (renderError) {
+      console.warn("Sticker delivered; chat rendering failed", renderError);
+      // The POST has succeeded. Recover the display without resending.
+      window.location.reload();
+      return;
+    }
+    try {
+      Promise.resolve(window.SovietgramSidebar?.refresh?.()).catch(() => {});
+      Promise.resolve(window.SovietgramChat?.syncNow?.()).catch(() => {});
+    } catch (_) {}
+  }
   function error(value=""){errorNode.textContent=value;errorNode.hidden=!value;}
   function pack(){return packs.find(item=>item.id===selected);}
   function setBusy(value){
@@ -104,13 +205,18 @@
       return;
     }
     if(mode!=="send")return;
+    const sentReply = $("replyToInput")?.value || "";
+    const silent = Boolean($("stickerSilent")?.checked);
+    let message;
     error();setBusy(true);
     try{
-      const sent=await window.SovietgramChat?.sendSticker(item.id,$("stickerSilent").checked);
-      if(sent){dialog.close();}
-      else error("Не удалось отправить стикер. Повторите попытку.");
-    }catch(e){error(e.message);}
+      message = await currentSender()(item.id, sentReply, silent);
+    }catch(e){error(e.message || "Не удалось отправить стикер.");}
     finally{setBusy(false);}
+    if (message) {
+      dialog.close();
+      showSentSticker(message, sentReply);
+    }
   }
   async function open(nextMode,id=null){
     if(busy)return;
