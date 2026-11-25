@@ -184,7 +184,10 @@
   tabs.forEach(tab => tab.addEventListener("click", () => selectKind(tab.dataset.galleryKind)));
   more.addEventListener("click", () => { void load(Boolean(before)); });
   $("chatGalleryClose").addEventListener("click", () => gallery.close());
-  gallery.addEventListener("close", () => { generation++; controller?.abort(); });
+  gallery.addEventListener("close", () => {
+    generation++; controller?.abort();
+    for (const player of gallery.querySelectorAll("audio, video")) player.pause();
+  });
   gallery.addEventListener("play", event => {
     if (event.target.tagName === "AUDIO") for (const player of gallery.querySelectorAll("audio")) if (player !== event.target) player.pause();
   }, true);

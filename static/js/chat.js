@@ -1,4 +1,8 @@
+// Keep classic-script lexical bindings out of the global environment.
+// profile.js defines csrfToken() and other modules have independent state.
+(() => {
 const conversation = document.querySelector(".conversation--chat");
+if (!conversation) return;
 const form = document.getElementById("messageForm");
 const messageInput = document.getElementById("messageInput");
 const messageFlow = document.getElementById("messageFlow");
@@ -1874,7 +1878,7 @@ document.addEventListener("keydown", (event) => {
     event.preventDefault(); setSearchPanel(true); return;
   }
   if (event.key !== "Escape") return;
-  if (document.querySelector("dialog[open]")) return;
+  if (document.querySelector("#communityProfile:not([hidden]), #telegramSettings:not([hidden]), #userProfileOverlay:not([hidden])")) return;
   if (editModal && !editModal.hidden) { closeEditModal(); return; }
 
   if (mediaComposeBackdrop && !mediaComposeBackdrop.hidden) { closeMediaComposer(); return; }
@@ -1931,3 +1935,5 @@ window.SovietgramChat = {
   focusComposer: focusMessageInput,
   resizeComposer: autoSizeInput,
 };
+
+})();

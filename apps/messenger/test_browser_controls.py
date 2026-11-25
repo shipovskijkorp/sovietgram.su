@@ -6,15 +6,18 @@ SOVIETGRAM_BROWSER_TESTS=1. CI runs these in a separate job.
 import os
 from unittest import skipUnless
 from unittest.mock import patch
+from tempfile import TemporaryDirectory
+from io import BytesIO
 
 from django.conf import settings
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.core.cache import cache
+from django.core.files.base import ContentFile
 from django.test import override_settings
 from django.urls import reverse
 
 from apps.accounts.models import User
-from .models import Chat, ChatParticipant, Message
+from .models import Chat, ChatParticipant, Message, MessageAttachment
 from .services import get_or_create_direct_chat
 
 
@@ -236,6 +239,53 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.expect(self.page.locator("#chatFoldersClose")).to_be_enabled()
         self.click("#chatFoldersClose")
         self.hidden("#chatFoldersDialog")
+
+    def test_gallery_filters_navigation_and_protected_download(self):
+        from PIL import Image
+
+        storage = self.enterContext(TemporaryDirectory())
+        self.enterContext(override_settings(MEDIA_ROOT=storage))
+        picture = BytesIO()
+        Image.new("RGB", (8, 8), "red").save(picture, format="PNG")
+        content = picture.getvalue()
+        for name in ("a.png", "b.png"):
+            MessageAttachment.objects.create(
+                message=self.direct_message, kind="image", original_name=name,
+                file=ContentFile(content, name=name), size=len(content),
+            )
+        MessageAttachment.objects.create(
+            message=self.direct_message, kind="file", original_name="note.txt",
+            file="test/note.txt", size=42,
+        )
+        self.go(self.direct)
+        self.menu('[data-open-gallery="media"]')
+        self.visible("#chatMediaGallery")
+        self.expect(self.page.locator("#chatGalleryItems .chat-gallery-card")).to_have_count(2)
+        self.page.locator("#chatGalleryItems [data-lightbox-image]").first.click()
+        self.visible("#imageViewer")
+        self.expect(self.page.locator("#imageViewerCount")).to_have_text("1 / 2")
+        self.click("#imageViewerNext")
+        self.expect(self.page.locator("#imageViewerCount")).to_have_text("2 / 2")
+        self.expect(self.page.locator("#imageViewerNext")).to_be_disabled()
+        self.click("#imageViewerPrev")
+        self.expect(self.page.locator("#imageViewerCount")).to_have_text("1 / 2")
+        self.click("#imageViewerClose")
+        self.hidden("#imageViewer")
+        self.click('[data-gallery-kind="files"]')
+        self.expect(self.page.locator("#chatGalleryItems")).to_contain_text("note.txt")
+        self.expect(self.page.locator("#chatGalleryItems [data-gallery-download]")).to_have_count(1)
+        self.click("#chatGalleryClose")
+        self.hidden("#chatMediaGallery")
+        self.direct.protect_content = True
+        self.direct.save(update_fields=["protect_content"])
+        self.go(self.direct)
+        self.menu('[data-open-gallery="media"]')
+        self.expect(self.page.locator("#chatGalleryItems .chat-gallery-card")).to_have_count(2)
+        self.expect(self.page.locator("#chatGalleryItems [data-gallery-download]")).to_have_count(0)
+        self.page.locator("#chatGalleryItems [data-lightbox-image]").first.click()
+        self.hidden("#imageViewerDownload")
+        self.click("#imageViewerClose")
+        self.click("#chatGalleryClose")
 
     def test_settings_sections_and_return_navigation(self):
         self.go(query="?settings=main")

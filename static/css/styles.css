@@ -13,6 +13,10 @@
 
 * { box-sizing: border-box; }
 
+/* Honor the HTML hidden state even when a component sets display:grid/flex.
+   Otherwise closed forms, pickers and menus can stay visible and clickable. */
+[hidden]:not([hidden="until-found"]) { display: none !important; }
+
 html, body {
   width: 100%;
   min-width: 0;
