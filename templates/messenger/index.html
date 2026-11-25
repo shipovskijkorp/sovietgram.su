@@ -115,6 +115,7 @@
           data-chat-title="{{ selected_chat.display_name_ui|escape }}"
           data-chat-peer-name="{% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}{{ selected_chat.other_user.display_name|escape }}{% else %}{{ selected_chat.display_name_ui|escape }}{% endif %}"
           data-channel-signatures="{{ selected_chat.signatures_enabled|yesno:'true,false' }}"
+          data-comments-enabled="{{ selected_chat.comments_enabled|yesno:'true,false' }}"
           data-can-send-text="{{ can_send_text|yesno:'true,false' }}"
           data-can-send-media="{{ can_send_media|yesno:'true,false' }}"
           data-can-record-voice="{{ can_record_voice|yesno:'true,false' }}">
@@ -555,6 +556,9 @@
                 <time>{{ message.created_at|date:'H:i' }}</time>
                 {% if message.sender_id == request.user.pk %}<span class="message-check" role="img" data-read-state="{% if message.is_read_ui %}read{% else %}sent{% endif %}" aria-label="{% if message.is_read_ui %}Прочитано{% else %}Отправлено{% endif %}" title="{% if message.is_read_ui %}Прочитано{% else %}Отправлено{% endif %}"></span>{% endif %}
               </footer>
+              {% if selected_chat.type == 'channel' %}
+              <button type="button" class="message-discussion" data-discussion-url="{% url 'messenger:channel_discussion' selected_chat.pk message.pk %}" data-discussion-count="{{ message.comment_count_ui }}" {% if not selected_chat.comments_enabled %}hidden{% endif %}><span>Комментарии: {{ message.comment_count_ui }}</span><b aria-hidden="true">›</b></button>
+              {% endif %}
               <button class="message-action-trigger" type="button" aria-label="Действия с сообщением">⋮</button>
             </article>
           {% endfor %}
@@ -846,6 +850,7 @@
   <button class="message-context-menu__danger" type="button" data-message-action="delete"><span class="tg-native-icon tg-native-icon--clear" aria-hidden="true"></span>Удалить сообщение</button>
 </div>
 
+{% if selected_chat.type == 'channel' %}{% include 'messenger/_channel_discussion.html' %}{% endif %}
 <dialog class="message-readers-dialog" id="messageReactorsDialog" aria-labelledby="messageReactorsTitle">
   <header><strong id="messageReactorsTitle">Реакции</strong><button type="button" id="messageReactorsClose" aria-label="Закрыть">×</button></header>
   <div id="messageReactorsFilters" class="message-reactors-filters" aria-label="Фильтр реакций"></div>
@@ -1236,6 +1241,7 @@
 <script src="{% static 'js/attachment-menu.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/attachment-files.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/read-ack.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/channel-discussions.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/chat.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/media-gallery.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/scheduled-messages.js' %}?v={{ static_version }}"></script>

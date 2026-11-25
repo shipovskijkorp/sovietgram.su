@@ -33,7 +33,7 @@ from .services import visible_chat_attachments, shared_attachment_payload, invit
 from .ratelimit import rate_limit
 from .community_permissions import (
     ADMIN_RIGHTS, MEMBER_DENIALS, active_sanctions, admin_rights,
-    can_add_members, can_moderate, has_admin_right, is_banned, allowed_reaction_emojis,
+    can_add_members, can_moderate, has_admin_right, is_banned, allowed_reaction_emojis, available_member_denials,
 )
 
 User = get_user_model()
@@ -245,7 +245,7 @@ def _member_payload(actor, membership):
         "is_self": user.pk == actor.user_id,
         "can_remove": removable,
         "can_ban": removable,
-        "can_restrict": removable and membership.role == ChatParticipant.Role.MEMBER and actor.chat.type == Chat.Type.GROUP,
+        "can_restrict": removable and membership.role == ChatParticipant.Role.MEMBER and actor.chat.type in {Chat.Type.GROUP, Chat.Type.CHANNEL},
         "can_edit_admin_rights": actor_is_owner and membership.role == ChatParticipant.Role.ADMIN,
         "admin_rights": admin_rights(membership) if actor_is_owner or actor.user_id == user.pk else [],
         "can_change_role": changeable,
@@ -417,7 +417,7 @@ def _settings_payload(request, chat):
         "viewer_role": actor.role,
         "admin_rights": admin_rights(actor),
         "admin_right_labels": ADMIN_RIGHTS,
-        "member_denial_labels": MEMBER_DENIALS,
+        "member_denial_labels": available_member_denials(chat),
         "can_add_members": _can_add_members(chat, actor),
         "moderation": moderation_rows,
         "moderation_count": moderation_count,
@@ -434,6 +434,7 @@ def _settings_payload(request, chat):
             "restriction_total": len(restrictions),
         },
         "signatures_enabled": chat.signatures_enabled,
+        "comments_enabled": chat.comments_enabled,
         "allowed_reactions": allowed_reaction_emojis(chat),
         "reaction_choices": [{"emoji": emoji, "label": label} for emoji, label in MessageReaction.Emoji.choices],
         "member_count": len(memberships),
@@ -612,7 +613,7 @@ def community_settings(request, chat_id):
         return JsonResponse({"ok": True, "settings": _settings_payload(request, chat)})
 
     section = request.POST.get("section", "").strip()
-    right = {"type": "change_info", "permissions": "manage_permissions", "signatures": "change_info", "reactions": "manage_permissions"}.get(section)
+    right = {"type": "change_info", "permissions": "manage_permissions", "signatures": "change_info", "reactions": "manage_permissions", "comments": "manage_permissions"}.get(section)
     if right and not has_admin_right(membership, right):
         return _json_error("Недостаточно прав для изменения этих настроек.", status=403)
     if section == "type":
@@ -680,6 +681,15 @@ def community_settings(request, chat_id):
             chat.allowed_reactions = new_value
             chat.save(update_fields=("allowed_reactions", "updated_at"))
             _log(chat, request.user, "reactions", "Изменены доступные реакции: " + (" ".join(selected) or "отключены"))
+
+    elif section == "comments":
+        if chat.type != Chat.Type.CHANNEL:
+            return _json_error("Обсуждения доступны только для каналов.")
+        enabled = _post_bool(request, "enabled")
+        if chat.comments_enabled != enabled:
+            chat.comments_enabled = enabled
+            chat.save(update_fields=("comments_enabled", "updated_at"))
+            _log(chat, request.user, "comments", "Комментарии включены." if enabled else "Комментарии отключены.")
 
     elif section == "signatures":
         if chat.type != Chat.Type.CHANNEL:

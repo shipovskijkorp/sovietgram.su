@@ -20,6 +20,8 @@
   const adminSummary = $("communitySettingsAdminSummary");
   const memberSummary = $("communitySettingsMemberSummary");
   const signatures = $("communitySettingsSignatures");
+  const comments = $("communitySettingsComments");
+  let commentsBusy = false;
   const deleteButton = $("communitySettingsDelete");
   const typeForm = $("communitySettingsTypeForm");
   const typeUsername = $("communitySettingsUsername");
@@ -263,6 +265,7 @@
       if(activeView===view&&!rights.has(right))setView("overview");
     }
     if(signatures){signatures.checked=Boolean(settings.signatures_enabled);signatures.closest("label").hidden=!rights.has("change_info");}
+    if(comments){comments.checked=Boolean(settings.comments_enabled);comments.closest("label").hidden=!rights.has("manage_permissions");}
     if(addMember)addMember.hidden=!settings.can_add_members;
     if(deleteButton)deleteButton.hidden=!settings.can_delete;
     $("communitySettingsModerationSummary").textContent=String(settings.moderation_count||0)+" активных";
@@ -866,6 +869,20 @@
       errorNode.textContent = error.message;
       errorNode.hidden = false;
     } finally { submit.disabled = false; }
+  });
+
+  comments?.addEventListener("change", async () => {
+    if (commentsBusy || !settings) return;
+    commentsBusy = true;
+    const desired = comments.checked;
+    comments.disabled = true;
+    try {
+      await applySettings({section:"comments",enabled:desired?"1":"0"});
+      window.SovietgramDiscussions?.sync(Boolean(settings.comments_enabled), {});
+      toast(desired ? "Комментарии включены." : "Комментарии отключены.");
+    } catch (error) {
+      comments.checked = !desired; toast(error.message);
+    } finally { comments.disabled = false; commentsBusy = false; }
   });
 
   signatures?.addEventListener("change", async () => {

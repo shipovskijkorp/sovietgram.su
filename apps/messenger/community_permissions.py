@@ -21,6 +21,7 @@ MEMBER_DENIALS = {
     "add_members": "Добавление участников",
     "pin_messages": "Закрепление сообщений",
     "react": "Добавление реакций",
+    "comment": "Комментарии к публикациям",
 }
 DURATIONS = {"1h": 3600, "8h": 28800, "1d": 86400, "7d": 604800, "30d": 2592000, "forever": None}
 
@@ -105,3 +106,9 @@ def member_reaction_emojis(chat, membership):
     ):
         return []
     return allowed_reaction_emojis(chat)
+
+
+def available_member_denials(chat):
+    if chat.type == Chat.Type.CHANNEL:
+        return {key: MEMBER_DENIALS[key] for key in ("react", "comment")}
+    return {key: label for key, label in MEMBER_DENIALS.items() if key != "comment"}

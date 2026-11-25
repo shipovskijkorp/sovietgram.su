@@ -96,6 +96,7 @@ from .services import (
     shared_attachment_payload,
     clone_attachments,
     delete_message_content,
+    discussion_counts,
     get_or_create_direct_chat,
     invited_membership_defaults,
     mark_chat_read,
@@ -1006,7 +1007,11 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
         .order_by("-pinned_at", "-id")[:8]
     )
     pinned_ids = {pin.message_id for pin in pins}
+    comment_counts = discussion_counts(
+        message.pk for message in context["chat_messages"] if not message.is_deleted
+    ) if selected_chat.type == Chat.Type.CHANNEL and selected_chat.comments_enabled else {}
     for message in context["chat_messages"]:
+        message.comment_count_ui = comment_counts.get(message.pk, 0)
         message.is_pinned_ui = message.pk in pinned_ids
         message.is_read_ui = message.sender_id == user.pk and message.pk <= other_last_read_id
         message.reactions_ui = serialize_reactions(message, user)
@@ -3867,6 +3872,7 @@ def poll_messages(request, chat_id):
     # Preserve the cursor of the timestamp page separately from repairs.
     cursor_messages = list(updated_messages)
     removed_ids = []
+    visible_ids = set()
     repair_reaction_ids = set()
     if known_ids:
         mounted = list(
@@ -4048,6 +4054,10 @@ def poll_messages(request, chat_id):
                 for message in updated_messages
             ],
             "removed_ids": removed_ids,
+            "comments_enabled": chat.type == Chat.Type.CHANNEL and chat.comments_enabled,
+            "discussion_counts": discussion_counts(
+                visible_ids | {message.pk for message in new_messages + updated_messages if not message.is_deleted}
+            ) if chat.type == Chat.Type.CHANNEL and chat.comments_enabled else {},
             "reaction_updates": [
                 {
                     "message_id": message.pk,

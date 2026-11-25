@@ -11,6 +11,8 @@ DEFAULT_RATE_LIMITS = {
     "global_search": {"limit": 90, "window": 60},
     "typing": {"limit": 120, "window": 60},
     "message_reaction": {"limit": 120, "window": 60},
+    "channel_discussion_read": {"limit": 120, "window": 60},
+    "channel_discussion_write": {"limit": 30, "window": 60},
     "mention_candidates": {"limit": 90, "window": 60},
     "markdown_preview": {"limit": 30, "window": 60},
     "scheduled_messages": {"limit": 90, "window": 60},

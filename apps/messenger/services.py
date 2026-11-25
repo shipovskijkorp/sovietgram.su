@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from django.db import transaction
-from django.db.models import BigIntegerField, Case, F, Max, Q, Value, When
+from django.db.models import BigIntegerField, Case, Count, F, Max, Q, Value, When
 from django.urls import reverse
 from django.utils import timezone
 
@@ -12,6 +12,7 @@ from .folder_rules import keep_in_archive_for_folder
 from .community_permissions import has_admin_right
 from .models import (
     Chat,
+    ChannelComment,
     ChatParticipant,
     Contact,
     Message,
@@ -255,6 +256,7 @@ def delete_message_content(message):
     # Mark the message deleted before removing reactions so concurrent
     # requests cannot recreate a reaction on a soft-deleted message.
     message.reactions.all().delete()
+    message.channel_comments.all().delete()
 
 
 def visible_chat_attachments(chat, membership):
@@ -469,6 +471,17 @@ def serialize_reactions(message, current_user):
     ]
 
 
+def discussion_counts(post_ids):
+    ids = set(post_ids)
+    if not ids:
+        return {}
+    counts = dict(
+        ChannelComment.objects.filter(post_id__in=ids, is_deleted=False)
+        .order_by().values("post_id").annotate(total=Count("pk")).values_list("post_id", "total")
+    )
+    return {pk: counts.get(pk, 0) for pk in ids}
+
+
 def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=None):
     pinned_ids = pinned_ids or set()
     reply = message.reply_to
@@ -566,6 +579,8 @@ def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=No
         "reaction_version": message.reaction_version,
         "reactions": serialize_reactions(message, current_user),
         "urls": {
+            "discussion": reverse("messenger:channel_discussion", args=[message.chat_id, message.pk])
+                if message.chat.type == Chat.Type.CHANNEL and not message.is_deleted else "",
             "reaction": reverse("messenger:message_reaction", args=[message.chat_id, message.pk]),
             "reactors": reverse("messenger:message_reactors", args=[message.chat_id, message.pk]),
             "edit": reverse("messenger:edit_message", args=[message.chat_id, message.pk]),

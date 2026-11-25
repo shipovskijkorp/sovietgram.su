@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from . import community_profiles as profiles
-from .community_permissions import ADMIN_RIGHTS, DURATIONS, MEMBER_DENIALS, can_moderate, has_admin_right
+from .community_permissions import ADMIN_RIGHTS, DURATIONS, available_member_denials, can_moderate, has_admin_right
 from .models import Chat, ChatJoinRequest, ChatMemberModeration, ChatParticipant
 from .ratelimit import rate_limit
 
@@ -79,8 +79,8 @@ def community_moderation(request, chat_id):
                 # be extended using the list, even after membership removal.
                 if target is None and not (action == "ban" and row and row.banned):
                     return error("Участник не найден.", 404)
-                if action == "restrict" and (chat.type != Chat.Type.GROUP or target.role != ChatParticipant.Role.MEMBER):
-                    return error("Индивидуальные ограничения доступны для обычных участников групп.", 400)
+                if action == "restrict" and target.role != ChatParticipant.Role.MEMBER:
+                    return error("Индивидуальные ограничения доступны для обычных участников.", 400)
                 duration = request.POST.get("duration")
                 if duration not in DURATIONS:
                     return error("Некорректный срок.")
@@ -88,7 +88,7 @@ def community_moderation(request, chat_id):
                 if len(reason) > 200:
                     return error("Причина должна содержать не более 200 символов.")
                 try:
-                    denied = parse_rights(request, "permissions", MEMBER_DENIALS) if action == "restrict" else []
+                    denied = parse_rights(request, "permissions", available_member_denials(chat)) if action == "restrict" else []
                 except ValueError as exc:
                     return error(str(exc))
                 if action == "restrict" and not denied:

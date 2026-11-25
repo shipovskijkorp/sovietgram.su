@@ -74,6 +74,7 @@ class Chat(models.Model):
     # NULL allows the full current reaction catalog; [] disables new reactions.
     allowed_reactions = models.JSONField(default=None, null=True, blank=True)
     signatures_enabled = models.BooleanField(default=False)
+    comments_enabled = models.BooleanField(default=False)
     auto_delete_seconds = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, db_index=True)
@@ -188,6 +189,7 @@ class Message(models.Model):
     special_data = models.JSONField(blank=True, default=dict)
     is_deleted = models.BooleanField(default=False, db_index=True)
     silent = models.BooleanField(default=False)
+    comments_closed = models.BooleanField(default=False)
     reaction_version = models.PositiveBigIntegerField(default=0)
     reaction_changed_at = models.DateTimeField(null=True, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
@@ -566,3 +568,23 @@ class ChatMemberModeration(models.Model):
         ordering = ("-updated_at", "-pk")
         constraints = [models.UniqueConstraint(fields=("chat", "user"), name="unique_chat_member_moderation")]
         indexes = [models.Index(fields=("chat", "banned", "expires_at"), name="sg_chat_moderation_idx")]
+
+
+class ChannelComment(models.Model):
+    """A text discussion belonging to exactly one channel publication."""
+    post = models.ForeignKey(Message, on_delete=models.CASCADE, related_name="channel_comments")
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="channel_comments")
+    client_id = models.UUIDField()
+    text = models.TextField(max_length=4096)
+    reply_to = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="replies")
+    is_deleted = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    edited_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("id",)
+        constraints = [
+            models.UniqueConstraint(fields=("post", "author", "client_id"), name="sg_comment_send_once"),
+        ]
+        indexes = [models.Index(fields=("post", "is_deleted", "id"), name="sg_comment_post_visible_idx")]
