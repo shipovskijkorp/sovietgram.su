@@ -241,6 +241,7 @@
                   {% csrf_token %}<input type="hidden" name="action" value="mute">
                   <button type="submit"><span class="tg-native-icon tg-native-icon--mute" aria-hidden="true"></span>{% if active_membership.notifications_muted %}Включить уведомления{% else %}Выключить уведомления{% endif %}</button>
                 </form>
+                {% if selected_chat.type != 'private' %}<a href="{% url 'administration:submit_report' 'community' selected_chat.pk %}"><span class="tg-native-icon tg-native-icon--info" aria-hidden="true"></span>Пожаловаться на сообщество</a>{% endif %}
                 <button type="button" data-select-messages><span class="chat-menu__select-icon" aria-hidden="true">✓</span>Выбрать сообщения</button>
                 <div class="chat-menu__separator"></div>
                 <button type="button" data-clear-chat-history><span class="tg-native-icon tg-native-icon--clear" aria-hidden="true"></span>Очистить историю</button>
@@ -847,6 +848,7 @@
   {% if can_pin_messages %}
   <button type="button" data-message-action="pin"><span class="tg-native-icon tg-native-icon--pin" aria-hidden="true"></span><b id="messagePinLabel">Закрепить</b></button>
   {% endif %}
+  <button type="button" data-message-action="report" hidden data-report-template="{% url 'administration:submit_report' 'message' 0 %}"><svg class="message-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 21V4l7 3 7-3v12l-7 3-7-3"/></svg>Пожаловаться</button>
   <button class="message-context-menu__danger" type="button" data-message-action="delete"><span class="tg-native-icon tg-native-icon--clear" aria-hidden="true"></span>Удалить сообщение</button>
 </div>
 
@@ -1079,6 +1081,8 @@
     <a href="{% url 'messenger:contacts' %}"><span class="tg-native-icon tg-native-icon--contacts" aria-hidden="true"></span><strong>Контакты</strong></a>
     <a href="{% url 'messenger:calls' %}"><span class="tg-native-icon tg-native-icon--phone" aria-hidden="true"></span><strong>Звонки</strong></a>
     <a href="{% url 'messenger:saved_messages' %}"><span class="tg-native-icon tg-native-icon--saved" aria-hidden="true"></span><strong>Избранное</strong></a>
+    {% if request.user.platform_role %}<a href="{% url 'administration:dashboard' %}" id="platformAdminEntry"><span class="tg-native-icon tg-native-icon--settings" aria-hidden="true"></span><strong>Администрирование</strong></a>{% endif %}
+    <a href="{% url 'administration:my_reports' %}"><span class="archive-menu-svg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 21V4l7 3 7-3v12l-7 3-7-3"/></svg></span><strong>Мои жалобы</strong></a>
     <a href="{% url 'messenger:home' %}?settings=main" data-open-settings="main"><span class="tg-native-icon tg-native-icon--settings" aria-hidden="true"></span><strong>Настройки</strong></a>
   </nav>
 

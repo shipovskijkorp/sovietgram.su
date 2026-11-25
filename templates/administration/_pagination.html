@@ -1,0 +1,5 @@
+<nav class="platform-pagination" aria-label="Страницы">
+{% if rows.has_previous %}<a href="?page={{ rows.previous_page_number }}&amp;q={{ q|default:''|urlencode }}&amp;status={{ status|default:''|urlencode }}">← Назад</a>{% endif %}
+<span>Страница {{ rows.number }} из {{ rows.paginator.num_pages }}</span>
+{% if rows.has_next %}<a href="?page={{ rows.next_page_number }}&amp;q={{ q|default:''|urlencode }}&amp;status={{ status|default:''|urlencode }}">Далее →</a>{% endif %}
+</nav>

@@ -48,7 +48,7 @@ def delete_user_account(user):
     # cannot race ownership transfer and cascade deletion.
     UserModel = type(user)
     locked_user = UserModel.objects.select_for_update().filter(pk=user.pk).first()
-    if locked_user is None:
+    if locked_user is None or locked_user.platform_role or locked_user.is_staff or locked_user.is_superuser or locked_user.platform_suspended_at:
         return
     user = locked_user
 

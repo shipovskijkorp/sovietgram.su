@@ -397,6 +397,8 @@ def auto_delete_label(seconds):
 
 
 def account_expired_for_inactivity(user, now=None):
+    if user.platform_role or user.is_staff or user.is_superuser:
+        return False
     now = now or timezone.now()
     base = user.last_seen_at or user.date_joined
     days = int(user.delete_after_inactive_days or 365)

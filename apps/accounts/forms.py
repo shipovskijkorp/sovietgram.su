@@ -56,6 +56,7 @@ class IdentifierAuthenticationForm(AuthenticationForm):
                 if (
                     user is not None
                     and not user.is_active
+                    and not user.platform_suspended_at
                     and user.email_verification_sent_at is not None
                     and user.check_password(password)
                 ):

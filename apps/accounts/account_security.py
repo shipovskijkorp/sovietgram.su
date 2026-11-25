@@ -422,6 +422,8 @@ def delete_account(request):
                 user = User.objects.select_for_update().filter(pk=request.user.pk).first()
                 if not user or not user.is_active:
                     form.add_error(None, "Аккаунт недоступен.")
+                elif user.platform_role or user.is_staff or user.is_superuser:
+                    form.add_error(None, "Сначала необходимо снять административные полномочия.")
                 elif form.cleaned_data["username"] != user.username:
                     form.add_error("username", "Имя пользователя не совпадает.")
                 elif not user.check_password(form.cleaned_data["password"]):

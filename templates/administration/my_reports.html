@@ -1,0 +1,5 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Мои жалобы — Sovietgram{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/administration.css' %}?v={{ static_version }}">{% endblock %}
+{% block content %}<main class="platform-main platform-personal"><header class="platform-heading"><div><a href="{% url 'messenger:home' %}">← В мессенджер</a><h1>Мои жалобы</h1></div></header>{% for message in messages %}<p class="platform-notice">{{ message }}</p>{% endfor %}<div class="platform-table-wrap"><table><thead><tr><th>Объект</th><th>Причина</th><th>Статус</th><th>Дата</th></tr></thead><tbody>{% for row in rows %}<tr><td>{{ row.target_label }}</td><td>{{ row.get_reason_display }}</td><td>{{ row.get_status_display }}</td><td>{{ row.created_at|date:"d.m.Y H:i" }}</td></tr>{% empty %}<tr><td colspan="4">Вы ещё не отправляли жалобы.</td></tr>{% endfor %}</tbody></table></div>{% include 'administration/_pagination.html' %}</main>{% endblock %}

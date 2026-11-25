@@ -23,5 +23,7 @@ class SovietgramUserAdmin(UserAdmin):
             return super().save_model(request, obj, form, change)
         writable = {field.name for field in obj._meta.concrete_fields if not field.primary_key and field.editable}
         fields = writable.intersection(form.changed_data) - {"password"}
+        if User.objects.filter(pk=obj.pk, platform_suspended_at__isnull=False).exists():
+            fields.discard("is_active")
         if fields:
             obj.save(update_fields=fields)

@@ -463,6 +463,8 @@
     const copyLink = contextMenu.querySelector('[data-message-action="copy-link"]');
     if (copyLink) copyLink.hidden = chatProtected;
     const deleteButton = contextMenu.querySelector('[data-message-action="delete"]');
+    const reportButton = contextMenu.querySelector('[data-message-action="report"]');
+    if (reportButton) reportButton.hidden = isOwn(article) || !article.dataset.messageId;
     const pinLabel = document.getElementById("messagePinLabel");
     const reactorsButton = contextMenu.querySelector('[data-message-action="reactors"]');
     if (reactorsButton) {
@@ -1108,6 +1110,9 @@
       }
       if (action === "copy-link" && !chatProtected) {
         copyText(messageLink(article)).then(() => notify("Ссылка скопирована. Доступ только у участников чата.")).catch(error => notify(error.message));
+      }
+      if (action === "report" && !isOwn(article) && /^\d+$/.test(article.dataset.messageId || "")) {
+        window.location.assign(actionButton.dataset.reportTemplate.replace(/\/0\/$/, "/" + article.dataset.messageId + "/"));
       }
       if (action === "reactors") openReactors(article);
       if (action === "readers") openReaders(article);

@@ -38,6 +38,7 @@
                 {% csrf_token %}
                 <button class="profile-action profile-action--primary" type="submit">Написать</button>
               </form>
+              <a class="profile-action" href="{% url 'administration:submit_report' 'user' profile_user.pk %}">Пожаловаться</a>
               {% if is_contact %}
                 <form method="post" action="{% url 'messenger:remove_contact' profile_user.username %}">
                   {% csrf_token %}

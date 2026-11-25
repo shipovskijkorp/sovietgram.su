@@ -74,6 +74,15 @@ class User(AbstractUser):
         default=365,
     )
 
+    class PlatformRole(models.TextChoices):
+        MEMBER = "", "Пользователь"
+        MODERATOR = "moderator", "Модератор"
+        ADMIN = "admin", "Администратор"
+        OWNER = "owner", "Владелец платформы"
+
+    platform_role = models.CharField(max_length=12, choices=PlatformRole.choices, blank=True, default="", editable=False, db_index=True)
+    platform_suspended_at = models.DateTimeField(null=True, blank=True, editable=False, db_index=True)
+    platform_suspension_reason = models.CharField(max_length=300, blank=True, default="", editable=False)
     security_version = models.PositiveBigIntegerField(default=0, editable=False)
     two_factor_secret = models.TextField(blank=True, default="", editable=False)
     two_factor_recovery_hashes = models.JSONField(default=list, blank=True, editable=False)

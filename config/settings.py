@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "apps.accounts.apps.AccountsConfig",
     "apps.messenger.apps.MessengerConfig",
+    "apps.administration",
 ]
 
 MIDDLEWARE = [

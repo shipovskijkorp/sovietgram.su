@@ -75,12 +75,16 @@ class Chat(models.Model):
     allowed_reactions = models.JSONField(default=None, null=True, blank=True)
     signatures_enabled = models.BooleanField(default=False)
     comments_enabled = models.BooleanField(default=False)
+    platform_public_restricted = models.BooleanField(default=False, editable=False)
     auto_delete_seconds = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True, db_index=True)
 
     class Meta:
         ordering = ("-updated_at", "-id")
+        constraints = [
+            models.CheckConstraint(condition=models.Q(platform_public_restricted=False) | models.Q(username__isnull=True), name="sg_chat_public_restriction"),
+        ]
 
     def __str__(self):
         return f"Chat {self.pk}"

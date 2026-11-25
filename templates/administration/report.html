@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}Жалоба — Sovietgram{% endblock %}
+{% block body_class %}auth-body{% endblock %}
+{% block content %}
+<main class="auth-shell"><section class="auth-card auth-card--wide"><div class="auth-heading"><p class="eyebrow">Модерация</p><h1>Отправить жалобу</h1><p>{{ label }}</p></div>
+{% if error %}<div class="form-alert">{{ error }}</div>{% endif %}
+<p>Жалоба будет доступна модераторам. {% if kind == 'message' %}Они смогут увидеть текст указанного сообщения, пока оно существует, но не всю переписку.{% endif %} Не добавляйте пароли и лишние личные данные.</p>
+<form method="post" class="auth-form">{% csrf_token %}<input type="hidden" name="account_id" value="{{ request.user.pk }}"><label class="field"><span>Причина</span><select name="reason" required>{% for value, name in reasons %}<option value="{{ value }}">{{ name }}</option>{% endfor %}</select></label><label class="field"><span>Дополнительная информация</span><textarea name="details" maxlength="1000" rows="5"></textarea></label><button class="primary-button">Отправить жалобу</button></form>
+<p class="auth-switch"><a href="{% url 'messenger:home' %}">Вернуться к чатам</a> · <a href="{% url 'administration:my_reports' %}">Мои жалобы</a></p></section></main>
+{% endblock %}

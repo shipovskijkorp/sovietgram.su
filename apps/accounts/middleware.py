@@ -12,7 +12,7 @@ def _purge_inactive_accounts(now, exclude_user_id=None):
     if not cache.add("sovietgram:privacy:inactive-purge", 1, timeout=3600):
         return
     User = get_user_model()
-    candidates = User.objects.filter(is_active=True).only(
+    candidates = User.objects.filter(is_active=True, platform_role="", is_staff=False, is_superuser=False).only(
         "id",
         "last_seen_at",
         "date_joined",
@@ -49,7 +49,7 @@ class UserActivityMiddleware:
             current_user_id = request.user.pk
             base = request.user.last_seen_at or request.user.date_joined
             days = int(request.user.delete_after_inactive_days or 365)
-            if base and base <= now - timedelta(days=days):
+            if not (request.user.platform_role or request.user.is_staff or request.user.is_superuser) and base and base <= now - timedelta(days=days):
                 expired = request.user
                 logout(request)
                 delete_user_account(expired)

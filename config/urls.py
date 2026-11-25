@@ -10,6 +10,7 @@ def _deny_private_media(request, path):
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("control/", include("apps.administration.urls")),
     path("", include("apps.accounts.urls")),
     path("", include("apps.messenger.urls")),
 ]

@@ -188,6 +188,8 @@ def _clean_public_username(chat, raw):
     username = (raw or "").strip().lstrip("@").lower()
     if not username:
         return ""
+    if chat.platform_public_restricted:
+        raise forms.ValidationError("Публичный адрес запрещён администрацией платформы.")
     if len(username) < 5 or not username.replace("_", "").isalnum():
         raise forms.ValidationError(
             "Адрес: минимум 5 символов, только буквы, цифры и подчёркивание."

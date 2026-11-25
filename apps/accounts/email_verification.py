@@ -47,7 +47,7 @@ def get_pending_verification(token):
         if not isinstance(user_id, int) or isinstance(user_id, bool):
             return None
         user = User.objects.filter(
-            pk=user_id, is_active=False, email_verified_at__isnull=True,
+            pk=user_id, is_active=False, email_verified_at__isnull=True, platform_suspended_at__isnull=True,
         ).first()
         if (
             user is None
@@ -101,6 +101,7 @@ def confirm_verification(token):
             is_active=False,
             email_verified_at__isnull=True,
             email_verification_sent_at=user.email_verification_sent_at,
+            platform_suspended_at__isnull=True,
         ).update(
             is_active=True,
             email_verified_at=timezone.now(),
@@ -117,6 +118,7 @@ def reserve_resend(email):
         user = User.objects.select_for_update().filter(
             email__iexact=email,
             is_active=False,
+            platform_suspended_at__isnull=True,
             email_verified_at__isnull=True,
         ).first()
         if user is None:
