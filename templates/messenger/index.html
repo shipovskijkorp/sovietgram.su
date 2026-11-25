@@ -102,6 +102,7 @@
     <main class="conversation conversation--chat{% if selected_chat.protect_content %} is-content-protected{% endif %}"
           data-chat-id="{{ selected_chat.pk }}"
           data-chat-url="{% url 'messenger:chat' selected_chat.pk %}"
+          data-gallery-url="{% url 'messenger:chat_gallery' selected_chat.pk %}"
           data-chat-action-url="{% url 'messenger:chat_action' selected_chat.pk %}"
           data-special-send-url="{% url 'messenger:send_special_message' selected_chat.pk %}"
           data-chat-type="{{ selected_chat.type }}"
@@ -188,6 +189,7 @@
                 <button type="submit"><span class="tg-native-icon tg-native-icon--pin" aria-hidden="true"></span><span class="chat-menu__label">{% if active_membership.is_pinned %}Открепить чат{% else %}Закрепить чат{% endif %}</span></button>
               </form>
               {% endif %}
+              <button type="button" data-open-gallery="media"><span class="archive-menu-svg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1.5"/><path d="m3 17 5-5 4 4 4-6 5 6"/></svg></span><span class="chat-menu__label">Медиа и файлы</span></button>
               <button type="button" data-chat-folders="{{ selected_chat.pk }}"><span class="archive-menu-svg"><svg viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v12H3zM12 11v6m-3-3h6"/></svg></span><span class="chat-menu__label">Папки чата</span></button>
               <form method="post" action="{% url 'messenger:chat_action' selected_chat.pk %}">
                 {% csrf_token %}<input type="hidden" name="action" value="archive">
@@ -492,11 +494,11 @@
                           {% if not selected_chat.protect_content %}<button type="button" data-save-sticker="{{ attachment.pk }}" title="Сохранить стикер в набор" aria-label="Сохранить стикер"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>{% endif %}
                         </div>
                       {% elif attachment.kind == 'image' %}
-                        <a class="message-media__item" href="{% url 'messenger:view_attachment' attachment.pk %}" target="_blank" rel="noopener" data-lightbox-image="{% url 'messenger:view_attachment' attachment.pk %}">
+                        <a class="message-media__item" href="{% url 'messenger:view_attachment' attachment.pk %}" target="_blank" rel="noopener" data-lightbox-image="{% url 'messenger:view_attachment' attachment.pk %}" data-media-name="{{ attachment.original_name }}" data-media-download="{% if not selected_chat.protect_content %}{% url 'messenger:download_attachment' attachment.pk %}{% endif %}">
                           <img class="message-media__image" src="{% url 'messenger:view_attachment' attachment.pk %}" alt="{{ attachment.original_name }}" loading="lazy">
                         </a>
                       {% elif attachment.kind == 'video' %}
-                        <video class="message-media__video" controls preload="metadata" src="{% url 'messenger:view_attachment' attachment.pk %}"></video>
+                        <div class="message-video-wrap"><video class="message-media__video" controls preload="metadata" src="{% url 'messenger:view_attachment' attachment.pk %}"></video><button type="button" class="message-video-expand" data-lightbox-video="{% url 'messenger:view_attachment' attachment.pk %}" data-media-name="{{ attachment.original_name }}" data-media-download="{% if not selected_chat.protect_content %}{% url 'messenger:download_attachment' attachment.pk %}{% endif %}" aria-label="Открыть видео" title="Открыть видео"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3h7v7M10 21H3v-7M21 3l-7 7M3 21l7-7"/></svg></button></div>
                       {% elif attachment.kind == 'voice' %}
                         <div class="voice-message"
                              data-voice-player
@@ -955,14 +957,14 @@
     {% endif %}
   </section>
   <section class="chat-info-section">
-    <div class="chat-info-section__title"><strong>Медиа и файлы</strong><span>{{ shared_attachments|length }}</span></div>
+    <div class="chat-info-section__title"><strong>Медиа и файлы</strong><button type="button" class="gallery-open-link" data-open-gallery="media">Все вложения</button></div>
     {% if shared_attachments %}
       <div class="shared-media-grid">
         {% for attachment in shared_attachments %}
           {% if attachment.kind == 'image' %}
             <a class="shared-media-item shared-media-item--image" href="{% url 'messenger:view_attachment' attachment.pk %}" target="_blank" rel="noopener" data-lightbox-image="{% url 'messenger:view_attachment' attachment.pk %}"><img src="{% url 'messenger:view_attachment' attachment.pk %}" alt="{{ attachment.original_name }}" loading="lazy"></a>
           {% elif attachment.kind == 'video' %}
-            <a class="shared-media-item shared-media-item--video" href="{% url 'messenger:view_attachment' attachment.pk %}" target="_blank" rel="noopener"><span>▶</span><small>{{ attachment.original_name }}</small></a>
+            <a class="shared-media-item shared-media-item--video" href="{% url 'messenger:view_attachment' attachment.pk %}" target="_blank" rel="noopener" data-lightbox-video="{% url 'messenger:view_attachment' attachment.pk %}" data-media-name="{{ attachment.original_name }}" data-media-download="{% if not selected_chat.protect_content %}{% url 'messenger:download_attachment' attachment.pk %}{% endif %}"><span>▶</span><small>{{ attachment.original_name }}</small></a>
           {% else %}
             <a class="shared-file-item" href="{{ attachment.ui_url }}"><span>↓</span><span><strong>{{ attachment.original_name }}</strong><small>{{ attachment.size|filesizeformat }}</small></span></a>
           {% endif %}
@@ -976,10 +978,7 @@
 {% include 'messenger/_community_profile_overlay.html' %}
 {% endif %}
 
-<div class="image-viewer" id="imageViewer" hidden>
-  <button id="imageViewerClose" type="button" aria-label="Закрыть"><span class="tg-native-icon tg-native-icon--close tg-native-icon--compact" aria-hidden="true"></span></button>
-  <img id="imageViewerImage" src="" alt="">
-</div>
+{% include 'messenger/_media_gallery.html' %}
 {% endif %}
 
 <div class="profile-drawer-backdrop" id="profileMenuBackdrop" aria-hidden="true"></div>
@@ -1213,6 +1212,7 @@
 <script src="{% static 'js/attachment-files.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/read-ack.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/chat.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/media-gallery.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/scheduled-messages.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/sound-notifications.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/voice-messages.js' %}?v={{ static_version }}"></script>

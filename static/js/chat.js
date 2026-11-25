@@ -309,6 +309,8 @@ function makeMedia(attachment, isOwn = false) {
     link.target = "_blank";
     link.rel = "noopener";
     link.dataset.lightboxImage = attachment.url;
+    link.dataset.mediaName = attachment.name || "";
+    link.dataset.mediaDownload = "/attachment/" + attachment.id + "/download/";
     const image = document.createElement("img");
     image.className = "message-media__image";
     image.src = attachment.url;
@@ -325,7 +327,19 @@ function makeMedia(attachment, isOwn = false) {
     video.controls = true;
     video.preload = "metadata";
     video.src = attachment.url;
-    return video;
+    const wrap = document.createElement("div");
+    wrap.className = "message-video-wrap";
+    const expand = document.createElement("button");
+    expand.type = "button";
+    expand.className = "message-video-expand";
+    expand.dataset.lightboxVideo = attachment.url;
+    expand.dataset.mediaName = attachment.name || "";
+    expand.dataset.mediaDownload = "/attachment/" + attachment.id + "/download/";
+    expand.setAttribute("aria-label", "Открыть видео");
+    expand.title = "Открыть видео";
+    expand.textContent = "⤢";
+    wrap.append(video, expand);
+    return wrap;
   }
 
   if (attachment.kind === "audio") {
@@ -944,22 +958,7 @@ document.querySelector("[data-open-chat-info]")?.addEventListener("click", () =>
 chatInfoBackdrop?.addEventListener("click", () => setChatInfo(false));
 chatInfoClose?.addEventListener("click", () => setChatInfo(false));
 
-const imageViewer = document.getElementById("imageViewer");
-const imageViewerImage = document.getElementById("imageViewerImage");
-const imageViewerClose = document.getElementById("imageViewerClose");
-function closeImageViewer() {
-  if (imageViewer) imageViewer.hidden = true;
-  if (imageViewerImage) imageViewerImage.src = "";
-}
-document.addEventListener("click", (event) => {
-  const link = event.target.closest("[data-lightbox-image]");
-  if (!link || !imageViewer || !imageViewerImage) return;
-  event.preventDefault();
-  imageViewerImage.src = link.dataset.lightboxImage;
-  imageViewer.hidden = false;
-});
-imageViewer?.addEventListener("click", (event) => { if (event.target === imageViewer) closeImageViewer(); });
-imageViewerClose?.addEventListener("click", closeImageViewer);
+// The independent media-gallery controller owns the image/video viewer.
 
 let draftTimer;
 let typingSentAt = 0;
@@ -1870,11 +1869,12 @@ if (messageStage) {
 }
 
 document.addEventListener("keydown", (event) => {
+  if (document.querySelector("dialog[open]")) return;
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f" && conversation) {
     event.preventDefault(); setSearchPanel(true); return;
   }
   if (event.key !== "Escape") return;
-  if (imageViewer && !imageViewer.hidden) { closeImageViewer(); return; }
+  if (document.querySelector("dialog[open]")) return;
   if (editModal && !editModal.hidden) { closeEditModal(); return; }
 
   if (mediaComposeBackdrop && !mediaComposeBackdrop.hidden) { closeMediaComposer(); return; }

@@ -1,0 +1,23 @@
+<dialog id="chatMediaGallery" class="chat-gallery-dialog" aria-labelledby="chatGalleryTitle">
+  <header><h2 id="chatGalleryTitle">Медиа и файлы</h2><button type="button" id="chatGalleryClose" aria-label="Закрыть">×</button></header>
+  <nav class="chat-gallery-tabs" aria-label="Тип вложений">
+    <button type="button" data-gallery-kind="media" aria-pressed="true">Медиа <small></small></button>
+    <button type="button" data-gallery-kind="files" aria-pressed="false">Файлы <small></small></button>
+    <button type="button" data-gallery-kind="audio" aria-pressed="false">Музыка <small></small></button>
+    <button type="button" data-gallery-kind="voice" aria-pressed="false">Голосовые <small></small></button>
+    <button type="button" data-gallery-kind="stickers" aria-pressed="false">Стикеры <small></small></button>
+  </nav>
+  <div class="chat-gallery-scroll"><p id="chatGalleryStatus" role="status"></p><div id="chatGalleryItems" class="chat-gallery-items"></div><button id="chatGalleryMore" class="gallery-open-link" type="button" hidden>Показать ещё</button></div>
+</dialog>
+<dialog class="image-viewer gallery-viewer" id="imageViewer" aria-label="Просмотр медиа" hidden>
+  <header class="gallery-viewer-header"><div><strong id="imageViewerName"></strong><small id="imageViewerCount"></small></div><a id="imageViewerDownload" href="#" hidden download>Скачать</a><button id="imageViewerClose" type="button" aria-label="Закрыть">×</button></header>
+  <div class="gallery-viewer-stage">
+    <button id="imageViewerPrev" type="button" aria-label="Предыдущий файл">‹</button>
+    <div class="gallery-viewer-content">
+      <img id="imageViewerImage" alt="" hidden>
+      <video id="imageViewerVideo" controls playsinline preload="metadata" hidden></video>
+      <p id="imageViewerError" role="status" hidden>Не удалось загрузить медиа.</p>
+    </div>
+    <button id="imageViewerNext" type="button" aria-label="Следующий файл">›</button>
+  </div>
+</dialog>

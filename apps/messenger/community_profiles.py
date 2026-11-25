@@ -25,7 +25,7 @@ from .models import (
     ChatParticipant,
     MessageAttachment,
 )
-from .services import attachment_url, invited_membership_defaults, set_membership_archived
+from .services import visible_chat_attachments, shared_attachment_payload, invited_membership_defaults, set_membership_archived
 from .ratelimit import rate_limit
 from .community_permissions import (
     ADMIN_RIGHTS, MEMBER_DENIALS, active_sanctions, admin_rights,
@@ -249,19 +249,6 @@ def _member_payload(actor, membership):
     }
 
 
-def _visible_attachments(chat, membership):
-    query = MessageAttachment.objects.filter(
-        message__chat=chat,
-        message__is_deleted=False,
-    )
-    if (
-        not chat.history_visible_to_new_members
-        and not membership.can_see_pre_join_history
-    ):
-        query = query.filter(message__created_at__gte=membership.joined_at)
-    return query.select_related("message").order_by("-id")
-
-
 def _profile_payload(request, chat):
     actor = _membership(chat, request.user)
     can_manage = _can_manage(actor)
@@ -288,19 +275,11 @@ def _profile_payload(request, chat):
         for item in memberships
     ] if members_visible else []
 
-    attachments = list(_visible_attachments(chat, actor)[:90])
-    attachment_items = [
-        {
-            "id": item.pk,
-            "kind": item.kind,
-            "name": item.original_name,
-            "size": item.size,
-            "url": attachment_url(item),
-            "created_at": timezone.localtime(item.created_at).strftime("%d.%m.%Y %H:%M"),
-            "message_url": f"{reverse('messenger:chat', args=[chat.pk])}?message={item.message_id}#message-{item.message_id}",
-        }
-        for item in attachments
-    ]
+    attachment_query = visible_chat_attachments(chat, actor)
+    media_types = [MessageAttachment.Kind.IMAGE, MessageAttachment.Kind.VIDEO]
+    media_count = attachment_query.filter(kind__in=media_types).count()
+    file_count = attachment_query.exclude(kind__in=media_types).count()
+    attachment_items = [shared_attachment_payload(item, chat) for item in attachment_query[:90]]
     count = len(memberships)
     noun = "подписчиков" if chat.type == Chat.Type.CHANNEL else "участников"
     return {
@@ -327,8 +306,9 @@ def _profile_payload(request, chat):
         "is_archived": actor.is_archived,
         "created_at": timezone.localtime(chat.created_at).strftime("%d.%m.%Y"),
         "attachments": attachment_items,
-        "media_count": sum(item.kind in {MessageAttachment.Kind.IMAGE, MessageAttachment.Kind.VIDEO} for item in attachments),
-        "file_count": sum(item.kind not in {MessageAttachment.Kind.IMAGE, MessageAttachment.Kind.VIDEO} for item in attachments),
+        "media_count": media_count,
+        "file_count": file_count,
+        "protect_content": chat.protect_content,
         "urls": {
             "chat": reverse("messenger:chat", args=[chat.pk]),
             "profile": reverse("messenger:community_profile", args=[chat.pk]),

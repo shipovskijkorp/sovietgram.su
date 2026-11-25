@@ -85,6 +85,8 @@ from .services import (
     apply_archive_rules_on_new_message,
     attachment_kind,
     attachment_url,
+    visible_chat_attachments,
+    shared_attachment_payload,
     clone_attachments,
     delete_message_content,
     get_or_create_direct_chat,
@@ -1013,9 +1015,7 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
     )
 
     shared_items = []
-    attachments = MessageAttachment.objects.filter(
-        message__in=_visible_message_queryset(selected_chat, user).filter(is_deleted=False)
-    ).select_related("message").order_by("-id")[:36]
+    attachments = visible_chat_attachments(selected_chat, membership)[:36]
     for attachment in attachments:
         attachment.ui_url = attachment_url(attachment)
         shared_items.append(attachment)
@@ -3395,9 +3395,52 @@ def typing(request, chat_id):
     return JsonResponse({"ok": True})
 
 
+@login_required
+@require_GET
+def chat_gallery(request, chat_id):
+    account_id = request.GET.get("account_id")
+    if account_id is not None and account_id != str(request.user.pk):
+        return JsonResponse({"ok": False, "error": "Аккаунт изменился."}, status=409)
+    chat = _chat_for_user(request.user, chat_id)
+    membership = _membership(chat, request.user)
+    kind = request.GET.get("kind", "media")
+    filters = {
+        "media": [MessageAttachment.Kind.IMAGE, MessageAttachment.Kind.VIDEO],
+        "files": [MessageAttachment.Kind.FILE],
+        "audio": [MessageAttachment.Kind.AUDIO],
+        "voice": [MessageAttachment.Kind.VOICE],
+        "stickers": [MessageAttachment.Kind.STICKER],
+    }
+    if kind not in filters:
+        return JsonResponse({"ok": False, "error": "Неизвестный раздел."}, status=400)
+    try:
+        before = _search_before(request)
+    except ValueError:
+        return JsonResponse({"ok": False, "error": "Некорректный курсор."}, status=400)
+    query = visible_chat_attachments(chat, membership)
+    counts = dict(query.order_by().values("kind").annotate(total=Count("pk")).values_list("kind", "total"))
+    selected = query.filter(kind__in=filters[kind])
+    if before:
+        selected = selected.filter(pk__lt=before)
+    rows = list(selected[:41])
+    more = len(rows) > 40
+    rows = rows[:40]
+    response = JsonResponse({
+        "ok": True, "account_id": request.user.pk,
+        "kind": kind, "protected": chat.protect_content,
+        "counts": {key: sum(counts.get(value, 0) for value in values) for key, values in filters.items()},
+        "items": [shared_attachment_payload(row, chat) for row in rows],
+        "next_before": rows[-1].pk if more else None,
+    })
+    response["Cache-Control"] = "private, no-store"
+    return response
+
+
 def _attachment_for_user(user, attachment_id):
     attachment = get_object_or_404(
-        MessageAttachment.objects.select_related("message", "message__chat"),
+        MessageAttachment.objects.select_related("message", "message__chat").filter(
+            Q(message__expires_at__isnull=True) | Q(message__expires_at__gt=timezone.now())
+        ),
         pk=attachment_id,
         message__chat__participants=user,
         message__is_deleted=False,

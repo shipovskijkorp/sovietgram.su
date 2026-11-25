@@ -160,6 +160,8 @@
       const link = document.createElement("a");
       link.className = "community-profile-media community-profile-media--" + item.kind;
       link.href = item.url;
+      link.dataset.mediaName = item.name;
+      link.dataset.mediaDownload = item.download_url || "";
       if (item.kind === "image") {
         link.dataset.lightboxImage = item.url;
         const image = document.createElement("img");
@@ -168,6 +170,7 @@
         image.loading = "lazy";
         link.appendChild(image);
       } else {
+        link.dataset.lightboxVideo = item.url;
         const mark = document.createElement("span");
         mark.textContent = "▶";
         const label = document.createElement("small");
@@ -181,7 +184,7 @@
     files.forEach((item) => {
       const link = document.createElement("a");
       link.className = "community-profile-file";
-      link.href = item.url;
+      link.href = profile.protect_content && item.kind === "file" ? item.message_url : item.url;
       const icon = document.createElement("span");
       icon.className = "community-profile-file__icon";
       const nativeIcon = document.createElement("span");

@@ -257,6 +257,40 @@ def delete_message_content(message):
     message.reactions.all().delete()
 
 
+def visible_chat_attachments(chat, membership):
+    """Use the same visibility rules in all shared media surfaces."""
+    if membership.is_hidden:
+        return MessageAttachment.objects.none()
+    query = MessageAttachment.objects.filter(
+        Q(message__expires_at__isnull=True) | Q(message__expires_at__gt=timezone.now()),
+        message__chat=chat,
+        message__is_deleted=False,
+        message_id__gt=membership.cleared_before_message_id,
+    ).exclude(message__hidden_for_users__user_id=membership.user_id)
+    if (
+        chat.type != Chat.Type.PRIVATE
+        and not chat.history_visible_to_new_members
+        and not membership.can_see_pre_join_history
+    ):
+        query = query.filter(message__created_at__gte=membership.joined_at)
+    return query.order_by("-pk")
+
+
+def shared_attachment_payload(attachment, chat):
+    return {
+        "id": attachment.pk,
+        "kind": attachment.kind,
+        "name": attachment.original_name,
+        "size": attachment.size,
+        "url": attachment_url(attachment),
+        "download_url": "" if chat.protect_content else reverse(
+            "messenger:download_attachment", args=[attachment.pk]
+        ),
+        "created_at": timezone.localtime(attachment.created_at).strftime("%d.%m.%Y %H:%M"),
+        "message_url": f"{reverse('messenger:chat', args=[chat.pk])}?message={attachment.message_id}#message-{attachment.message_id}",
+    }
+
+
 def attachment_url(attachment):
     if attachment.kind == MessageAttachment.Kind.FILE:
         return reverse("messenger:download_attachment", args=[attachment.pk])
