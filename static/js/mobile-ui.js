@@ -50,6 +50,15 @@
     }
   });
 
+  const composeMenu = document.getElementById("sidebarComposeMenu");
+  const composeButton = document.getElementById("sidebarComposeButton");
+  composeMenu?.addEventListener("click", event => {
+    if (event.target.closest("a")) {
+      composeMenu.hidden = true;
+      composeButton?.setAttribute("aria-expanded", "false");
+    }
+  });
+
   function setTools(open) {
     if (!tools || !toolsToggle) return;
     tools.hidden = !open;

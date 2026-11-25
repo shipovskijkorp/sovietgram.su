@@ -49,6 +49,11 @@
   }
   .app-body .sidebar-searchbar__menu { grid-column: 1; grid-row: 1; gap: 5px; }
   .app-body .sidebar-searchbar__menu:not(.sidebar-searchbar__back) > span { width: 20px; height: 2px; }
+  .app-body .sidebar-searchbar__back > .tg-native-icon {
+    width: 30px; height: 30px; flex-basis: 30px;
+    mask-size: 30px 30px; -webkit-mask-size: 30px 30px;
+    background-color: currentColor;
+  }
   .mobile-chat-title {
     display: block; grid-column: 2; grid-row: 1; min-width: 0;
     overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
