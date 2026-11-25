@@ -54,7 +54,10 @@ class TwoFactorTests(TestCase):
         self.assertNotEqual(self.client.session[PENDING]["secret"],secret)
         self.assertIn("no-store",setup["Cache-Control"])
         self.assertEqual(self.act("enable",otp="not-code").status_code,400)
-        response = self.act("enable",otp=pyotp.TOTP(secret).now())
+        enrollment_time = timezone.now()
+        enrollment_code = pyotp.TOTP(secret).at(int(enrollment_time.timestamp()))
+        with patch("apps.accounts.two_factor.timezone.now",return_value=enrollment_time):
+            response = self.act("enable",otp=enrollment_code)
         self.assertEqual(response.status_code,200,response.content)
         codes = response.context["codes"]
         self.assertEqual(len(codes),10)
@@ -67,7 +70,8 @@ class TwoFactorTests(TestCase):
         self.assertNotContains(self.client.get(self.url),codes[0])
         self.assertEqual(old.get(reverse("messenger:home")).status_code,302)
         self.assertIsNone(authenticate(username=self.user.username,password=self.password))
-        self.assertIsNone(authenticate(username=self.user.username,password=self.password,otp=pyotp.TOTP(secret).now()))
+        with patch("apps.accounts.two_factor.timezone.now",return_value=enrollment_time):
+            self.assertIsNone(authenticate(username=self.user.username,password=self.password,otp=enrollment_code))
         fresh = Client()
         self.assertTrue(fresh.login(username=self.user.email,password=self.password,otp=codes[0]))
         self.assertFalse(Client().login(username=self.user.email,password=self.password,otp=codes[0]))

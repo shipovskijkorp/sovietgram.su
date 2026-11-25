@@ -378,6 +378,35 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.click("#imageViewerClose")
         self.click("#chatGalleryClose")
 
+    def test_two_factor_enrollment_and_recovery_login(self):
+        import pyotp
+
+        self.go(query="?settings=privacy")
+        self.click('a[href="' + reverse("accounts:two_factor") + '"]')
+        self.page.locator('input[name="password"]').fill("Password-1945!")
+        self.page.get_by_role("button",name="Настроить двухфакторную защиту").click()
+        self.visible("#totpSetupSecret")
+        secret = self.page.locator("#totpSetupSecret").input_value()
+        self.page.locator('input[name="otp"]').fill(pyotp.TOTP(secret).now())
+        self.page.get_by_role("button",name="Включить защиту").click()
+        self.visible("#recoveryCodes")
+        codes = self.page.locator("#recoveryCodes").inner_text().split()
+        self.assertEqual(len(codes),10)
+        self.page.get_by_role("link",name="Я сохранил коды").click()
+        self.expect(self.page.locator("#recoveryRemaining")).to_have_text("10")
+        self.context.clear_cookies()
+        self.page.goto(self.live_server_url + reverse("accounts:login"))
+        self.page.locator("#id_username").fill(self.owner.username)
+        self.page.locator("#id_password").fill("Password-1945!")
+        self.page.get_by_role("button",name="Войти",exact=True).click()
+        self.visible("#id_otp")
+        self.page.locator("#id_password").fill("Password-1945!")
+        self.page.locator("#id_otp").fill(codes[0])
+        self.page.get_by_role("button",name="Войти",exact=True).click()
+        self.visible("#profileMenuButton")
+        self.page.goto(self.live_server_url + reverse("accounts:two_factor"))
+        self.expect(self.page.locator("#recoveryRemaining")).to_have_text("9")
+
     def test_notification_preferences_persist_after_reload(self):
         self.go(query="?settings=main")
         self.click('[data-settings-target="notifications"]')
