@@ -94,6 +94,78 @@
   const chatExportLink = chatMenu?.querySelector("[data-chat-export]");
   let chatProtected = conversation.dataset.chatProtected === "true";
 
+  const reactorsDialog = document.getElementById("messageReactorsDialog");
+  const reactorsStatus = document.getElementById("messageReactorsStatus");
+  const reactorsList = document.getElementById("messageReactorsList");
+  const reactorsFilters = document.getElementById("messageReactorsFilters");
+  const reactorsMore = document.getElementById("messageReactorsMore");
+  let reactorsUrl = "", reactorEmoji = "", reactorsAfter = 0, reactorGeneration = 0, reactorRequest = null;
+  function renderReactorFilters(counts) {
+    const choices = [{emoji:"", count:counts.reduce((sum, row) => sum + row.count, 0)}, ...counts];
+    reactorsFilters.replaceChildren(...choices.map(choice => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = (choice.emoji || "Все") + " " + choice.count;
+      button.setAttribute("aria-pressed", String(choice.emoji === reactorEmoji));
+      button.addEventListener("click", () => {
+        reactorEmoji = choice.emoji;
+        void loadReactors();
+      });
+      return button;
+    }));
+  }
+  async function loadReactors(append = false) {
+    if (!reactorsDialog?.open || !reactorsUrl) return;
+    reactorRequest?.abort();
+    const generation = ++reactorGeneration;
+    reactorRequest = new AbortController();
+    if (!append) { reactorsAfter = 0; reactorsList.replaceChildren(); }
+    reactorsStatus.textContent = "Загрузка…";
+    reactorsMore.hidden = true;
+    try {
+      const url = new URL(reactorsUrl, location.origin);
+      url.searchParams.set("account_id", document.body.dataset.accountId || "");
+      url.searchParams.set("emoji", reactorEmoji);
+      url.searchParams.set("after", String(reactorsAfter));
+      const response = await fetch(url, {credentials:"same-origin",cache:"no-store",signal:reactorRequest.signal});
+      const data = await response.json().catch(() => ({}));
+      if (generation !== reactorGeneration || !reactorsDialog.open) return;
+      if (!response.ok || !data.ok) throw new Error(data.error || "Реакции недоступны.");
+      renderReactorFilters(data.counts || []);
+      for (const reactor of data.reactors || []) {
+        const row = document.createElement("li");
+        const name = document.createElement("strong");
+        name.textContent = reactor.emoji + " " + reactor.name;
+        const username = document.createElement("small");
+        username.textContent = "@" + reactor.username;
+        row.append(name, username);
+        reactorsList.append(row);
+      }
+      reactorsStatus.textContent = data.anonymous ? "Реакции в каналах анонимны." : "Участники: " + data.visible_total;
+      reactorsAfter = data.next_after || 0;
+      reactorsMore.textContent = "Показать ещё";
+      reactorsMore.hidden = !reactorsAfter;
+    } catch (error) {
+      if (generation !== reactorGeneration || error.name === "AbortError") return;
+      reactorsStatus.textContent = error.message;
+      reactorsMore.textContent = "Повторить";
+      reactorsMore.hidden = false;
+    }
+  }
+  function openReactors(article) {
+    if (!reactorsDialog || !article.dataset.reactorsUrl) return;
+    reactorsUrl = article.dataset.reactorsUrl;
+    reactorEmoji = ""; reactorsAfter = 0;
+    reactorsFilters.replaceChildren();
+    if (!reactorsDialog.open) reactorsDialog.showModal();
+    void loadReactors();
+  }
+  reactorsMore?.addEventListener("click", () => { void loadReactors(Boolean(reactorsAfter)); });
+  document.getElementById("messageReactorsClose")?.addEventListener("click", () => reactorsDialog.close());
+  reactorsDialog?.addEventListener("close", () => {
+    reactorGeneration++; reactorRequest?.abort(); reactorsUrl = ""; reactorsList.replaceChildren();
+  });
+
   const readersDialog = document.getElementById("messageReadersDialog");
   const readersStatus = document.getElementById("messageReadersStatus");
   const readersList = document.getElementById("messageReadersList");
@@ -392,6 +464,11 @@
     if (copyLink) copyLink.hidden = chatProtected;
     const deleteButton = contextMenu.querySelector('[data-message-action="delete"]');
     const pinLabel = document.getElementById("messagePinLabel");
+    const reactorsButton = contextMenu.querySelector('[data-message-action="reactors"]');
+    if (reactorsButton) {
+      reactorsButton.hidden = !article.dataset.reactorsUrl || !article.querySelector("[data-message-reaction]");
+      reactorsButton.lastChild.textContent = chatType === "channel" ? "Реакции" : "Кто отреагировал";
+    }
     const readersButton = contextMenu.querySelector('[data-message-action="readers"]');
     if (readersButton) readersButton.hidden = chatType !== "group" || !isOwn(article) || !article.dataset.readersUrl;
 
@@ -1032,6 +1109,7 @@
       if (action === "copy-link" && !chatProtected) {
         copyText(messageLink(article)).then(() => notify("Ссылка скопирована. Доступ только у участников чата.")).catch(error => notify(error.message));
       }
+      if (action === "reactors") openReactors(article);
       if (action === "readers") openReaders(article);
       if (action === "edit") openEditModal(article);
       if (action === "forward") openForwardModal([article]);

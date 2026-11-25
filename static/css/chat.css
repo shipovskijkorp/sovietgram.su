@@ -1726,3 +1726,7 @@ body[data-theme="dark"] .message-readers-dialog { background:#211d1a; }
 .message-readers-dialog li { display:flex;flex-direction:column;gap:3px;padding:9px 0;border-bottom:1px solid var(--line); }
 .message-readers-dialog small { display:block;opacity:.75;font-size:11px; }
 .message-readers-dialog>small { margin-top:10px; }
+
+.message-reactors-filters { display:flex;flex-wrap:wrap;gap:6px;margin-top:12px; }
+.message-reactors-filters button { border:1px solid var(--line);border-radius:16px;padding:5px 9px;color:var(--ink);background:transparent;font:inherit;font-size:12px;cursor:pointer; }
+.message-reactors-filters button[aria-pressed="true"] { border-color:var(--red);color:var(--red);background:color-mix(in srgb,var(--red) 8%,transparent); }

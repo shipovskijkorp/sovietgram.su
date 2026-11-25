@@ -17,7 +17,7 @@ from django.test import override_settings
 from django.urls import reverse
 
 from apps.accounts.models import User
-from .models import Chat, ChatParticipant, Message, MessageAttachment
+from .models import Chat, ChatParticipant, Message, MessageAttachment, MessageReaction
 from .services import get_or_create_direct_chat
 
 
@@ -107,7 +107,7 @@ class BrowserControlsTests(StaticLiveServerTestCase):
             with self.subTest(chat_type=chat.type):
                 self.go(chat)
                 self.manage()
-                sections = ["type","invites","join-requests","admins","members","moderation","log"]
+                sections = ["type","reactions","invites","join-requests","admins","members","moderation","log"]
                 if chat.type == Chat.Type.GROUP:
                     sections.append("permissions")
                 for name in sections:
@@ -201,6 +201,27 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.click("#deleteMessageConfirm")
         self.hidden("#deleteMessageModal")
         self.expect(self.page.locator(message)).to_have_count(0)
+
+    def test_group_reaction_management_and_reactor_list(self):
+        MessageReaction.objects.create(message=self.message,user=self.peer,emoji="🔥")
+        self.go(self.group)
+        self.manage()
+        self.click('[data-community-settings-open="reactions"]')
+        self.visible('[data-community-settings-view="reactions"]')
+        self.click('#communitySettingsReactionChoices label:has(input[value="🔥"])')
+        self.click('#communitySettingsReactionsForm button[type="submit"]')
+        self.visible("#communitySettingsOverview")
+        self.click("#communitySettingsClose")
+        self.click("#communityProfileClose")
+        selector = '.message[data-message-id="' + str(self.message.pk) + '"]'
+        self.page.locator(selector).click(button="right")
+        self.hidden('#messageReactionPicker [data-pick-reaction="🔥"]')
+        self.visible('#messageReactionPicker [data-pick-reaction="👍"]')
+        self.click('[data-message-action="reactors"]')
+        self.visible("#messageReactorsDialog")
+        self.expect(self.page.locator("#messageReactorsList")).to_contain_text("@peer")
+        self.click("#messageReactorsClose")
+        self.hidden("#messageReactorsDialog")
 
     def test_group_message_readers_dialog(self):
         ChatParticipant.objects.filter(chat=self.group, user=self.peer).update(read_through_id=self.message.pk)
@@ -308,8 +329,10 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         mention = '[data-notification-preference="mention"]'
         badge = '[data-notification-preference="badge"]'
         self.expect(self.page.locator(mention)).to_be_checked()
-        self.click(mention)
-        self.click(badge)
+        # The native input is covered by its visible decorative track.
+        # Exercise the associated label rather than forcing a hidden click.
+        self.click('label:has(' + mention + ')')
+        self.click('label:has(' + badge + ')')
         self.expect(self.page.locator(mention)).not_to_be_checked()
         self.page.reload(wait_until="domcontentloaded")
         self.visible('[data-settings-screen="notifications"]')

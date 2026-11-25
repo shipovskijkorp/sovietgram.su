@@ -110,22 +110,51 @@
     return article.querySelector('[data-message-reaction][aria-pressed="true"]')?.dataset.messageReaction || "";
   }
 
+  function allowedReactions() {
+    const conversation = stage?.closest(".conversation--chat");
+    const value = conversation?.dataset.allowedReactions;
+    return value === undefined ? null : new Set(value.split(",").filter(Boolean));
+  }
+
+  function setAllowedReactions(values) {
+    const conversation = stage?.closest(".conversation--chat");
+    if (!conversation || !Array.isArray(values)) return;
+    conversation.dataset.allowedReactions = values.join(",");
+    // If a menu is currently open, hide forbidden additions immediately.
+    const article = document.querySelector(".message.is-context-target");
+    if (article) preparePicker(article);
+  }
+
   function preparePicker(article) {
     const picker = document.getElementById("messageReactionPicker");
     if (!picker) return;
-    picker.hidden = !article.dataset.reactionUrl;
     const selected = selectedReaction(article);
-    picker.querySelectorAll("[data-pick-reaction]").forEach(button =>
-      button.setAttribute("aria-pressed", String(button.dataset.pickReaction === selected)));
+    const allowed = allowedReactions();
+    let visible = 0;
+    picker.querySelectorAll("[data-pick-reaction]").forEach(button => {
+      const emoji = button.dataset.pickReaction;
+      // Keep an existing selected reaction removable even if it is now forbidden.
+      button.hidden = emoji !== selected && allowed !== null && !allowed.has(emoji);
+      button.setAttribute("aria-pressed", String(emoji === selected));
+      if (!button.hidden) visible++;
+    });
+    picker.hidden = !article.dataset.reactionUrl || !visible;
   }
 
   const pending = new WeakSet();
   async function toggleReaction(article, emoji) {
     if (!article?.dataset.reactionUrl || pending.has(article)) return;
+    const desired = selectedReaction(article) === emoji ? "" : emoji;
+    const allowed = allowedReactions();
+    if (desired && allowed !== null && !allowed.has(desired)) {
+      window.showToast?.("Эта реакция недоступна в переписке.");
+      return;
+    }
     pending.add(article);
     try {
       const body = new FormData();
-      body.append("emoji", selectedReaction(article) === emoji ? "" : emoji);
+      body.append("emoji", desired);
+      if (document.body.dataset.accountId) body.append("account_id", document.body.dataset.accountId);
       const csrf = document.querySelector("[name='csrfmiddlewaretoken']")?.value || "";
       body.append("csrfmiddlewaretoken", csrf);
       const response = await fetch(article.dataset.reactionUrl, {
@@ -158,7 +187,7 @@
     return { text: text.slice(0, token.start) + value + tail, caret: token.start + value.length };
   }
 
-  window.SovietgramSocial = { tokenize, renderText, renderReactions, preparePicker, toggleReaction, mentionToken, insertMention };
+  window.SovietgramSocial = { tokenize, renderText, renderReactions, preparePicker, toggleReaction, mentionToken, insertMention, setAllowedReactions };
 
   if (!stage) return;
   document.querySelectorAll(".message[data-message-id]").forEach(article => {

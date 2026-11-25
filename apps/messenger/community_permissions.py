@@ -2,7 +2,7 @@
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import Chat, ChatMemberModeration, ChatParticipant
+from .models import Chat, ChatMemberModeration, ChatParticipant, MessageReaction
 
 ADMIN_RIGHTS = {
     "change_info": "Изменение информации и адреса",
@@ -20,6 +20,7 @@ MEMBER_DENIALS = {
     "send_links": "Отправка ссылок",
     "add_members": "Добавление участников",
     "pin_messages": "Закрепление сообщений",
+    "react": "Добавление реакций",
 }
 DURATIONS = {"1h": 3600, "8h": 28800, "1d": 86400, "7d": 604800, "30d": 2592000, "forever": None}
 
@@ -85,3 +86,22 @@ def can_moderate(actor, target):
         and has_admin_right(actor, "moderate_members")
         and (actor.role == ChatParticipant.Role.OWNER or target.role == ChatParticipant.Role.MEMBER)
     )
+
+
+def allowed_reaction_emojis(chat):
+    choices = MessageReaction.Emoji.values
+    if chat.type == Chat.Type.PRIVATE or chat.allowed_reactions is None:
+        return list(choices)
+    if not isinstance(chat.allowed_reactions, list):
+        return []
+    return [emoji for emoji in choices if emoji in chat.allowed_reactions]
+
+
+def member_reaction_emojis(chat, membership):
+    if membership is None or membership.is_hidden:
+        return []
+    if chat.type != Chat.Type.PRIVATE and (
+        is_banned(chat, membership.user_id) or "react" in member_denials(chat, membership)
+    ):
+        return []
+    return allowed_reaction_emojis(chat)

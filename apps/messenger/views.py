@@ -68,7 +68,9 @@ from apps.accounts.privacy import (
 from .forms import CommunityForm, EditMessageForm, MessageForm
 from .media_processing import THUMBNAIL_VERSION, compress_image_upload, make_thumbnail
 from PIL import Image
-from .community_permissions import can_pin_messages, has_admin_right, is_banned, member_denials
+from .community_permissions import (
+    can_pin_messages, has_admin_right, is_banned, member_denials, member_reaction_emojis,
+)
 from .folder_rules import decorate_folder_categories, matching_chats, requested_folder
 from .markdown import render_message_markdown
 from .models import (
@@ -1053,6 +1055,8 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
             "mention_url": reverse("messenger:mention_candidates", args=[selected_chat.pk]),
             "markdown_preview_url": reverse("messenger:markdown_preview", args=[selected_chat.pk]),
             "reaction_choices": MessageReaction.Emoji.choices,
+            "allowed_reactions": member_reaction_emojis(selected_chat, membership)
+                if selected_chat.type != Chat.Type.PRIVATE or can_send_text else [],
             "mention_profile_prefix": reverse("accounts:public_profile", args=["__mention__"]).split("__mention__")[0],
             "draft_url": reverse("messenger:save_draft", args=[selected_chat.pk]),
             "scheduled_url": reverse("messenger:scheduled_messages", args=[selected_chat.pk]),
@@ -2914,16 +2918,24 @@ def mention_candidates(request, chat_id):
 @require_POST
 @rate_limit("message_reaction")
 def message_reaction(request, chat_id, message_id):
+    account_id = request.POST.get("account_id")
+    if account_id is not None and account_id != str(request.user.pk):
+        return JsonResponse({"ok": False, "error": "Аккаунт изменился."}, status=409)
     chat = _chat_for_user(request.user, chat_id)
     emoji = request.POST.get("emoji")
     if emoji is None or (emoji and emoji not in MessageReaction.Emoji.values):
         return JsonResponse({"ok": False, "error": "Неизвестная реакция."}, status=400)
     with transaction.atomic():
+        # Serialize permission changes with reaction writes, using the same
+        # lock order as community moderation (chat, membership, message).
+        chat = get_object_or_404(Chat.objects.select_for_update(), pk=chat.pk)
         membership = ChatParticipant.objects.select_for_update().filter(
             chat=chat, user=request.user, is_hidden=False,
         ).first()
         if membership is None:
             raise Http404
+        if emoji and emoji not in member_reaction_emojis(chat, membership):
+            return JsonResponse({"ok": False, "error": "Эта реакция недоступна в сообществе."}, status=403)
         if emoji and chat.type == Chat.Type.PRIVATE and not _posting_capabilities(
             chat, membership, request.user,
         )["text"]:
@@ -2959,6 +2971,59 @@ def message_reaction(request, chat_id, message_id):
             "reaction_version": message.reaction_version,
             "reactions": serialize_reactions(message, request.user),
         })
+
+
+@login_required
+@require_GET
+@rate_limit("message_reaction")
+def message_reactors(request, chat_id, message_id):
+    account_id = request.GET.get("account_id")
+    if account_id is not None and account_id != str(request.user.pk):
+        return JsonResponse({"ok": False, "error": "Аккаунт изменился."}, status=409)
+    chat = _chat_for_user(request.user, chat_id)
+    message = get_object_or_404(_visible_message_queryset(chat, request.user), pk=message_id, is_deleted=False)
+    emoji = request.GET.get("emoji", "")
+    if emoji and emoji not in MessageReaction.Emoji.values:
+        return JsonResponse({"ok": False, "error": "Неизвестная реакция."}, status=400)
+    try:
+        after = int(request.GET.get("after", "0"))
+        if not 0 <= after <= 9223372036854775807:
+            raise ValueError
+    except (ValueError, TypeError, OverflowError):
+        return JsonResponse({"ok": False, "error": "Некорректный курсор."}, status=400)
+
+    counts = serialize_reactions(message, request.user)
+    # Reactions to channel posts remain anonymous, including for admins.
+    # In groups/direct chats reveal only current visible participants.
+    anonymous = chat.type == Chat.Type.CHANNEL
+    reactors = []
+    next_after = None
+    visible_total = 0
+    if not anonymous:
+        memberships = ChatParticipant.objects.filter(chat=chat, is_hidden=False, cleared_before_message_id__lt=message.pk)
+        memberships = memberships.exclude(
+            user_id__in=MessageHiddenForUser.objects.filter(message=message).values("user_id")
+        )
+        if chat.type == Chat.Type.GROUP and not chat.history_visible_to_new_members:
+            memberships = memberships.filter(
+                Q(can_see_pre_join_history=True) | Q(joined_at__lte=message.created_at)
+            )
+        query = MessageReaction.objects.filter(message=message, user_id__in=memberships.values("user_id"))
+        if emoji:
+            query = query.filter(emoji=emoji)
+        visible_total = query.count()
+        rows = list(query.filter(pk__gt=after).select_related("user").order_by("pk")[:51])
+        more = len(rows) > 50
+        rows = rows[:50]
+        reactors = [{"name": row.user.display_name, "username": row.user.username, "emoji": row.emoji} for row in rows]
+        next_after = rows[-1].pk if more else None
+    response = JsonResponse({
+        "ok": True, "account_id": request.user.pk,
+        "anonymous": anonymous, "counts": counts, "reactors": reactors,
+        "visible_total": visible_total, "next_after": next_after,
+    })
+    response["Cache-Control"] = "private, no-store"
+    return response
 
 
 def _search_before(request):
@@ -4012,6 +4077,8 @@ def poll_messages(request, chat_id):
             "other_user_profile_url": other_user_profile_url,
             "chat_id": chat.pk,
             "chat_type": chat.type,
+            "allowed_reactions": member_reaction_emojis(chat, membership)
+                if chat.type != Chat.Type.PRIVATE or _posting_capabilities(chat, membership, request.user)["text"] else [],
             "protect_content": chat.protect_content,
             "is_muted": membership.notifications_muted,
             "muted_until": (

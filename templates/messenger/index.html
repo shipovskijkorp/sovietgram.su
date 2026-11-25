@@ -106,6 +106,7 @@
           data-chat-action-url="{% url 'messenger:chat_action' selected_chat.pk %}"
           data-special-send-url="{% url 'messenger:send_special_message' selected_chat.pk %}"
           data-chat-type="{{ selected_chat.type }}"
+          data-allowed-reactions="{{ allowed_reactions|join:',' }}"
           data-chat-role="{{ active_membership.role }}"
           data-can-moderate-messages="{{ can_moderate_messages|yesno:'true,false' }}"
           data-chat-saved="{{ selected_chat.is_saved_ui|yesno:'true,false' }}"
@@ -380,6 +381,7 @@
                      data-forward-url="{% url 'messenger:forward_message' selected_chat.pk message.pk %}"
                      data-pin-url="{% url 'messenger:pin_message' selected_chat.pk message.pk %}"
                      data-reaction-url="{% url 'messenger:message_reaction' selected_chat.pk message.pk %}"
+                     data-reactors-url="{% url 'messenger:message_reactors' selected_chat.pk message.pk %}"
                      data-reaction-version="{{ message.reaction_version }}">
               {% if message.forwarded_from_name %}
                 <div class="message-forwarded">
@@ -833,6 +835,7 @@
   <button type="button" data-message-action="reply"><span class="tg-native-icon tg-native-icon--reply" aria-hidden="true"></span>Ответить</button>
   <button type="button" data-message-action="copy"><span class="tg-native-icon tg-native-icon--copy" aria-hidden="true"></span>Копировать текст</button>
   <button type="button" data-message-action="copy-link"><svg class="message-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a4 4 0 0 0 6 0l4-4a4 4 0 0 0-6-6l-2 2m2 6a4 4 0 0 0-6 0l-4 4a4 4 0 0 0 6 6l2-2"/></svg>Копировать ссылку</button>
+  <button type="button" data-message-action="reactors" hidden><svg class="message-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 14c2 3 6 3 8 0M9 9h.01M15 9h.01" stroke-linecap="round"/></svg>Кто отреагировал</button>
   <button type="button" data-message-action="readers" hidden><svg class="message-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 12 4 4L17 6m-6 10L21 6"/></svg>Кто прочитал</button>
   <button type="button" data-message-action="edit"><span class="tg-native-icon tg-native-icon--edit" aria-hidden="true"></span>Изменить</button>
   <button type="button" data-message-action="forward"><span class="tg-native-icon tg-native-icon--forward" aria-hidden="true"></span>Переслать</button>
@@ -843,6 +846,14 @@
   <button class="message-context-menu__danger" type="button" data-message-action="delete"><span class="tg-native-icon tg-native-icon--clear" aria-hidden="true"></span>Удалить сообщение</button>
 </div>
 
+<dialog class="message-readers-dialog" id="messageReactorsDialog" aria-labelledby="messageReactorsTitle">
+  <header><strong id="messageReactorsTitle">Реакции</strong><button type="button" id="messageReactorsClose" aria-label="Закрыть">×</button></header>
+  <div id="messageReactorsFilters" class="message-reactors-filters" aria-label="Фильтр реакций"></div>
+  <p id="messageReactorsStatus" role="status"></p>
+  <ul id="messageReactorsList"></ul>
+  <button type="button" id="messageReactorsMore" class="gallery-open-link" hidden>Показать ещё</button>
+  <small>В каналах реакции анонимны. В группах и личных чатах показываются только участники, сохраняющие доступ к сообщению.</small>
+</dialog>
 <dialog class="message-readers-dialog" id="messageReadersDialog" aria-labelledby="messageReadersTitle">
   <header><strong id="messageReadersTitle">Кто прочитал</strong><button type="button" id="messageReadersClose" aria-label="Закрыть">×</button></header>
   <p id="messageReadersStatus" role="status"></p>

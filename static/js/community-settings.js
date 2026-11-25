@@ -83,6 +83,8 @@
   async function post(url, values) {
     const body = new FormData();
     body.append("csrfmiddlewaretoken", csrf());
+    if (!Object.hasOwn(values || {}, "account_id") && document.body.dataset.accountId)
+      body.append("account_id", document.body.dataset.accountId);
     Object.entries(values || {}).forEach(([key, value]) => {
       if (value !== undefined && value !== null) body.append(key, String(value));
     });
@@ -184,13 +186,15 @@
       const slow = Number(settings.permissions.slow_mode_seconds) || 0;
       permissionsSummary.textContent = String(denied) + "/" + String(total) + " запрещено" + (slow ? " · медленный режим " + slowModeText(slow) : "");
     }
+    $("communitySettingsReactionsSummary").textContent = settings.allowed_reactions?.length
+      ? settings.allowed_reactions.length + " доступно" : "Отключены";
     inviteSummary.textContent = String(settings.active_invite_count || 0) + " активн.";
     const joinSummary=$("communitySettingsJoinSummary");
     if(joinSummary)joinSummary.textContent = String(settings.pending_join_count || 0) + " ожидают";
     adminSummary.textContent = String(settings.admin_count || 0);
     memberSummary.textContent = String(settings.member_count || 0);
     const rights=new Set(settings.admin_rights||[]);
-    const required={type:"change_info",permissions:"manage_permissions",invites:"invite_users","join-requests":"invite_users",moderation:"moderate_members"};
+    const required={type:"change_info",permissions:"manage_permissions",reactions:"manage_permissions",invites:"invite_users","join-requests":"invite_users",moderation:"moderate_members"};
     for(const [view,right] of Object.entries(required)){
       const control=panel.querySelector('[data-community-settings-open="'+view+'"]');
       if(control)control.hidden=!rights.has(right);
@@ -571,8 +575,31 @@
     });
   }
 
+  function renderReactionSettings() {
+    const choices = $("communitySettingsReactionChoices");
+    if (!choices || !settings) return;
+    const allowed = new Set(settings.allowed_reactions || []);
+    choices.replaceChildren(...(settings.reaction_choices || []).map(choice => {
+      const label = document.createElement("label");
+      label.className = "community-settings-toggle-row";
+      const title = document.createElement("strong");
+      title.textContent = choice.emoji + " " + choice.label;
+      const toggle = document.createElement("span");
+      toggle.className = "community-settings-switch";
+      const input = document.createElement("input");
+      input.type = "checkbox"; input.name = "reaction"; input.value = choice.emoji;
+      input.checked = allowed.has(choice.emoji);
+      const track = document.createElement("span");
+      track.append(document.createElement("i"));
+      toggle.append(input, track);
+      label.append(title, toggle);
+      return label;
+    }));
+  }
+
   function render() {
     renderOverview();
+    renderReactionSettings();
     renderTypeForm();
     renderPermissionsForm();
     renderInvites();
@@ -757,6 +784,26 @@
       permissionsError.textContent = error.message;
       permissionsError.hidden = false;
     }
+  });
+
+  $("communitySettingsReactionsForm")?.addEventListener("submit", async event => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const submit = form.querySelector('button[type="submit"]');
+    const errorNode = $("communitySettingsReactionsError");
+    if (submit.disabled || !settings) return;
+    errorNode.hidden = true;
+    submit.disabled = true;
+    try {
+      const values = [...form.querySelectorAll('input[name="reaction"]:checked')].map(input => input.value);
+      await applySettings({section:"reactions", reactions:JSON.stringify(values)});
+      window.SovietgramSocial?.setAllowedReactions(settings.allowed_reactions);
+      setView("overview");
+      toast("Реакции сохранены.");
+    } catch (error) {
+      errorNode.textContent = error.message;
+      errorNode.hidden = false;
+    } finally { submit.disabled = false; }
   });
 
   signatures?.addEventListener("change", async () => {

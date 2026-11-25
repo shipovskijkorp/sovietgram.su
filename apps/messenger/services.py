@@ -567,6 +567,7 @@ def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=No
         "reactions": serialize_reactions(message, current_user),
         "urls": {
             "reaction": reverse("messenger:message_reaction", args=[message.chat_id, message.pk]),
+            "reactors": reverse("messenger:message_reactors", args=[message.chat_id, message.pk]),
             "edit": reverse("messenger:edit_message", args=[message.chat_id, message.pk]),
             "delete": reverse("messenger:delete_message", args=[message.chat_id, message.pk]),
             "forward": reverse("messenger:forward_message", args=[message.chat_id, message.pk]),

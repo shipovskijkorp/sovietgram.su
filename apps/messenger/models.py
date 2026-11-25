@@ -71,6 +71,8 @@ class Chat(models.Model):
     members_can_add_members = models.BooleanField(default=False)
     members_can_pin_messages = models.BooleanField(default=False)
     slow_mode_seconds = models.PositiveSmallIntegerField(default=0)
+    # NULL allows the full current reaction catalog; [] disables new reactions.
+    allowed_reactions = models.JSONField(default=None, null=True, blank=True)
     signatures_enabled = models.BooleanField(default=False)
     auto_delete_seconds = models.PositiveIntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)

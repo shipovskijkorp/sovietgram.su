@@ -52,6 +52,7 @@ urlpatterns = [
     path("chat/<int:chat_id>/action/", views.chat_action, name="chat_action"),
     path("chat/<int:chat_id>/message/<int:message_id>/edit/", views.edit_message, name="edit_message"),
     path("chat/<int:chat_id>/message/<int:message_id>/reaction/", views.message_reaction, name="message_reaction"),
+    path("chat/<int:chat_id>/message/<int:message_id>/reactors/", views.message_reactors, name="message_reactors"),
     path("chat/<int:chat_id>/message/<int:message_id>/delete/", views.delete_message, name="delete_message"),
     path("chat/<int:chat_id>/message/<int:message_id>/forward/", views.forward_message, name="forward_message"),
     path("chat/<int:chat_id>/message/<int:message_id>/pin/", views.pin_message, name="pin_message"),

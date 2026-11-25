@@ -201,6 +201,11 @@
       </div>
 
       <div class="community-settings__group">
+        <button class="community-settings-row" type="button" data-community-settings-open="reactions">
+          <span class="community-settings-row__icon" aria-hidden="true">☺</span>
+          <span class="community-settings-row__copy"><strong>Реакции</strong><small id="communitySettingsReactionsSummary"></small></span>
+          <b>›</b>
+        </button>
         <button class="community-settings-row" type="button" data-community-settings-open="invites">
           <span class="community-settings-row__icon"><span class="tg-native-icon tg-native-icon--copy" aria-hidden="true"></span></span>
           <span class="community-settings-row__copy">
@@ -314,6 +319,18 @@
     </section>
     {% endif %}
 
+    <section class="community-settings__subview" data-community-settings-view="reactions" hidden>
+      <header class="community-settings__subheader">
+        <button type="button" data-community-settings-back aria-label="Назад"><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span></button>
+        <strong>Реакции</strong><span></span>
+      </header>
+      <form class="community-settings__form" id="communitySettingsReactionsForm">
+        <p class="community-settings__hint">Выберите разрешённые реакции. Если снять все отметки, новые реакции будут запрещены. Уже поставленные можно удалить.</p>
+        <div id="communitySettingsReactionChoices"></div>
+        <p class="community-settings__error" id="communitySettingsReactionsError" role="alert" hidden></p>
+        <footer><button type="submit">Сохранить</button></footer>
+      </form>
+    </section>
     <section class="community-settings__subview" data-community-settings-view="invites" hidden>
       <header class="community-settings__subheader">
         <button type="button" data-community-settings-back><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span></button>

@@ -1,5 +1,6 @@
 import secrets
 from datetime import timedelta
+import json
 
 from django import forms
 from django.contrib import messages
@@ -24,12 +25,13 @@ from .models import (
     ChatMemberModeration,
     ChatParticipant,
     MessageAttachment,
+    MessageReaction,
 )
 from .services import visible_chat_attachments, shared_attachment_payload, invited_membership_defaults, set_membership_archived
 from .ratelimit import rate_limit
 from .community_permissions import (
     ADMIN_RIGHTS, MEMBER_DENIALS, active_sanctions, admin_rights,
-    can_add_members, can_moderate, has_admin_right, is_banned,
+    can_add_members, can_moderate, has_admin_right, is_banned, allowed_reaction_emojis,
 )
 
 User = get_user_model()
@@ -430,6 +432,8 @@ def _settings_payload(request, chat):
             "restriction_total": len(restrictions),
         },
         "signatures_enabled": chat.signatures_enabled,
+        "allowed_reactions": allowed_reaction_emojis(chat),
+        "reaction_choices": [{"emoji": emoji, "label": label} for emoji, label in MessageReaction.Emoji.choices],
         "member_count": len(memberships),
         "admin_count": len(admins),
         "admins": admins,
@@ -526,6 +530,9 @@ def community_profile_update(request, chat_id):
 @require_http_methods(["GET", "POST"])
 @transaction.atomic
 def community_settings(request, chat_id):
+    account_id = (request.POST if request.method == "POST" else request.GET).get("account_id")
+    if account_id is not None and account_id != str(request.user.pk):
+        return _json_error("Аккаунт изменился. Обновите страницу.", status=409)
     chat = _collective_chat_for_user(request.user, chat_id)
     if request.method == "POST":
         chat = get_object_or_404(Chat.objects.select_for_update(), pk=chat.pk)
@@ -537,7 +544,7 @@ def community_settings(request, chat_id):
         return JsonResponse({"ok": True, "settings": _settings_payload(request, chat)})
 
     section = request.POST.get("section", "").strip()
-    right = {"type": "change_info", "permissions": "manage_permissions", "signatures": "change_info"}.get(section)
+    right = {"type": "change_info", "permissions": "manage_permissions", "signatures": "change_info", "reactions": "manage_permissions"}.get(section)
     if right and not has_admin_right(membership, right):
         return _json_error("Недостаточно прав для изменения этих настроек.", status=403)
     if section == "type":
@@ -589,6 +596,22 @@ def community_settings(request, chat_id):
             "updated_at",
         ))
         _log(chat, request.user, "permissions", "Изменены права участников группы.")
+
+    elif section == "reactions":
+        try:
+            selected = json.loads(request.POST.get("reactions", ""))
+            if not isinstance(selected, list) or any(
+                type(emoji) is not str or emoji not in MessageReaction.Emoji.values for emoji in selected
+            ):
+                raise ValueError
+        except (ValueError, TypeError):
+            return _json_error("Некорректный набор реакций.")
+        selected = [emoji for emoji in MessageReaction.Emoji.values if emoji in selected]
+        new_value = None if selected == list(MessageReaction.Emoji.values) else selected
+        if chat.allowed_reactions != new_value:
+            chat.allowed_reactions = new_value
+            chat.save(update_fields=("allowed_reactions", "updated_at"))
+            _log(chat, request.user, "reactions", "Изменены доступные реакции: " + (" ".join(selected) or "отключены"))
 
     elif section == "signatures":
         if chat.type != Chat.Type.CHANNEL:

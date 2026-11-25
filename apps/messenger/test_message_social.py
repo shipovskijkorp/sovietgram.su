@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from apps.accounts.lifecycle import delete_user_account
 from apps.accounts.models import User, UserBlock
-from .models import Chat, ChatParticipant, Message, MessageHiddenForUser, MessageReaction
+from .models import Chat, ChatParticipant, Message, MessageHiddenForUser, MessageReaction, ChatMemberModeration, ChatAdminLog
 from .services import get_or_create_direct_chat
 
 
@@ -158,3 +158,64 @@ class MessageSocialTests(TestCase):
                 self.assertEqual([item["id"] for item in self.client.get(search, {"q": query}).json()["results"]], [exact.pk])
                 global_results = self.client.get(reverse("messenger:global_search"), {"q": query}).json()["messages"]
                 self.assertEqual([item["id"] for item in global_results], [exact.pk])
+
+
+    def test_community_reaction_configuration_and_individual_restrictions(self):
+        group = Chat.objects.create(type=Chat.Type.GROUP, title="Restricted")
+        ChatParticipant.objects.create(chat=group, user=self.bob, role="owner")
+        ChatParticipant.objects.create(chat=group, user=self.alice)
+        ChatParticipant.objects.create(chat=group, user=self.outsider, role="admin", admin_permissions=[])
+        msg = Message.objects.create(chat=group, sender=self.bob, text="News")
+        url = reverse("messenger:message_reaction", args=[group.pk,msg.pk])
+        settings_url = reverse("messenger:community_settings", args=[group.pk])
+        owner = Client()
+        owner.force_login(self.bob)
+        admin = Client()
+        admin.force_login(self.outsider)
+        self.assertEqual(self.react("🔥",url=url).status_code,200)
+        values = {"section":"reactions","reactions":'["👍"]'}
+        self.assertEqual(self.client.post(settings_url,values).status_code,403)
+        self.assertEqual(admin.post(settings_url,values).status_code,403)
+        self.assertEqual(owner.post(settings_url, {"section":"reactions","reactions":'["bad"]'}).status_code,400)
+        result = owner.post(settings_url, values)
+        self.assertEqual(result.status_code,200,result.content)
+        self.assertEqual(result.json()["settings"]["allowed_reactions"],["👍"])
+        self.assertEqual(self.react("❤️",url=url).status_code,403)
+        self.assertEqual(self.react("",url=url).status_code,200)
+        self.assertEqual(self.react("👍",url=url).status_code,200)
+        payload = self.client.get(reverse("messenger:poll_messages",args=[group.pk])).json()
+        self.assertEqual(payload["allowed_reactions"],["👍"])
+        sanction = ChatMemberModeration.objects.create(chat=group,user=self.alice,denied_permissions=["react"])
+        self.assertEqual(self.react("👍",url=url).status_code,403)
+        self.assertEqual(self.react("",url=url).status_code,200)
+        sanction.delete()
+        self.assertEqual(owner.post(settings_url, {"section":"reactions","reactions":"[]"}).status_code,200)
+        self.assertEqual(self.react("👍",url=url).status_code,403)
+        self.assertTrue(ChatAdminLog.objects.filter(chat=group,action="reactions").exists())
+
+    def test_reactor_list_respects_membership_filters_and_channel_anonymity(self):
+        group = Chat.objects.create(type=Chat.Type.GROUP, title="Reactors")
+        ChatParticipant.objects.create(chat=group,user=self.alice,role="owner")
+        ChatParticipant.objects.create(chat=group,user=self.bob)
+        message = Message.objects.create(chat=group,sender=self.alice,text="Group")
+        MessageReaction.objects.create(message=message,user=self.bob,emoji="🔥")
+        MessageReaction.objects.create(message=message,user=self.alice,emoji="👍")
+        url = reverse("messenger:message_reactors",args=[group.pk,message.pk])
+        data = self.client.get(url,{"emoji":"🔥"}).json()
+        self.assertEqual(data["reactors"],[{"name":"bob","username":"bob","emoji":"🔥"}])
+        self.assertEqual(data["visible_total"],1)
+        self.assertEqual(len(data["counts"]),2)
+        self.assertEqual(self.client.get(url,{"account_id":self.bob.pk}).status_code,409)
+        outsider = Client()
+        outsider.force_login(self.outsider)
+        self.assertEqual(outsider.get(url).status_code,404)
+        ChatParticipant.objects.filter(chat=group,user=self.bob).delete()
+        self.assertEqual(self.client.get(url,{"emoji":"🔥"}).json()["reactors"],[])
+        group.type = Chat.Type.CHANNEL
+        group.save(update_fields=["type"])
+        result = self.client.get(url).json()
+        self.assertTrue(result["anonymous"])
+        self.assertEqual(result["reactors"],[])
+        self.assertEqual(sum(row["count"] for row in result["counts"]),2)
+        MessageHiddenForUser.objects.create(message=message,user=self.alice)
+        self.assertEqual(self.client.get(url).status_code,404)

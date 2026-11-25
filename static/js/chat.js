@@ -421,6 +421,7 @@ function buildMessageArticle(message) {
   article.dataset.forwardUrl = message.urls?.forward || "";
   article.dataset.pinUrl = message.urls?.pin || "";
   article.dataset.reactionUrl = message.urls?.reaction || "";
+  article.dataset.reactorsUrl = message.urls?.reactors || "";
 
   if (message.forwarded) article.appendChild(makeForwardedBlock(message.forwarded));
   if (message.reply) article.appendChild(makeReplyPreview(message.reply));
@@ -559,6 +560,7 @@ function applyMessageUpdate(message) {
     article.dataset.forwardUrl = message.urls.forward || article.dataset.forwardUrl;
     article.dataset.pinUrl = message.urls.pin || article.dataset.pinUrl;
     article.dataset.reactionUrl = message.urls.reaction || article.dataset.reactionUrl;
+    article.dataset.reactorsUrl = message.urls.reactors || article.dataset.reactorsUrl;
     article.dataset.readersUrl = message.urls.readers || "";
   }
   window.SovietgramSocial.renderReactions(article, message);
@@ -1512,6 +1514,7 @@ async function pollMessages() {
     if (generation !== historyGeneration) return;
     if (!payload.ok) return;
     window.SovietgramConnection?.success();
+    if (Array.isArray(payload.allowed_reactions)) window.SovietgramSocial?.setAllowedReactions(payload.allowed_reactions);
     knownMessageCursor = knownIds.at(-1) || 0;
     document.dispatchEvent(new CustomEvent("sovietgram:chat-protection", {
       detail: { enabled: Boolean(payload.protect_content) },
