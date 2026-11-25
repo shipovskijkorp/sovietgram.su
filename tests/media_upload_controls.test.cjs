@@ -1,0 +1,22 @@
+const {test}=require("node:test");
+const assert=require("node:assert/strict");
+const fs=require("node:fs");
+const read=file=>fs.readFileSync(file,"utf8");
+test("one uploader owns file selection, drop and paste",()=>{
+  const chat=read("static/js/chat.js");
+  const uploader=read("static/js/attachment-files.js");
+  assert.doesNotMatch(chat,/function openMediaComposer|function uploadMediaRequest/);
+  assert.match(uploader,/addEventListener\("drop"/);
+  assert.match(uploader,/addEventListener\("paste"/);
+  assert.match(uploader,/function openTransfer/);
+  assert.match(uploader,/data.append\("account_id", accountId\)/);
+});
+test("retry plan keeps stable batch IDs and only sends unfinished uploads",()=>{
+  const uploader=read("static/js/attachment-files.js");
+  assert.match(uploader,/const plan = retryPlan \|\| buildPlan\(\)/);
+  assert.match(uploader,/plan.batches\[plan.completed\]/);
+  assert.match(uploader,/plan.completed\+\+/);
+  assert.match(uploader,/activeUpload\?\.abort\(\)/);
+  assert.match(uploader,/data.append\("compress_images", "1"\)/);
+  assert.match(read("templates/messenger/index.html"),/id="mediaComposeCompress"/);
+});

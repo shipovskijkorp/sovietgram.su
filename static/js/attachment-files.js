@@ -21,6 +21,11 @@
   const groupRow = document.getElementById("mediaComposeGroupRow");
   const groupToggle = document.getElementById("mediaComposeGroup");
   const silentToggle = document.getElementById("mediaComposeSilent");
+  const compressToggle = document.getElementById("mediaComposeCompress");
+  const compressRow = document.getElementById("mediaComposeCompressRow");
+  const abortButton = document.getElementById("mediaComposeAbort");
+  const dropOverlay = document.getElementById("chatDropOverlay");
+  const accountId = document.getElementById("messageStage")?.dataset.accountId || document.body.dataset.accountId || "";
   const progressNode = document.getElementById("mediaUploadProgress");
   const progressBar = document.getElementById("mediaUploadProgressBar");
   const messageInput = document.getElementById("messageInput");
@@ -38,7 +43,8 @@
   let selectedMode = "media";
   let appendNextPick = false;
   let objectUrls = [];
-  let busy = false;
+  let busy = false, activeUpload = null, cancelled = false, dragDepth = 0;
+  let retryPlan = null;
   const sendKeys = window.SovietgramSendRetry.batch();
 
   function notify(text) {
@@ -113,13 +119,21 @@
     }
     if (addButton) addButton.disabled = active;
     if (closeButton) closeButton.disabled = active;
-    if (silentToggle) silentToggle.disabled = active;
+    if (silentToggle) silentToggle.disabled = active || Boolean(retryPlan);
+    if (compressToggle) compressToggle.disabled = active || Boolean(retryPlan);
+    if (groupToggle) groupToggle.disabled = active || Boolean(retryPlan);
+    if (captionNode) captionNode.readOnly = active || Boolean(retryPlan);
+    if (addButton) addButton.disabled = active || Boolean(retryPlan);
+    if (abortButton) abortButton.hidden = !active;
+    for (const button of previewNode?.querySelectorAll(".media-preview-remove") || []) button.disabled = active || Boolean(retryPlan);
     if (progressNode) progressNode.hidden = !active;
     if (progressBar) progressBar.style.width = Math.max(0, Math.min(100, percent)) + "%";
   }
 
   function closeComposer() {
     if (busy) return;
+    if (retryPlan && !window.confirm("Прекратить отправку? Уже принятые сервером файлы останутся в переписке.")) return;
+    retryPlan = null;
     releaseUrls();
     sendKeys.clear();
     selectedFiles = [];
@@ -130,7 +144,7 @@
   }
 
   function removeFile(index) {
-    if (busy) return;
+    if (busy || retryPlan) return;
     selectedFiles.splice(index, 1);
     if (!selectedFiles.length) {
       closeComposer();
@@ -168,6 +182,7 @@
     }
 
     if (groupRow) groupRow.hidden = selectedMode !== "media" || selectedFiles.length < 2;
+    if (compressRow) compressRow.hidden = selectedMode !== "media" || !selectedFiles.some(file => ["jpg","jpeg","png","webp"].includes(extension(file)));
 
     if (selectedMode === "media") {
       const grid = document.createElement("div");
@@ -245,6 +260,10 @@
   }
 
   function openComposer(files, mode, preserveCaption = false) {
+    if (busy || retryPlan) {
+      notify("Сначала завершите или отмените текущую отправку файлов.");
+      return;
+    }
     if (conversation.dataset.canSendMedia === "false") {
       notify("Администраторы запретили отправлять медиа и файлы.");
       return;
@@ -262,12 +281,14 @@
     if (modeInput) modeInput.value = mode;
     if (groupToggle && !preserveCaption) groupToggle.checked = true;
     if (silentToggle && !preserveCaption) silentToggle.checked = false;
+    if (compressToggle && !preserveCaption) compressToggle.checked = false;
     if (captionNode) {
       captionNode.value = preserveCaption
         ? previousCaption
         : (messageInput?.value || "");
     }
     renderSelection();
+    resizeCaption();
     if (progressNode) progressNode.hidden = true;
     if (progressBar) progressBar.style.width = "0%";
     if (backdrop) backdrop.hidden = false;
@@ -275,6 +296,7 @@
   }
 
   function pick(mode, append = false) {
+    if (busy || retryPlan) return;
     const input = inputs[mode];
     if (!input) {
       notify("Поле выбора файлов не найдено.");
@@ -311,19 +333,25 @@
     openComposer(next, mode, preserveCaption);
   }
 
-  function upload(files, text, mode, replyTo, onProgress, clientId, silent = false, attempt = 0) {
+  function upload(files, text, mode, replyTo, onProgress, clientId, silent = false, attempt = 0, compress = false) {
     return new Promise((resolve, reject) => {
       const data = new FormData();
       data.append("csrfmiddlewaretoken", csrfToken);
       data.append("text", text);
       data.append("attachment_mode", mode);
       data.append("client_message_id", clientId);
+      data.append("account_id", accountId);
+      data.append("preserve_draft", "1");
+      if (compress) data.append("compress_images", "1");
       if (silent) data.append("silent", "1");
       if (replyTo) data.append("reply_to", replyTo);
       files.forEach((file) => data.append("attachments", file, file.name));
 
+      if (cancelled) { reject(new Error("Загрузка отменена.")); return; }
       const xhr = new XMLHttpRequest();
+      activeUpload = xhr;
       xhr.open("POST", form.action);
+      xhr.timeout = 180000;
       xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
       xhr.responseType = "json";
 
@@ -338,94 +366,147 @@
           return;
         }
         if (!attempt && [502, 503, 504].includes(xhr.status)) {
-          upload(files, text, mode, replyTo, onProgress, clientId, silent, 1).then(resolve, reject);
+          upload(files, text, mode, replyTo, onProgress, clientId, silent, 1, compress).then(resolve, reject);
           return;
         }
         const firstError = Object.values(payload.errors || {}).flat()?.[0]?.message;
         reject(new Error(payload.error || firstError || "Не удалось отправить файлы."));
       });
       xhr.addEventListener("error", () => {
-        if (!attempt) upload(files, text, mode, replyTo, onProgress, clientId, silent, 1).then(resolve, reject);
+        if (!attempt) upload(files, text, mode, replyTo, onProgress, clientId, silent, 1, compress).then(resolve, reject);
         else reject(new Error("Не удалось загрузить файлы. Повторите отправку."));
       });
-      xhr.addEventListener("abort", () => reject(new Error("Загрузка была отменена.")));
+      xhr.addEventListener("timeout", () => {
+        if (!attempt && !cancelled) upload(files, text, mode, replyTo, onProgress, clientId, silent, 1, compress).then(resolve, reject);
+        else reject(new Error("Сервер не ответил вовремя. Можно повторить загрузку."));
+      });
+      xhr.addEventListener("abort", () => reject(new Error("Загрузка отменена. Сервер мог уже принять файл.")));
+      xhr.addEventListener("loadend", () => { if (activeUpload === xhr) activeUpload = null; });
       xhr.send(data);
     });
   }
 
   function renderSent(message) {
-    if (typeof window.renderSovietgramChatMessage === "function") {
-      window.renderSovietgramChatMessage(message);
-    } else {
-      window.location.reload();
+    try {
+      if (typeof window.renderSovietgramChatMessage === "function") window.renderSovietgramChatMessage(message);
+      else void window.SovietgramChat?.syncNow?.();
+    } catch (error) {
+      // An acknowledged upload must not become a failed send because of DOM rendering.
+      console.warn("Attachment sent; rendering failed", error);
+      try { void window.SovietgramChat?.syncNow?.(); } catch (_) {}
     }
   }
 
-  async function sendSelected() {
-    if (!selectedFiles.length || busy) return;
-
-    const error = validate(selectedFiles, selectedMode);
-    if (error) {
-      notify(error);
-      return;
-    }
-
+  function buildPlan() {
     const files = [...selectedFiles];
     const caption = captionNode?.value || "";
     const replyTo = replyInput?.value || "";
     const silent = Boolean(silentToggle?.checked);
-    const separate = selectedMode === "media"
-      && files.length > 1
-      && groupToggle
-      && !groupToggle.checked;
-    const totalBytes = Math.max(1, files.reduce((sum, file) => sum + file.size, 0));
-    let sentBytes = 0;
+    const compress = selectedMode === "media" && Boolean(compressToggle?.checked);
+    const separate = selectedMode === "media" && files.length > 1 && groupToggle && !groupToggle.checked;
+    const signature = [files.map(window.SovietgramSendRetry.fileIdentity), caption, selectedMode, replyTo, silent, compress, Boolean(separate)];
+    const batches = separate ? files.map((file, index) => ({
+      files: [file], caption: index === files.length - 1 ? caption : "", reply: index === 0 ? replyTo : "",
+      id: sendKeys.key(index, signature),
+    })) : [{files, caption, reply:replyTo, id:sendKeys.key("album", signature)}];
+    return {batches, mode:selectedMode, silent, compress, completed:0,
+            originalDraft:messageInput?.value || "", originalReply:replyTo};
+  }
 
+  async function sendSelected() {
+    if (!selectedFiles.length || busy) return;
+    const error = validate(selectedFiles, selectedMode);
+    if (error) { notify(error); return; }
+    const plan = retryPlan || buildPlan();
+    retryPlan = plan;
+    cancelled = false;
     setProgress(true, 0);
-
+    const bytes = batch => batch.files.reduce((sum, file) => sum + file.size, 0);
+    const totalBytes = Math.max(1, plan.batches.reduce((sum, batch) => sum + bytes(batch), 0));
+    let sentBytes = plan.batches.slice(0, plan.completed).reduce((sum, batch) => sum + bytes(batch), 0);
     try {
-      if (separate) {
-        for (let index = 0; index < files.length; index += 1) {
-          const file = files[index];
-          const payload = await upload(
-            [file],
-            index === files.length - 1 ? caption : "",
-            "media",
-            index === 0 ? replyTo : "",
-            (loaded) => setProgress(true, ((sentBytes + loaded) / totalBytes) * 100),
-            sendKeys.key(window.SovietgramSendRetry.fileIdentity(file),
-              ["media", index === files.length - 1 ? caption : "", index === 0 ? replyTo : "", silent]),
-            silent,
-          );
-          renderSent(payload.message);
-          sentBytes += file.size;
-        }
-      } else {
+      while (plan.completed < plan.batches.length) {
+        if (cancelled) throw new Error("Загрузка отменена.");
+        const batch = plan.batches[plan.completed];
         const payload = await upload(
-          files,
-          caption,
-          selectedMode,
-          replyTo,
-          (loaded, total) => setProgress(true, total ? (loaded / total) * 100 : 0),
-          sendKeys.key("album", [files.map(window.SovietgramSendRetry.fileIdentity), caption, selectedMode, replyTo, silent]),
-          silent,
+          batch.files, batch.caption, plan.mode, batch.reply,
+          (loaded, total) => setProgress(true, (sentBytes + bytes(batch) * (total ? loaded / total : 0)) / totalBytes * 100),
+          batch.id, plan.silent, 0, plan.compress,
         );
+        plan.completed++;
+        sentBytes += bytes(batch);
         renderSent(payload.message);
       }
-
-      if (messageInput) {
+      if (messageInput && messageInput.value === plan.originalDraft) {
         messageInput.value = "";
         messageInput.dispatchEvent(new Event("input", { bubbles: true }));
       }
-      if (replyInput) replyInput.value = "";
-      if (composerReply) composerReply.hidden = true;
+      if (replyInput && replyInput.value === plan.originalReply) {
+        replyInput.value = "";
+        if (composerReply) composerReply.hidden = true;
+      }
+      retryPlan = null;
       setProgress(false, 100);
       closeComposer();
+      void window.SovietgramSidebar?.refresh?.();
+      window.SovietgramChat?.focusComposer?.();
     } catch (uploadError) {
       setProgress(false, 0);
-      notify(uploadError.message + " Для безопасного повтора не меняйте состав отправки.");
+      if (sendButton) sendButton.textContent = "Повторить отправку";
+      notify(uploadError.message + " Отправлено: " + plan.completed + " из " + plan.batches.length + ". Повтор продолжит оставшиеся.");
     }
   }
+
+  abortButton?.addEventListener("click", () => {
+    if (!busy) return;
+    cancelled = true;
+    activeUpload?.abort();
+  });
+
+  function resizeCaption() {
+    if (!captionNode) return;
+    captionNode.style.height = "auto";
+    captionNode.style.height = Math.min(captionNode.scrollHeight,120) + "px";
+  }
+  captionNode?.addEventListener("input", resizeCaption);
+
+  function fromTransfer(transfer) {
+    return [...(transfer?.files || [])].filter(file => file.size > 0);
+  }
+  function openTransfer(files) {
+    if (!files.length) return;
+    if (busy || retryPlan) { notify("Сначала завершите текущую отправку."); return; }
+    const mode = files.every(isMedia) ? "media" : files.every(isAudio) ? "audio" : "file";
+    const append = backdrop && !backdrop.hidden && selectedMode === mode;
+    openComposer(append ? [...selectedFiles, ...files] : files, mode, append);
+  }
+  const fileDrag = event => [...(event.dataTransfer?.types || [])].includes("Files");
+  if (dropOverlay) {
+    document.addEventListener("dragenter", event => {
+      if (!fileDrag(event) || busy || retryPlan) return;
+      dragDepth++; dropOverlay.hidden = false;
+    });
+    document.addEventListener("dragover", event => {
+      if (!fileDrag(event)) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = busy || retryPlan ? "none" : "copy";
+    });
+    document.addEventListener("dragleave", () => {
+      dragDepth = Math.max(0,dragDepth-1);
+      if (!dragDepth) dropOverlay.hidden = true;
+    });
+    document.addEventListener("drop", event => {
+      const files = fromTransfer(event.dataTransfer);
+      if (!files.length) return;
+      event.preventDefault(); dragDepth = 0; dropOverlay.hidden = true;
+      openTransfer(files);
+    });
+  }
+  messageInput?.addEventListener("paste", event => {
+    const files = fromTransfer(event.clipboardData);
+    if (!files.length) return;
+    event.preventDefault(); openTransfer(files);
+  });
 
   // Own attachment file actions before the legacy chat handlers can consume
   // the same event. This isolates file picking from the large chat.js module.
@@ -485,6 +566,7 @@
   window.SovietgramAttachmentFiles = {
     pick,
     close: closeComposer,
+    visible: () => Boolean(backdrop && !backdrop.hidden),
     send: sendSelected,
   };
 })();

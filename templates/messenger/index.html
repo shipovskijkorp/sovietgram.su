@@ -694,13 +694,17 @@
       <span><strong>Сгруппировать медиа</strong><small>Отправить выбранное одним альбомом</small></span>
       <span class="media-compose-switch"><input id="mediaComposeGroup" type="checkbox" checked><span><i></i></span></span>
     </label>
+    <label class="media-compose-group" id="mediaComposeCompressRow" hidden>
+      <span><strong>Сжать фотографии</strong><small>Уменьшить размер до 1920 px и объём хранения; анимированные изображения и видео не изменяются</small></span>
+      <span class="media-compose-switch"><input id="mediaComposeCompress" type="checkbox"><span><i></i></span></span>
+    </label>
     <div class="media-compose-caption"><textarea id="mediaComposeCaption" rows="1" maxlength="4096" placeholder="Добавить подпись…"></textarea>{% if can_send_text %}{% include 'messenger/_composer_tools.html' with editor_id="mediaComposeCaption" %}{% endif %}</div>
     <label class="media-compose-group media-compose-silent">
       <span><strong>Отправить без звука</strong><small>Не воспроизводить звук уведомления у получателя</small></span>
       <span class="media-compose-switch"><input id="mediaComposeSilent" type="checkbox"><span><i></i></span></span>
     </label>
     <div class="media-upload-progress" id="mediaUploadProgress" hidden><span id="mediaUploadProgressBar"></span></div>
-    <footer class="media-compose-footer"><small id="mediaComposeHint">Фото, GIF и видео будут отправлены как медиа.</small><button class="media-compose-send" id="mediaComposeSend" type="button">Отправить</button></footer>
+    <footer class="media-compose-footer"><small id="mediaComposeHint">Фото, GIF и видео будут отправлены как медиа.</small><button type="button" class="gallery-open-link" id="mediaComposeAbort" hidden>Остановить</button><button class="media-compose-send" id="mediaComposeSend" type="button">Отправить</button></footer>
   </section>
 </div>
 

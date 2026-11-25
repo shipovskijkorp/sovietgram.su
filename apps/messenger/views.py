@@ -63,6 +63,7 @@ from apps.accounts.privacy import (
 )
 
 from .forms import CommunityForm, EditMessageForm, MessageForm
+from .media_processing import compress_image_upload
 from .community_permissions import can_pin_messages, has_admin_right, is_banned, member_denials
 from .folder_rules import decorate_folder_categories, matching_chats, requested_folder
 from .markdown import render_message_markdown
@@ -2078,6 +2079,8 @@ def send_message(request, chat_id):
             )
             Sticker.objects.filter(pk=sticker.pk, pack__owner=request.user).update(last_used_at=timezone.now())
         for uploaded in form.cleaned_data["attachments"]:
+            if attachment_mode == MessageForm.MODE_MEDIA and form.cleaned_data["compress_images"]:
+                uploaded = compress_image_upload(uploaded)
             MessageAttachment.objects.create(
                 message=message,
                 file=uploaded,

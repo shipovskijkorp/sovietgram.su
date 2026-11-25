@@ -13,9 +13,29 @@ jobs:
   chromium:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: sovietgram
+          POSTGRES_USER: sovietgram
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sovietgram -d sovietgram"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     env:
       SOVIETGRAM_BROWSER_TESTS: "1"
       DJANGO_DEBUG: "1"
+      DB_ENGINE: postgresql
+      POSTGRES_DB: sovietgram
+      POSTGRES_USER: sovietgram
+      POSTGRES_PASSWORD: ci-only-password
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: "5432"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

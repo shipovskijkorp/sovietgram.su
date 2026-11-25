@@ -71,6 +71,8 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.page.set_default_timeout(8000)
         self.errors = []
         self.page.on("pageerror", lambda error: self.errors.append(str(error)))
+        self.page.on("response", lambda response: print(f"Browser HTTP {response.status}: {response.url}", flush=True)
+                     if response.status >= 500 else None)
         self.page.on("dialog", lambda dialog: dialog.accept())
         self.addCleanup(lambda: self.assertEqual(self.errors, [], "Uncaught browser errors"))
 

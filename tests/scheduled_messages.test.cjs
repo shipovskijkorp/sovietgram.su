@@ -36,7 +36,7 @@ test("text and media retries include silent mode and outbox uses a private endpo
   assert.match(chat,/textOutbox.enqueue\(messageInput.value, replyToInput\?\.value \|\| "", silent\)/);
   const media=read("static/js/attachment-files.js");
   assert.match(media,/data.append\("silent", "1"\)/);
-  assert.match(media,/clientId, silent, 1/);
+  assert.match(media,/clientId, silent, 1, compress/);
   assert.match(read("static/js/scheduled-messages.js"),/fields.client_message_id=await window.SovietgramSendRetry.textKey/);
   assert.match(read("templates/messenger/index.html"),/data-scheduled-url/);
   assert.match(read("templates/messenger/_scheduled_messages.html"),/id="scheduledDate"/);
