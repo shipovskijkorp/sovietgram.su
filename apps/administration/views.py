@@ -315,7 +315,7 @@ def report_detail(request, pk):
     valid_id(pk)
     report = get_object_or_404(PlatformReport.objects.select_related("reporter", "decided_by"), pk=pk)
     evidence = None
-    if report.kind == "message":
+    if report.kind == "message" and report.status == "open":
         evidence = Message.objects.filter(pk=report.target_id, is_deleted=False).filter(
             Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now())
         ).select_related("sender").first()
@@ -346,6 +346,8 @@ def report_action(request, pk):
         message = get_object_or_404(Message.objects.select_for_update(), pk=report.target_id, chat_id=chat_id, is_deleted=False)
         if message.expires_at and message.expires_at <= timezone.now():
             return HttpResponse("Сообщение уже недоступно.", status=409)
+        if request.POST.get("revision") != str(message.sync_revision):
+            return HttpResponse("Сообщение изменилось. Откройте жалобу заново перед удалением.", status=409)
         delete_message_content(message)
         log(actor, "delete_reported_message", "message", message.pk, report.target_label, reason)
         report.status = "resolved"

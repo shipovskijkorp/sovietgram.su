@@ -10,6 +10,9 @@ from .two_factor import verify_factor_locked
 class EmailOrUsernameBackend(ModelBackend):
     """Password plus TOTP/recovery code when required."""
 
+    def user_can_authenticate(self, user):
+        return super().user_can_authenticate(user) and not user.platform_suspended_at
+
     def authenticate(self, request, username=None, password=None, otp=None, **kwargs):
         UserModel = get_user_model()
         identifier = username or kwargs.get(UserModel.USERNAME_FIELD)

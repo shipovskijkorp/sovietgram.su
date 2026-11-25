@@ -201,6 +201,7 @@
               </form>
               <div class="chat-menu__separator"></div>
               {% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}
+                <a href="{% url 'administration:submit_report' 'user' selected_chat.other_user.pk %}"><span class="tg-native-icon tg-native-icon--info" aria-hidden="true"></span>Пожаловаться на пользователя</a>
                 <button type="button" data-chat-menu-mute aria-expanded="false" aria-controls="chatMuteOptions">
                   <span class="tg-native-icon tg-native-icon--mute" aria-hidden="true"></span>
                   <span class="chat-menu__label">{% if active_membership.notifications_muted %}Включить уведомления{% else %}Выключить уведомления{% endif %}</span>

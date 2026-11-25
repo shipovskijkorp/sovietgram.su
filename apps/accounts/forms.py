@@ -53,6 +53,8 @@ class IdentifierAuthenticationForm(AuthenticationForm):
                 user = User.objects.filter(username__iexact=identifier).first()
                 if user is None:
                     user = User.objects.filter(email__iexact=identifier).first()
+                if user is not None and user.platform_suspended_at and user.check_password(password):
+                    raise forms.ValidationError("Аккаунт заблокирован администрацией Sovietgram.", code="platform_suspended")
                 if (
                     user is not None
                     and not user.is_active

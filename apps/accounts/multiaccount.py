@@ -51,7 +51,7 @@ def account_slots(request):
     ids = [item.get("user_id") for item in entries if item.get("user_id")]
     users = {
         str(user.pk): user
-        for user in User.objects.filter(pk__in=ids, is_active=True)
+        for user in User.objects.filter(pk__in=ids, is_active=True, platform_suspended_at__isnull=True)
     }
 
     cleaned = []
@@ -106,7 +106,7 @@ def activate_account(request, user_id):
     for item in _raw_accounts(request):
         if str(item.get("user_id")) != str(user_id):
             continue
-        user = User.objects.filter(pk=user_id, is_active=True).first()
+        user = User.objects.filter(pk=user_id, is_active=True, platform_suspended_at__isnull=True).first()
         if not user:
             break
         if not constant_time_compare(
