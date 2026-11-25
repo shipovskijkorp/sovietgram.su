@@ -301,6 +301,23 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.click("#imageViewerClose")
         self.click("#chatGalleryClose")
 
+    def test_notification_preferences_persist_after_reload(self):
+        self.go(query="?settings=main")
+        self.click('[data-settings-target="notifications"]')
+        self.visible('[data-settings-screen="notifications"]')
+        mention = '[data-notification-preference="mention"]'
+        badge = '[data-notification-preference="badge"]'
+        self.expect(self.page.locator(mention)).to_be_checked()
+        self.click(mention)
+        self.click(badge)
+        self.expect(self.page.locator(mention)).not_to_be_checked()
+        self.page.reload(wait_until="domcontentloaded")
+        self.visible('[data-settings-screen="notifications"]')
+        self.expect(self.page.locator(mention)).not_to_be_checked()
+        self.expect(self.page.locator(badge)).not_to_be_checked()
+        self.click("#settingsSectionBack")
+        self.visible('[data-settings-screen="main"]')
+
     def test_settings_sections_and_return_navigation(self):
         self.go(query="?settings=main")
         self.visible("#telegramSettings")

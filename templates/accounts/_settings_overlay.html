@@ -73,6 +73,10 @@
             <span class="tg-settings-row__label">Конфиденциальность и безопасность</span>
           </button>
 
+          <button class="tg-settings-row" type="button" data-settings-target="notifications">
+            <span class="archive-menu-svg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg></span>
+            <span class="tg-settings-row__label">Уведомления</span>
+          </button>
           <button class="tg-settings-row" type="button" data-settings-target="chat">
             <span class="tg-native-icon tg-native-icon--settings tg-settings-row__icon" aria-hidden="true"></span>
             <span class="tg-settings-row__label">Настройки чатов</span>
@@ -317,6 +321,40 @@
             <span class="tg-settings-chevron" aria-hidden="true"></span>
           </button>
         </div>
+      </section>
+
+      <section class="tg-settings-screen" data-settings-screen="notifications" hidden>
+        <div class="tg-settings-subsection">
+          <h2>Способы уведомления</h2>
+          <label class="tg-settings-toggle-row">
+            <span class="tg-settings-toggle-row__copy"><strong>Звуковые уведомления</strong><small>Воспроизводить звук в активной вкладке.</small></span>
+            <span class="tg-settings-switch"><input type="checkbox" data-notification-preference="sound" checked><span class="tg-settings-switch__track"><span></span></span></span>
+          </label>
+          <label class="tg-settings-toggle-row">
+            <span class="tg-settings-toggle-row__copy"><strong>Системные уведомления</strong><small>Показывать уведомления браузера, пока вкладка открыта в фоне.</small></span>
+            <span class="tg-settings-switch"><input type="checkbox" data-notification-preference="desktop"><span class="tg-settings-switch__track"><span></span></span></span>
+          </label>
+          <label class="tg-settings-toggle-row">
+            <span class="tg-settings-toggle-row__copy"><strong>Счётчик непрочитанных</strong><small>Показывать количество входящих непрочитанных сообщений в заголовке вкладки.</small></span>
+            <span class="tg-settings-switch"><input type="checkbox" data-notification-preference="badge" checked><span class="tg-settings-switch__track"><span></span></span></span>
+          </label>
+        </div>
+        <div class="tg-settings-subsection">
+          <h2>Типы уведомлений</h2>
+          <label class="tg-settings-toggle-row">
+            <span class="tg-settings-toggle-row__copy"><strong>Обычные сообщения</strong><small>Новые сообщения без адресного упоминания или ответа.</small></span>
+            <span class="tg-settings-switch"><input type="checkbox" data-notification-preference="message" checked><span class="tg-settings-switch__track"><span></span></span></span>
+          </label>
+          <label class="tg-settings-toggle-row">
+            <span class="tg-settings-toggle-row__copy"><strong>Упоминания</strong><small>Когда в сообщении упоминают ваш @username.</small></span>
+            <span class="tg-settings-switch"><input type="checkbox" data-notification-preference="mention" checked><span class="tg-settings-switch__track"><span></span></span></span>
+          </label>
+          <label class="tg-settings-toggle-row">
+            <span class="tg-settings-toggle-row__copy"><strong>Ответы на мои сообщения</strong><small>Когда участник отвечает на ваше сообщение.</small></span>
+            <span class="tg-settings-switch"><input type="checkbox" data-notification-preference="reply" checked><span class="tg-settings-switch__track"><span></span></span></span>
+          </label>
+        </div>
+        <div class="tg-settings-subsection"><p id="notificationPreferencesStatus" role="status"></p></div>
       </section>
 
       <section class="tg-settings-screen" data-settings-screen="archive" id="archiveSettings" hidden>

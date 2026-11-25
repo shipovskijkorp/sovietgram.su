@@ -35,6 +35,7 @@
     main: "Настройки",
     privacy: "Конфиденциальность и безопасность",
     chat: "Настройки чатов",
+    notifications: "Уведомления",
     archive: "Настройки архива",
     password: "Пароль",
     blocked: "Заблокированные пользователи",
@@ -48,6 +49,7 @@
   const parentScreen = {
     privacy: "main",
     chat: "main",
+    notifications: "main",
     archive: "chat",
     password: "privacy",
     blocked: "privacy",

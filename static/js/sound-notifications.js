@@ -24,7 +24,37 @@
   const tabId = window.crypto?.randomUUID?.() || String(Math.random());
   const hasDesktop = typeof window.Notification === "function" && window.isSecureContext;
   let desktopEnabled = false;
-  let enabled=true, audio=null, cursor=null, initial=null, busy=false;
+  let enabled=true, audio=null, cursor=null, cursorId=0, initial=null, busy=false;
+  const preferenceKey = "sovietgram.notification-preferences."+button.dataset.accountId;
+  const preferenceControls = [...document.querySelectorAll("[data-notification-preference]")];
+  const preferenceStatus = document.getElementById("notificationPreferencesStatus");
+  const originalTitle = document.title;
+  const defaults = {message:true, mention:true, reply:true, badge:true};
+  let preferences = {...defaults};
+  let unreadCount = 0, desktopBusy = false;
+  function readPreferences() {
+    try {
+      const value = JSON.parse(localStorage.getItem(preferenceKey) || "{}");
+      preferences = Object.fromEntries(Object.keys(defaults).map(key => [key,value?.[key] !== false]));
+    } catch (_) { preferences = {...defaults}; }
+  }
+  readPreferences();
+  function updateBadge() {
+    document.title = preferences.badge && unreadCount > 0 ? "(" + (unreadCount > 999 ? "999+" : unreadCount) + ") " + originalTitle : originalTitle;
+  }
+  function syncPreferences() {
+    for (const control of preferenceControls) {
+      const name = control.dataset.notificationPreference;
+      control.checked = name === "sound" ? enabled : name === "desktop" ? desktopActive() : preferences[name] !== false;
+      if (name === "desktop") control.disabled = !hasDesktop || desktopBusy;
+    }
+    if (preferenceStatus) preferenceStatus.textContent = !hasDesktop
+      ? "Системные уведомления не поддерживаются или недоступны без HTTPS."
+      : Notification.permission === "denied"
+        ? "Системные уведомления запрещены в настройках браузера."
+        : "Настройки хранятся в этом браузере. Заглушённые чаты и тихая отправка учитываются.";
+    updateBadge();
+  }
   try { desktopEnabled = localStorage.getItem(desktopKey) === "true"; } catch (_) {}
   function desktopActive() { return hasDesktop && desktopEnabled && Notification.permission === "granted"; }
   function syncDesktop() {
@@ -33,18 +63,22 @@
     desktop.setAttribute("aria-pressed", String(desktopActive()));
     const title = desktopActive() ? "Выключить системные уведомления" : "Включить системные уведомления";
     desktop.title = title; desktop.setAttribute("aria-label", title);
+    syncPreferences();
   }
   syncDesktop();
-  desktop?.addEventListener("click", async () => {
-    if (!hasDesktop) return;
+  async function setDesktop(desired) {
+    if (!hasDesktop || desktopBusy) return;
+    desktopBusy = true;
+    syncPreferences();
     try {
-      desktopEnabled = !desktopActive() && await Notification.requestPermission() === "granted";
-      localStorage.setItem(desktopKey, String(desktopEnabled));
+      desktopEnabled = Boolean(desired) && (Notification.permission === "granted" || await Notification.requestPermission() === "granted");
+      try { localStorage.setItem(desktopKey, String(desktopEnabled)); } catch (_) {}
     } catch (_) { desktopEnabled = false; }
-    syncDesktop();
+    finally { desktopBusy = false; syncDesktop(); }
     if (desktopActive()) void poll();
-    else if (Notification.permission === "denied") window.showToast?.("Уведомления запрещены в настройках браузера.");
-  });
+    else if (desired && Notification.permission === "denied") window.showToast?.("Уведомления запрещены в настройках браузера.");
+  }
+  desktop?.addEventListener("click", () => { void setDesktop(!desktopActive()); });
   function focusState(forceBlur = false) {
     try {
       if (!forceBlur && !document.hidden && document.hasFocus()) {
@@ -71,13 +105,18 @@
       const chats = new Map();
       for (const item of items) {
         if (claimed.has(String(item.id)) || !Number.isSafeInteger(item.chat_id) || item.chat_id <= 0) continue;
-        const ids = chats.get(item.chat_id) || [];
-        ids.push(String(item.id)); chats.set(item.chat_id, ids);
+        const messages = chats.get(item.chat_id) || [];
+        messages.push(item); chats.set(item.chat_id, messages);
       }
-      for (const [chatId, ids] of chats) {
+      for (const [chatId, messages] of chats) {
         try {
+          const latest = messages.at(-1);
+          const kind = messages.some(item => item.kind === "reply") ? "reply"
+            : messages.some(item => item.kind === "mention") ? "mention" : "message";
+          const body = kind === "reply" ? "Вам ответили" : kind === "mention" ? "Вас упомянули" :
+            messages.length > 1 ? "Новые сообщения: " + messages.length : "Новое сообщение";
           const notice = new Notification("Sovietgram", {
-            body: "Новое сообщение", tag: "sovietgram-"+button.dataset.accountId+"-"+chatId,
+            body, tag: "sovietgram-"+button.dataset.accountId+"-"+chatId,
           });
           notice.onclick = async () => {
             notice.close(); window.focus();
@@ -85,10 +124,12 @@
             try {
               const response = await fetch("/presence/heartbeat/", {credentials:"same-origin",cache:"no-store"});
               const state = await response.json();
-              window.location.assign(String(state.account_id) === button.dataset.accountId ? "/chat/"+chatId+"/" : "/");
+              const messageId = Number.isSafeInteger(latest.id) && latest.id > 0 ? latest.id : 0;
+              const target = "/chat/" + chatId + "/" + (messageId ? "?message=" + messageId + "#message-" + messageId : "");
+              window.location.assign(String(state.account_id) === button.dataset.accountId ? target : "/");
             } catch (_) { window.location.assign("/"); }
           };
-          ids.forEach(id => claimed.add(id));
+          messages.forEach(item => claimed.add(String(item.id)));
         } catch (_) {
           // Some mobile browsers require a service worker for notifications.
           desktopEnabled = false; syncDesktop();
@@ -109,6 +150,7 @@
     button.setAttribute("aria-pressed",String(enabled));
     const label=enabled?"Выключить звуковые уведомления":"Включить звуковые уведомления";
     button.setAttribute("aria-label",label);button.title=label;
+    syncPreferences();
   }
   sync();
   async function unlock() {
@@ -133,38 +175,58 @@
       oscillator.start(time+offset);oscillator.stop(time+offset+.19);
     }
   }
+  function allowed(item) { return preferences[item.kind || "message"] !== false; }
   async function poll() {
     focusState();
-    if(busy || (!desktopActive() && (!enabled || document.hidden || !document.hasFocus())))return;
+    const alerts = desktopActive() || (enabled && !document.hidden && document.hasFocus());
+    if(busy || (!alerts && !preferences.badge))return;
     busy=true;
+    let more = false;
     try {
       const url=new URL(button.dataset.notificationUrl,window.location.origin);
       url.searchParams.set("account_id",button.dataset.accountId);
-      if(cursor)url.searchParams.set("since",cursor);
+      if(preferences.badge)url.searchParams.set("include_unread","1");
+      if(cursor){url.searchParams.set("since",cursor);url.searchParams.set("after_id",String(cursorId));}
       const response=await fetch(url,{credentials:"same-origin",cache:"no-store"});
       const result=await response.json();
       if(!response.ok||!result.ok||String(result.account_id)!==button.dataset.accountId)return;
       const first=!initial;
       if(first)initial=result.server_time;
-      cursor=nextCursor(result.server_time,initial);
-      const fresh=newIds(result.ids||[],seen);
-      if(!first && fresh.length) {
-        play();
-        const ids = new Set(fresh);
-        await showDesktop((result.items || []).filter(item => ids.has(String(item.id))));
+      cursor=result.next_since || nextCursor(result.server_time,initial);
+      cursorId=Number(result.next_after_id)||0;
+      more=Boolean(result.has_more);
+      if(Number.isSafeInteger(result.unread_count)){unreadCount=result.unread_count;updateBadge();}
+      const fresh=new Set(newIds(result.ids||[],seen));
+      if(!first && fresh.size) {
+        const items=(result.items||[]).filter(item=>fresh.has(String(item.id)) && allowed(item));
+        if(items.length){play();await showDesktop(items);}
       }
-    }catch(_error){}finally{busy=false;}
+    }catch(_error){}finally{
+      busy=false;
+      if(more)window.setTimeout(poll,150);
+    }
   }
-  button.addEventListener("click",()=>{
-    enabled=!enabled;sync();
+  function setSound(value) {
+    enabled=Boolean(value);sync();
     try{localStorage.setItem(key,String(enabled));}catch(_error){}
     if(enabled){void unlock();void poll();}
+  }
+  button.addEventListener("click",()=>setSound(!enabled));
+  for(const control of preferenceControls)control.addEventListener("change",()=>{
+    const name=control.dataset.notificationPreference;
+    if(name==="sound"){setSound(control.checked);return;}
+    if(name==="desktop"){void setDesktop(control.checked);return;}
+    if(!Object.hasOwn(defaults,name))return;
+    preferences[name]=control.checked;
+    try{localStorage.setItem(preferenceKey,JSON.stringify(preferences));}catch(_error){}
+    syncPreferences();void poll();
   });
   document.addEventListener("pointerdown",()=>void unlock(),{passive:true});
   document.addEventListener("keydown",()=>void unlock());
   window.addEventListener("storage",event=>{
     if(event.key===key){enabled=event.newValue!=="false";sync();}
     if(event.key===desktopKey){desktopEnabled=event.newValue==="true";syncDesktop();void poll();}
+    if(event.key===preferenceKey){readPreferences();syncPreferences();void poll();}
   });
   window.addEventListener("focus",()=>{focusState();syncDesktop();void poll();});
   window.addEventListener("blur",()=>{focusState(true);void poll();});

@@ -225,6 +225,19 @@ _ATTRS = {
 }
 
 
+def mentioned_usernames(text):
+    """Match actual mention tokens, not email addresses, links or code."""
+    if not text or "@" not in text:
+        return set()
+    tokens = _PARSER.parse(text[:4096], {"docId": "notification"})
+    return {
+        token.content[1:].casefold()
+        for parent in tokens
+        for token in parent.children or []
+        if token.type == "sg_mention"
+    }
+
+
 def render_message_markdown(text, scope="message"):
     if not text:
         return ""
