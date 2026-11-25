@@ -1558,7 +1558,9 @@ function updateConversationStatus(typing, status, presence = null) {
     presence.other_last_seen_at,
     presence.other_is_online,
   ) : status;
-  conversationStatus.textContent = typing ? "печатает…" : (localized || conversationStatus.textContent);
+  const names = Array.isArray(presence?.typing_names) ? presence.typing_names : [];
+  const typingLabel = names.length ? names.join(", ") + (names.length === 1 ? " печатает…" : " печатают…") : "печатает…";
+  conversationStatus.textContent = typing ? typingLabel : (localized || conversationStatus.textContent);
   conversationStatus.classList.toggle("is-typing", Boolean(typing));
 }
 
@@ -1871,9 +1873,14 @@ async function pollMessages() {
       window.location.assign("/");
       return;
     }
-    if (!response.ok) return;
+    if (!response.ok) {
+      if (response.status >= 500) window.SovietgramConnection?.failure();
+      return;
+    }
     const payload = await response.json();
     if (generation !== historyGeneration) return;
+    if (!payload.ok) return;
+    window.SovietgramConnection?.success();
     knownMessageCursor = knownIds.at(-1) || 0;
     document.dispatchEvent(new CustomEvent("sovietgram:chat-protection", {
       detail: { enabled: Boolean(payload.protect_content) },
@@ -1914,7 +1921,8 @@ async function pollMessages() {
     else if (anchor) restoreAnchor(anchor);
     scheduleReadCheck();
   } catch (_error) {
-    // The next polling cycle retries silently.
+    window.SovietgramConnection?.failure();
+    // The next polling cycle retries.
   } finally {
     pollRendering = false;
     pollBusy = false;

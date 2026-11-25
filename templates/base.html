@@ -35,6 +35,7 @@
 <body class="{% block body_class %}{% endblock %}"
       data-theme="{% if request.user.is_authenticated %}{{ request.user.theme }}{% else %}light{% endif %}"
       {% if request.user.is_authenticated %}
+      data-account-id="{{ request.user.pk }}"
       data-enter-to-send="{{ request.user.enter_to_send|yesno:'true,false' }}"
       data-self-profile-url="{% url 'accounts:public_profile' request.user.username %}"
       {% endif %}>
@@ -56,6 +57,7 @@
       {% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}
     </div>
   {% endif %}
+  {% if request.user.is_authenticated %}<div id="connectionStatus" class="connection-status" role="status" hidden></div>{% endif %}
   {% block content %}{% endblock %}
   <script src="{% static 'js/app.js' %}?v={{ static_version }}"></script>
   <script src="{% static 'js/search.js' %}?v={{ static_version }}"></script>

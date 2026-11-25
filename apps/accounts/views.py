@@ -431,7 +431,7 @@ def _parse_id_list(raw):
 @require_GET
 def presence_heartbeat(request):
     """Keep a focused browser session online via the activity middleware."""
-    response = JsonResponse({"ok": True})
+    response = JsonResponse({"ok": True, "account_id": request.user.pk})
     response["Cache-Control"] = "no-store"
     return response
 

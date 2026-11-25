@@ -3662,6 +3662,7 @@ def poll_messages(request, chat_id):
         _visible_pins_queryset(chat, request.user).values_list("message_id", flat=True)
     )
 
+    typing_names = []
     other_last_seen_exact = False
     other_last_seen_at = ""
     other_is_online = False
@@ -3726,6 +3727,20 @@ def poll_messages(request, chat_id):
             other_is_online = bool(other_user.is_online)
     else:
         other_typing = False
+        if chat.type == Chat.Type.GROUP:
+            # Limit work to recently active members; re-check posting rights,
+            # since a member may have been restricted while typing.
+            active_typists = (
+                ChatParticipant.objects.filter(
+                    chat=chat, is_hidden=False, last_typing_at__gte=now - timedelta(seconds=5)
+                ).exclude(user=request.user).select_related("user").order_by("-last_typing_at")[:12]
+            )
+            for typist in active_typists:
+                if len(typing_names) == 3:
+                    break
+                if not is_blocked_between(request.user, typist.user) and _posting_capabilities(chat, typist, typist.user)["text"]:
+                    typing_names.append(typist.user.display_name)
+            other_typing = bool(typing_names)
         _decorate_chat_ui(chat, request.user)
         other_status = chat.status_ui
 
@@ -3767,6 +3782,7 @@ def poll_messages(request, chat_id):
             "other_last_read_id": other_last_read_id,
             "own_last_read_id": max(membership.read_through_id, membership.last_read_message_id or 0),
             "other_typing": other_typing,
+            "typing_names": typing_names,
             "other_status": other_status,
             "other_last_seen_exact": other_last_seen_exact,
             "other_last_seen_at": other_last_seen_at,

@@ -1645,3 +1645,9 @@ body[data-theme="dark"] .pending-text-card { background:#2a2420; }
 .pending-text-footer { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:7px; font-size:11px; margin-top:5px; }
 .pending-text-footer span { opacity:.78; }
 .pending-text-footer button { border:0; background:transparent; color:var(--red); font:inherit; cursor:pointer; padding:4px; }
+
+.notification-desktop-toggle { width:30px; height:30px; flex:0 0 30px; display:grid; place-items:center; border:0; border-radius:50%; background:transparent; color:var(--ink); cursor:pointer; }
+.notification-desktop-toggle[hidden] { display:none; }
+.notification-desktop-toggle svg { width:19px; height:19px; }
+.notification-desktop-toggle[aria-pressed="true"] .notification-desktop-cross { display:none; }
+.notification-desktop-toggle:hover { background:color-mix(in srgb,var(--red) 10%,transparent); }

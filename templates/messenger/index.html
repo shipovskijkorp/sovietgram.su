@@ -91,6 +91,9 @@
       <button class="notification-sound-toggle" id="notificationSoundToggle" type="button" data-notification-url="{% url 'messenger:poll_sound_notifications' %}" data-account-id="{{ request.user.pk }}" aria-label="Звуковые уведомления" title="Звуковые уведомления" aria-pressed="true">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5" /><path class="notification-sound-waves" d="M15 9a4 4 0 0 1 0 6m3-9a8 8 0 0 1 0 12"/><path class="notification-sound-cross" d="m16 9 6 6m0-6-6 6"/></svg>
       </button>
+      <button class="notification-desktop-toggle" id="notificationDesktopToggle" type="button" aria-label="Системные уведомления" title="Системные уведомления" aria-pressed="false" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/><path class="notification-desktop-cross" d="m3 3 18 18"/></svg>
+      </button>
       <button id="easterStar" class="footer-star" type="button" title="Одобрено Госпланом">★</button>
     </footer>
   </aside>

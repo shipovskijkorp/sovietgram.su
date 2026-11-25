@@ -15,6 +15,9 @@ from .models import Chat, Message
 @login_required
 @require_GET
 def poll_sound_notifications(request):
+    account_id = request.GET.get("account_id")
+    if account_id is not None and account_id != str(request.user.pk):
+        return JsonResponse({"ok": False, "error": "Аккаунт изменился."}, status=409)
     now = timezone.now()
     try:
         since = parse_datetime(request.GET.get("since", ""))
@@ -22,13 +25,14 @@ def poll_sound_notifications(request):
             since = None
     except (ValueError, TypeError, OverflowError):
         since = None
-    ids = []
+    items = []
     if since is not None and since <= now:
-        # No backlog alert on open/reconnect. Overlap is deduplicated in the
-        # browser, which only plays sound in the visible, focused tab.
+        # No backlog alert on open/reconnect. Overlap is deduplicated in
+        # the browser; routing metadata contains no private message text.
         since = max(since, now - timedelta(seconds=30))
-        ids = list(
+        rows = list(
             Message.objects.filter(
+                Q(expires_at__isnull=True) | Q(expires_at__gt=now),
                 Q(chat__memberships__is_muted=False)
                 | Q(chat__memberships__muted_until__lte=now),
                 Q(chat__type=Chat.Type.PRIVATE)
@@ -46,8 +50,10 @@ def poll_sound_notifications(request):
                     output_field=BigIntegerField(),
                 ),
             ).exclude(sender=request.user).exclude(hidden_for_users__user=request.user)
-            .order_by("-created_at", "-pk").values_list("pk", flat=True)[:100]
+            .order_by("-created_at", "-pk").values_list("pk", "chat_id")[:100]
         )
-    response = JsonResponse({"ok": True, "ids": ids, "server_time": now.isoformat(), "account_id": request.user.pk})
+        items = [{"id": pk, "chat_id": chat_id} for pk, chat_id in rows]
+    response = JsonResponse({"ok": True, "ids": [item["id"] for item in items], "items": items,
+                             "server_time": now.isoformat(), "account_id": request.user.pk})
     response["Cache-Control"] = "private, no-store"
     return response

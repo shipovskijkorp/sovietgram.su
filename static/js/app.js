@@ -40,31 +40,47 @@ function syncClientTimezone() {
 
 syncClientTimezone();
 
-// A tab may remain open on settings or the chat list without making requests.
-// Keep presence fresh only while the signed-in user has this window in focus.
-// The backend writes last_seen_at at most once every 45 seconds.
+// A focused authenticated heartbeat doubles as a connectivity check.
 if (document.documentElement.dataset.authenticated === "true") {
-  let presencePending = false;
-  async function touchPresence() {
-    if (presencePending || document.hidden || !document.hasFocus()) return;
-    presencePending = true;
-    try {
-      await fetch("/presence/heartbeat/", {
-        method: "GET",
-        credentials: "same-origin",
-        cache: "no-store",
-      });
-    } catch (_error) {
-      // The next heartbeat will retry if the connection is interrupted.
-    } finally {
-      presencePending = false;
-    }
+  const banner = document.getElementById("connectionStatus");
+  let pending = false, failures = 0;
+  function showConnection(state) {
+    if (!banner) return;
+    banner.hidden = state === "online";
+    banner.textContent = state === "offline" ? "Нет подключения к интернету" : "Подключение к серверу…";
   }
-  window.setInterval(() => { void touchPresence(); }, 30000);
-  document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) void touchPresence();
-  });
+  function success() { failures = 0; showConnection(navigator.onLine ? "online" : "offline"); }
+  function failure() {
+    failures += 1;
+    if (!navigator.onLine) showConnection("offline");
+    else if (failures >= 2) showConnection("connecting");
+  }
+  window.SovietgramConnection = {success, failure};
+  async function touchPresence() {
+    if (pending || document.hidden || !document.hasFocus() || !navigator.onLine) return;
+    pending = true;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 8000);
+    try {
+      const response = await fetch("/presence/heartbeat/", {
+        credentials: "same-origin", cache: "no-store", signal: controller.signal,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (response.ok && payload.ok && String(payload.account_id) === document.body.dataset.accountId) success();
+      else if (response.status >= 500) failure();
+    } catch (_) { failure(); }
+    finally { pending = false; window.clearTimeout(timeout); }
+  }
+  window.addEventListener("offline", () => showConnection("offline"));
+  window.addEventListener("online", () => { showConnection("connecting"); void touchPresence(); });
   window.addEventListener("focus", () => { void touchPresence(); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) void touchPresence(); });
+  window.setInterval(() => {
+    if (failures || (banner && !banner.hidden)) void touchPresence();
+  }, 4000);
+  window.setInterval(touchPresence, 30000);
+  if (!navigator.onLine) showConnection("offline");
+  else void touchPresence();
 }
 
 function applyClientTheme(theme, persist = true) {

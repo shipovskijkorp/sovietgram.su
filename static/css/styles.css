@@ -438,3 +438,6 @@ body:not([data-theme="dark"]) .sidebar__footer {
   color: var(--red);
   box-shadow: 0 2px 8px rgba(57, 39, 27, .08);
 }
+
+.connection-status { position:fixed; z-index:1000; top:max(8px,env(safe-area-inset-top)); left:50%; transform:translateX(-50%); max-width:calc(100% - 24px); padding:7px 13px; border-radius:16px; background:#6c4523; color:#fff; font-size:12px; box-shadow:0 2px 8px #0003; pointer-events:none; text-align:center; }
+.connection-status[hidden] { display:none; }
