@@ -29,6 +29,7 @@ urlpatterns = [
     path("chat/<int:chat_id>/export/", views.export_chat_history, name="export_chat_history"),
     path("chat/<int:chat_id>/profile/", community_profiles.community_profile, name="community_profile"),
     path("chat/<int:chat_id>/profile/settings/", community_profiles.community_settings, name="community_settings"),
+    path("chat/<int:chat_id>/profile/statistics/", community_profiles.community_statistics, name="community_statistics"),
     path("chat/<int:chat_id>/profile/invites/", community_profiles.community_invite_action, name="community_invite_action"),
     path("chat/<int:chat_id>/profile/join-requests/", community_profiles.community_join_request_action, name="community_join_request_action"),
     path("chat/<int:chat_id>/profile/moderation/", moderation.community_moderation, name="community_moderation"),

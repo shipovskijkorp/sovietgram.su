@@ -1090,3 +1090,19 @@ body[data-theme="dark"] .community-moderation-dialog {background:#251f1b;color:#
 .community-load-state[hidden], .community-load-state button[hidden], .community-settings__delete[hidden], .community-profile__topbar-button[hidden] { display:none!important; }
 .community-load-state p { margin:0; font-size:13px; overflow-wrap:anywhere; }
 .community-load-state button { margin-top:8px; border:1px solid var(--line); color:var(--red); background:transparent; border-radius:8px; padding:7px 11px; font:inherit; cursor:pointer; }
+
+.community-stats-body { padding:12px 14px 20px; color:var(--ink); }
+.community-stats-period { display:flex;gap:6px; }
+.community-stats-period button { flex:1;padding:8px;border:1px solid var(--line);background:transparent;color:inherit;border-radius:7px;cursor:pointer;font:inherit; }
+.community-stats-period button[aria-pressed="true"] { border-color:var(--red);color:var(--red);background:color-mix(in srgb,var(--red) 8%,transparent); }
+#communityStatsStatus { font-size:11px;opacity:.75; }
+.community-stats-grid { display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px; }
+.community-stats-grid>div { padding:10px;border:1px solid var(--line);border-radius:8px;min-width:0; }
+.community-stats-grid small { display:block;font-size:11px;opacity:.8;overflow-wrap:anywhere; }
+.community-stats-grid strong { display:block;font-size:22px;margin-top:5px; }
+.community-stats-body h3 { font-size:12px;margin:16px 0 8px; }
+.community-stats-chart { display:grid;gap:4px;max-height:320px;overflow:auto; }
+.community-stats-chart-row { display:grid;grid-template-columns:38px minmax(0,1fr) 42px;gap:7px;align-items:center;font-size:10px; }
+.community-stats-chart-row strong { text-align:right; }
+.community-stats-bar-track { height:9px;border-radius:4px;background:color-mix(in srgb,var(--red) 7%,transparent);overflow:hidden; }
+.community-stats-bar-track>span { display:block;height:100%;background:var(--red);border-radius:4px; }

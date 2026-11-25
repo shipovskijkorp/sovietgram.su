@@ -107,7 +107,7 @@ class BrowserControlsTests(StaticLiveServerTestCase):
             with self.subTest(chat_type=chat.type):
                 self.go(chat)
                 self.manage()
-                sections = ["type","reactions","invites","join-requests","admins","members","moderation","log"]
+                sections = ["type","reactions","statistics","invites","join-requests","admins","members","moderation","log"]
                 if chat.type == Chat.Type.GROUP:
                     sections.append("permissions")
                 for name in sections:
@@ -201,6 +201,20 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.click("#deleteMessageConfirm")
         self.hidden("#deleteMessageModal")
         self.expect(self.page.locator(message)).to_have_count(0)
+
+    def test_community_statistics_period_switch(self):
+        self.go(self.group)
+        self.manage()
+        self.click('[data-community-settings-open="statistics"]')
+        self.visible("#communityStatsContent")
+        self.expect(self.page.locator('[data-stats-value="messages"]')).to_have_text("1")
+        self.expect(self.page.locator("#communityStatsMessages .community-stats-chart-row")).to_have_count(7)
+        self.click('[data-stats-days="30"]')
+        self.expect(self.page.locator("#communityStatsMessages .community-stats-chart-row")).to_have_count(30)
+        self.click("#communityStatsRefresh")
+        self.visible("#communityStatsContent")
+        self.click('[data-community-settings-view="statistics"] [data-community-settings-back]')
+        self.visible("#communitySettingsOverview")
 
     def test_group_reaction_management_and_reactor_list(self):
         MessageReaction.objects.create(message=self.message,user=self.peer,emoji="🔥")

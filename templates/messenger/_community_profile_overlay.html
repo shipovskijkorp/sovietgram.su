@@ -201,6 +201,10 @@
       </div>
 
       <div class="community-settings__group">
+        <button class="community-settings-row" type="button" data-community-settings-open="statistics">
+          <span class="community-settings-row__icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4v16h16M8 16v-4m5 4V8m5 8V5"/></svg></span>
+          <span class="community-settings-row__copy"><strong>Статистика</strong><small>Активность сообщества</small></span><b>›</b>
+        </button>
         <button class="community-settings-row" type="button" data-community-settings-open="reactions">
           <span class="community-settings-row__icon" aria-hidden="true">☺</span>
           <span class="community-settings-row__copy"><strong>Реакции</strong><small id="communitySettingsReactionsSummary"></small></span>
@@ -319,6 +323,31 @@
     </section>
     {% endif %}
 
+    <section class="community-settings__subview" data-community-settings-view="statistics" hidden>
+      <header class="community-settings__subheader">
+        <button type="button" data-community-settings-back aria-label="Назад"><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span></button>
+        <strong>Статистика</strong><button type="button" class="community-settings__header-action" id="communityStatsRefresh">Обновить</button>
+      </header>
+      <div class="community-stats-body">
+        <div class="community-stats-period" aria-label="Период">
+          <button type="button" data-stats-days="7" aria-pressed="true">7 дней</button>
+          <button type="button" data-stats-days="30" aria-pressed="false">30 дней</button>
+        </div>
+        <p id="communityStatsStatus" role="status">Загрузка…</p>
+        <div id="communityStatsContent" hidden>
+          <div class="community-stats-grid">
+            <div><small>Участников сейчас</small><strong data-stats-value="members"></strong></div>
+            <div><small>Новые участники</small><strong data-stats-value="new_members"></strong></div>
+            <div><small>Сообщения</small><strong data-stats-value="messages"></strong></div>
+            <div><small>Активные авторы</small><strong data-stats-value="active_authors"></strong></div>
+            <div><small>Реакции к сообщениям</small><strong data-stats-value="reactions"></strong></div>
+          </div>
+          <h3>Сообщения по дням</h3><div class="community-stats-chart" id="communityStatsMessages"></div>
+          <h3>Новые участники по дням</h3><div class="community-stats-chart" id="communityStatsMembers"></div>
+          <p class="community-settings__hint">Учитываются сохранившиеся сообщения за выбранный период, без удалённых и просроченных. Новые участники — нынешние участники, вступившие в указанные дни. Реакции — текущие реакции на сообщения этого периода. Это не журнал просмотров или выходов из сообщества.</p>
+        </div>
+      </div>
+    </section>
     <section class="community-settings__subview" data-community-settings-view="reactions" hidden>
       <header class="community-settings__subheader">
         <button type="button" data-community-settings-back aria-label="Назад"><span class="tg-native-icon tg-native-icon--back" aria-hidden="true"></span></button>

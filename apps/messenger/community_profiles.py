@@ -1,5 +1,5 @@
 import secrets
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 import json
 
 from django import forms
@@ -7,7 +7,8 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
+from django.db.models.functions import TruncDate
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -24,6 +25,7 @@ from .models import (
     ChatJoinRequest,
     ChatMemberModeration,
     ChatParticipant,
+    Message,
     MessageAttachment,
     MessageReaction,
 )
@@ -445,6 +447,7 @@ def _settings_payload(request, chat):
         "recent_actions": logs,
         "urls": {
             "settings": reverse("messenger:community_settings", args=[chat.pk]),
+            "statistics": reverse("messenger:community_statistics", args=[chat.pk]),
             "invite_action": reverse("messenger:community_invite_action", args=[chat.pk]),
             "join_request_action": reverse("messenger:community_join_request_action", args=[chat.pk]),
             "moderation": reverse("messenger:community_moderation", args=[chat.pk]),
@@ -461,6 +464,71 @@ def _json_error(message, status=400, errors=None):
     if errors is not None:
         payload["errors"] = errors
     return JsonResponse(payload, status=status)
+
+
+@login_required
+@require_GET
+@rate_limit("community_moderation")
+def community_statistics(request, chat_id):
+    """Aggregate retained history, never message text or reader identities."""
+    account_id = request.GET.get("account_id")
+    if account_id is not None and account_id != str(request.user.pk):
+        return _json_error("Аккаунт изменился.", status=409)
+    actor = get_object_or_404(
+        ChatParticipant.objects.select_related("chat"),
+        chat_id=chat_id, user=request.user, is_hidden=False,
+        chat__type__in=(Chat.Type.GROUP, Chat.Type.CHANNEL),
+    )
+    if not has_admin_right(actor, "manage_permissions"):
+        return _json_error("Недостаточно прав для просмотра статистики.", status=403)
+    if is_banned(actor.chat, request.user.pk):
+        return _json_error("Сообщество недоступно.", status=403)
+    try:
+        days = int(request.GET.get("days", "7"))
+        if days not in {7, 30}:
+            raise ValueError
+    except (TypeError, ValueError):
+        return _json_error("Выберите 7 или 30 дней.")
+
+    now = timezone.now()
+    tz = timezone.get_current_timezone()
+    today = timezone.localdate(now, timezone=tz)
+    first = today - timedelta(days=days - 1)
+    start = timezone.make_aware(datetime.combine(first, time.min), timezone=tz)
+    history = Message.objects.filter(
+        Q(expires_at__isnull=True) | Q(expires_at__gt=now),
+        chat_id=chat_id, is_deleted=False, created_at__gte=start, created_at__lte=now,
+    )
+    members = ChatParticipant.objects.filter(chat_id=chat_id, is_hidden=False)
+    arrivals = members.filter(joined_at__gte=start, joined_at__lte=now)
+    message_counts = dict(
+        history.order_by().annotate(day=TruncDate("created_at", tzinfo=tz))
+        .values("day").annotate(total=Count("pk")).values_list("day", "total")
+    )
+    member_counts = dict(
+        arrivals.order_by().annotate(day=TruncDate("joined_at", tzinfo=tz))
+        .values("day").annotate(total=Count("pk")).values_list("day", "total")
+    )
+    series = []
+    for offset in range(days):
+        day = first + timedelta(days=offset)
+        series.append({
+            "date": day.isoformat(),
+            "messages": message_counts.get(day, 0),
+            "new_members": member_counts.get(day, 0),
+        })
+    response = JsonResponse({
+        "ok": True, "account_id": request.user.pk, "days": days,
+        "timezone": timezone.get_current_timezone_name(),
+        "members": members.count(),
+        "new_members": sum(member_counts.values()),
+        "messages": sum(message_counts.values()),
+        "active_authors": history.order_by().values("sender_id").distinct().count(),
+        "reactions": MessageReaction.objects.filter(message__in=history).count(),
+        "series": series,
+    })
+    response["Cache-Control"] = "private, no-store"
+    return response
 
 
 @login_required

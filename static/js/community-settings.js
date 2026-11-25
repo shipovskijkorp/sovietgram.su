@@ -48,6 +48,7 @@
   let searchTimer = 0;
   let searchController = null;
   let signatureBusy = false;
+  let statsDays = 7, statsGeneration = 0, statsController = null;
 
   function csrf() {
     return document.querySelector('[name="csrfmiddlewaretoken"]')?.value || "";
@@ -99,6 +100,7 @@
   }
 
   function setView(name) {
+    if (name !== "statistics") { statsGeneration++; statsController?.abort(); }
     activeView = name;
     overview.hidden = !settings || name !== "overview";
     subviews.forEach((view) => {
@@ -108,7 +110,67 @@
       closeMemberSearch();
       renderMembers();
     }
+    if (name === "statistics") void loadStatistics();
   }
+
+  function renderStatsChart(target, rows, key) {
+    const max = Math.max(1, ...rows.map(row => Number(row[key]) || 0));
+    target.replaceChildren(...rows.map(row => {
+      const line = document.createElement("div");
+      line.className = "community-stats-chart-row";
+      const date = document.createElement("span");
+      date.textContent = row.date.slice(8,10) + "." + row.date.slice(5,7);
+      const track = document.createElement("span");
+      track.className = "community-stats-bar-track";
+      const bar = document.createElement("span");
+      bar.style.width = (Math.max(0,Number(row[key]) || 0) / max * 100) + "%";
+      track.append(bar);
+      const value = document.createElement("strong");
+      value.textContent = String(row[key] || 0);
+      line.append(date, track, value);
+      return line;
+    }));
+  }
+
+  async function loadStatistics() {
+    if (activeView !== "statistics" || !settings?.urls?.statistics) return;
+    const mine = ++statsGeneration;
+    statsController?.abort();
+    statsController = new AbortController();
+    const status = $("communityStatsStatus"), content = $("communityStatsContent");
+    const refresh = $("communityStatsRefresh");
+    const requestedDays = statsDays;
+    content.hidden = true;
+    status.textContent = "Загрузка…";
+    refresh.disabled = true;
+    panel.querySelectorAll("[data-stats-days]").forEach(button => {
+      button.setAttribute("aria-pressed", String(Number(button.dataset.statsDays) === requestedDays));
+    });
+    try {
+      const url = new URL(settings.urls.statistics, location.origin);
+      url.searchParams.set("days", String(requestedDays));
+      url.searchParams.set("account_id", document.body.dataset.accountId || "");
+      const data = await fetchJson(url, {cache:"no-store",signal:statsController.signal});
+      if (mine !== statsGeneration || activeView !== "statistics" || panel.hidden) return;
+      for (const element of content.querySelectorAll("[data-stats-value]")) {
+        element.textContent = Number(data[element.dataset.statsValue] || 0).toLocaleString("ru-RU");
+      }
+      renderStatsChart($("communityStatsMessages"), data.series || [], "messages");
+      renderStatsChart($("communityStatsMembers"), data.series || [], "new_members");
+      status.textContent = "Часовой пояс: " + data.timezone;
+      content.hidden = false;
+    } catch (error) {
+      if (mine !== statsGeneration || error.name === "AbortError") return;
+      status.textContent = error.message;
+    } finally {
+      if (mine === statsGeneration) refresh.disabled = false;
+    }
+  }
+  panel.querySelectorAll("[data-stats-days]").forEach(button => button.addEventListener("click", () => {
+    statsDays = Number(button.dataset.statsDays) === 30 ? 30 : 7;
+    void loadStatistics();
+  }));
+  $("communityStatsRefresh")?.addEventListener("click", () => { void loadStatistics(); });
 
   function closeSettings() {
     loadGeneration++;
@@ -194,7 +256,7 @@
     adminSummary.textContent = String(settings.admin_count || 0);
     memberSummary.textContent = String(settings.member_count || 0);
     const rights=new Set(settings.admin_rights||[]);
-    const required={type:"change_info",permissions:"manage_permissions",reactions:"manage_permissions",invites:"invite_users","join-requests":"invite_users",moderation:"moderate_members"};
+    const required={type:"change_info",permissions:"manage_permissions",reactions:"manage_permissions",statistics:"manage_permissions",invites:"invite_users","join-requests":"invite_users",moderation:"moderate_members"};
     for(const [view,right] of Object.entries(required)){
       const control=panel.querySelector('[data-community-settings-open="'+view+'"]');
       if(control)control.hidden=!rights.has(right);
