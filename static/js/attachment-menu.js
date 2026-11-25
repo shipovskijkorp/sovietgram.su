@@ -9,23 +9,26 @@
     if (!open || menu.hidden) return;
     const rect = button.getBoundingClientRect();
     const menuRect = menu.getBoundingClientRect();
-    const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
-    const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+    const viewport = window.visualViewport;
+    const viewportWidth = viewport?.width || window.innerWidth || document.documentElement.clientWidth;
+    const viewportHeight = viewport?.height || window.innerHeight || document.documentElement.clientHeight;
+    const viewportLeft = viewport?.offsetLeft || 0;
+    const viewportTop = viewport?.offsetTop || 0;
     const gutter = 8;
     const gap = 7;
 
     let left = rect.left;
-    if (left + menuRect.width > viewportWidth - gutter) {
-      left = viewportWidth - menuRect.width - gutter;
+    if (left + menuRect.width > viewportLeft + viewportWidth - gutter) {
+      left = viewportLeft + viewportWidth - menuRect.width - gutter;
     }
-    left = Math.max(gutter, left);
+    left = Math.max(viewportLeft + gutter, left);
 
     let top = rect.top - menuRect.height - gap;
-    if (top < gutter) {
+    if (top < viewportTop + gutter) {
       top = rect.bottom + gap;
     }
-    if (top + menuRect.height > viewportHeight - gutter) {
-      top = Math.max(gutter, viewportHeight - menuRect.height - gutter);
+    if (top + menuRect.height > viewportTop + viewportHeight - gutter) {
+      top = Math.max(viewportTop + gutter, viewportTop + viewportHeight - menuRect.height - gutter);
     }
 
     menu.style.left = Math.round(left) + "px";
@@ -109,6 +112,8 @@
   });
 
   window.addEventListener("resize", position);
+  window.visualViewport?.addEventListener("resize", position);
+  window.visualViewport?.addEventListener("scroll", position);
   window.addEventListener("scroll", position, true);
 
   window.SovietgramAttachmentMenu = {

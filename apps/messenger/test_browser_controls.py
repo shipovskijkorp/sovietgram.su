@@ -4,6 +4,7 @@ Opt-in locally: install playwright and Chromium, then set
 SOVIETGRAM_BROWSER_TESTS=1. CI runs these in a separate job.
 """
 import os
+import re
 from unittest import skipUnless
 from unittest.mock import patch
 from tempfile import TemporaryDirectory
@@ -417,6 +418,66 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.expect(self.page.locator(".platform-table-wrap")).to_contain_text("delete_reported_message")
         self.expect(self.page.locator(".platform-table-wrap")).to_contain_text("Browser moderation")
         self.assertFalse(Message.objects.filter(pk=reported.pk,is_deleted=False).exists())
+
+    def test_mobile_workspace_navigation_and_composer(self):
+        self.page.set_viewport_size({"width": 390, "height": 844})
+        self.go()
+        self.visible(".mobile-chat-title")
+        self.hidden("#chatFilter")
+        self.hidden(".conversation--empty")
+        self.visible("#sidebarComposeButton")
+        self.expect(self.page.locator(".sidebar")).to_have_css("display", "flex")
+        self.assertLessEqual(self.page.locator(".app-shell").bounding_box()["width"], 390)
+        self.click("#mobileSearchToggle")
+        self.visible("#chatFilter")
+        self.page.locator("#chatFilter").fill("peer")
+        self.visible("#sidebarGlobalSearch")
+        self.click("#mobileSearchToggle")
+        self.hidden("#chatFilter")
+        self.hidden("#sidebarGlobalSearch")
+        self.click("#sidebarComposeButton")
+        self.visible("#sidebarComposeMenu")
+        self.click('#sidebarComposeMenu [data-community-open="group"]')
+        self.visible("#communityWizard")
+        self.page.locator("#communityWizard [data-community-close]:visible").first.click()
+        self.hidden("#communityWizard")
+        self.click("#profileMenuButton")
+        self.expect(self.page.locator("#profileMenu")).to_have_class(re.compile(r"\bis-open\b"))
+        self.expect(self.page.locator("#profileMenu .sidebar__footer")).to_have_count(1)
+        self.click('#profileMenu [data-open-settings="main"]')
+        self.visible("#telegramSettings")
+        self.expect(self.page.locator(".tg-settings-window")).to_have_css("border-radius", "0px")
+        self.page.locator("#telegramSettings [data-settings-close]:visible").first.click()
+        self.hidden("#telegramSettings")
+        self.page.goto(self.live_server_url + reverse("messenger:chat", args=[self.direct.pk]),
+                       wait_until="domcontentloaded")
+        self.hidden(".sidebar")
+        self.visible(".mobile-back")
+        self.visible("#messageInput")
+        self.visible("#mobileComposerToggle")
+        self.hidden("#sendOptionsToggle")
+        self.click("#mobileComposerToggle")
+        self.visible("#mobileComposerTools")
+        self.visible("#sendOptionsToggle")
+        self.visible('#mobileComposerTools [data-compose-panel="format"]')
+        self.visible("#mobileComposerTools [data-open-stickers]")
+        self.click("#mobileComposerToggle")
+        self.hidden("#mobileComposerTools")
+        self.page.locator("#messageInput").fill("Mobile test")
+        self.click("#sendButton")
+        self.expect(self.page.locator(".message__text").last).to_have_text("Mobile test")
+        self.click(".conversation-header__identity")
+        self.visible("#userProfileOverlay")
+        self.expect(self.page.locator(".user-profile-overlay > .tg-profile")).to_have_css("border-radius", "0px")
+        self.click("#userProfileClose")
+        self.hidden("#userProfileOverlay")
+        self.click(".mobile-back")
+        self.visible("#profileMenuButton")
+        self.visible("#sidebarComposeButton")
+        self.page.set_viewport_size({"width": 1360, "height": 900})
+        self.visible("#chatFilter")
+        self.hidden("#sidebarComposeButton")
+        self.expect(self.page.locator(".sidebar > .sidebar__footer")).to_have_count(1)
 
     def test_native_select_colors_follow_account_theme(self):
         from apps.accounts.two_factor import encrypt_secret

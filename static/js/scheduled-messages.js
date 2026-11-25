@@ -43,9 +43,15 @@
     silentButton.disabled = scheduleButton.disabled = !hasText;
     menu.hidden = false;
     toggle?.setAttribute("aria-expanded","true");
-    const rect = anchor.getBoundingClientRect(), box = menu.getBoundingClientRect();
-    menu.style.left = Math.max(6,Math.min(rect.right-box.width,window.innerWidth-box.width-6))+"px";
-    menu.style.top = Math.max(6,Math.min(rect.top-box.height-8,window.innerHeight-box.height-6))+"px";
+    const rect = anchor.getBoundingClientRect();
+    const viewport = window.visualViewport;
+    const vw = viewport?.width || window.innerWidth, vh = viewport?.height || window.innerHeight;
+    const x = viewport?.offsetLeft || 0, y = viewport?.offsetTop || 0;
+    menu.style.maxHeight = Math.max(0, vh - 12)+"px";
+    menu.style.overflowY = "auto";
+    const box = menu.getBoundingClientRect();
+    menu.style.left = Math.max(x+6,Math.min(rect.right-box.width,x+vw-box.width-6))+"px";
+    menu.style.top = Math.max(y+6,Math.min(rect.top-box.height-8,y+vh-box.height-6))+"px";
   }
   toggle?.addEventListener("pointerdown", event => event.preventDefault());
   toggle?.addEventListener("click", () => menu.hidden ? showMenu(toggle) : hideMenu());
@@ -65,6 +71,8 @@
     }
   },true);
   window.addEventListener("resize", hideMenu);
+  window.visualViewport?.addEventListener("resize", hideMenu);
+  window.visualViewport?.addEventListener("scroll", hideMenu);
   silentButton.addEventListener("click", () => { hideMenu(); void window.SovietgramChat?.sendSilently(); });
 
   function open() {

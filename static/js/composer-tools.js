@@ -50,13 +50,17 @@
     if (popup.hidden||!trigger) return;
     const rect=trigger.getBoundingClientRect();
     if (!rect.width||!rect.height||!trigger.isConnected) { close(); return; }
-    const width=Math.max(0,Math.min(panel==="emoji"?328:270,window.innerWidth-16));
+    const viewport=window.visualViewport;
+    const vw=viewport?.width||window.innerWidth, vh=viewport?.height||window.innerHeight;
+    const x=viewport?.offsetLeft||0, y=viewport?.offsetTop||0;
+    const width=Math.max(0,Math.min(panel==="emoji"?328:270,vw-16));
     popup.style.width=width+"px";
-    popup.style.left=Math.max(8,Math.min(rect.right-width,window.innerWidth-width-8))+"px";
+    popup.style.maxHeight=Math.max(0,vh-16)+"px";
+    popup.style.left=Math.max(x+8,Math.min(rect.right-width,x+vw-width-8))+"px";
     const height=popup.offsetHeight;
     const above=rect.top-height-8;
     const below=rect.bottom+8;
-    popup.style.top=Math.max(8,Math.min(above>=8?above:below,window.innerHeight-height-8))+"px";
+    popup.style.top=Math.max(y+8,Math.min(above>=y+8?above:below,y+vh-height-8))+"px";
   }
   function apply(editor,change) {
     if (!editor||editor.readOnly||editor.disabled) return false;
@@ -186,6 +190,8 @@
     event.preventDefault();event.stopImmediatePropagation();close();format(editor,name);
   },true);
   window.addEventListener("resize",position);
+  window.visualViewport?.addEventListener("resize",position);
+  window.visualViewport?.addEventListener("scroll",position);
   document.addEventListener("scroll",position,true);
   document.addEventListener("submit",()=>close(),true);
   document.addEventListener("input",event=>{
