@@ -903,6 +903,19 @@ const searchClose = document.getElementById("chatSearchClose");
 const searchResults = document.getElementById("chatSearchResults");
 let searchTimer;
 let searchController;
+let searchGeneration = 0;
+let searchItems = [];
+let searchBefore = null;
+const searchFilters = ["chatSearchSender", "chatSearchKind", "chatSearchFrom", "chatSearchTo"]
+  .map(id => document.getElementById(id)).filter(Boolean);
+function chatSearchParams() {
+  const params = new URLSearchParams();
+  if (searchInput?.value.trim()) params.set("q", searchInput.value.trim());
+  for (const field of searchFilters) {
+    if (field.value.trim()) params.set(field.name, field.value.trim());
+  }
+  return params;
+}
 
 function setSearchPanel(open) {
   if (!searchPanel) return;
@@ -923,7 +936,7 @@ function renderSearchResults(results) {
   if (!results.length) {
     const empty = document.createElement("div");
     empty.className = "chat-search-empty";
-    empty.textContent = searchInput?.value.trim() ? "Ничего не нашлось." : "Введите текст сообщения или название файла.";
+    empty.textContent = chatSearchParams().size ? "Ничего не нашлось." : "Введите текст, название файла или выберите фильтры.";
     searchResults.appendChild(empty);
     return;
   }
@@ -947,29 +960,68 @@ function renderSearchResults(results) {
     });
     searchResults.appendChild(link);
   });
+  if (searchBefore) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "chat-search-more";
+    more.textContent = "Показать ещё";
+    more.addEventListener("click", async () => {
+      more.disabled = true;
+      await runChatSearch(searchGeneration, true);
+      if (more.isConnected) more.disabled = false;
+    });
+    searchResults.appendChild(more);
+  }
 }
 
-searchInput?.addEventListener("input", () => {
+async function runChatSearch(generation, append = false) {
+  const params = chatSearchParams();
+  if (!params.size || generation !== searchGeneration) return;
+  if (append && searchBefore) params.set("before", String(searchBefore));
+  const controller = new AbortController();
+  searchController = controller;
+  try {
+    const url = new URL(searchPanel.dataset.searchUrl, window.location.origin);
+    for (const [key, value] of params) url.searchParams.set(key, value);
+    const response = await fetch(url, { credentials: "same-origin", signal: controller.signal });
+    const payload = await response.json().catch(() => ({}));
+    if (generation !== searchGeneration || controller.signal.aborted) return;
+    if (!response.ok || !payload.ok) throw new Error(payload.error || "Поиск временно недоступен.");
+    const offset = searchResults.scrollTop;
+    const items = payload.results || [];
+    searchItems = append ? [...searchItems, ...items.filter(item => !searchItems.some(old => old.id === item.id))] : items;
+    searchBefore = payload.next_before || null;
+    renderSearchResults(searchItems);
+    if (append) searchResults.scrollTop = offset;
+  } catch (error) {
+    if (error.name !== "AbortError" && generation === searchGeneration) notify(error.message);
+  }
+}
+
+function restartChatSearch() {
   clearTimeout(searchTimer);
-  const query = searchInput.value.trim();
-  if (!query) {
+  searchController?.abort();
+  const generation = ++searchGeneration;
+  searchItems = [];
+  searchBefore = null;
+  if (!chatSearchParams().size) {
     renderSearchResults([]);
     return;
   }
-  searchTimer = window.setTimeout(async () => {
-    searchController?.abort();
-    searchController = new AbortController();
-    try {
-      const url = new URL(searchPanel.dataset.searchUrl, window.location.origin);
-      url.searchParams.set("q", query);
-      const response = await fetch(url, { credentials: "same-origin", signal: searchController.signal });
-      if (!response.ok) return;
-      const payload = await response.json();
-      renderSearchResults(payload.results || []);
-    } catch (error) {
-      if (error.name !== "AbortError") notify("Поиск временно недоступен.");
-    }
-  }, 220);
+  searchResults.replaceChildren();
+  const waiting = document.createElement("div");
+  waiting.className = "chat-search-empty";
+  waiting.textContent = "Поиск…";
+  searchResults.appendChild(waiting);
+  searchTimer = window.setTimeout(() => runChatSearch(generation), 220);
+}
+searchInput?.addEventListener("input", restartChatSearch);
+for (const field of searchFilters) {
+  field.addEventListener(field.tagName === "SELECT" || field.type === "date" ? "change" : "input", restartChatSearch);
+}
+document.getElementById("chatSearchReset")?.addEventListener("click", () => {
+  searchFilters.forEach(field => { field.value = ""; });
+  restartChatSearch();
 });
 
 const chatInfoBackdrop = document.getElementById("chatInfoBackdrop");

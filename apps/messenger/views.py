@@ -1,6 +1,7 @@
 import copy
 import hashlib
 from functools import wraps
+from itertools import islice
 from uuid import UUID
 import json
 import math
@@ -32,7 +33,7 @@ from django.db.models import (
     Value,
     When,
 )
-from django.db.models.functions import Coalesce, Greatest
+from django.db.models.functions import Coalesce, Concat, Greatest, Trim
 from django.http import (
     FileResponse,
     Http404,
@@ -44,7 +45,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import escape
-from django.utils.dateparse import parse_datetime
+from django.utils.dateparse import parse_date, parse_datetime
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_POST
 
@@ -1571,6 +1572,7 @@ def global_search(request):
                 "people": [],
                 "communities": [],
                 "messages": [],
+                "next_before": None,
             }
         )
 
@@ -1583,42 +1585,60 @@ def global_search(request):
         ids = [chat.pk for chat in _folder_sidebar_context(request.user, raw_folder=active_folder.pk)["chats"]]
         membership_scope = {"chat_id__in": ids}
         message_scope = {"chat_id__in": ids}
-    memberships = list(
-        ChatParticipant.objects.filter(
-            user=request.user,
-            is_hidden=False,
-            **membership_scope,
-        )
-        .select_related("chat")
-        .prefetch_related("chat__participants")
-        .order_by("-is_pinned", "-pin_order", "-chat__updated_at")[:120]
-    )
-    joined_ids = {membership.chat_id for membership in memberships}
-    collective_ids = {
-        membership.chat_id
-        for membership in memberships
-        if membership.chat.type != Chat.Type.PRIVATE
-    }
-    collective_counts = dict(
-        ChatParticipant.objects.filter(chat_id__in=collective_ids)
-        .values("chat_id")
-        .annotate(total=Count("id"))
-        .values_list("chat_id", "total")
-    )
+    messages_only = request.GET.get("messages_only") == "1"
+    try:
+        before = _search_before(request)
+    except ValueError:
+        return JsonResponse({"ok": False, "error": "Некорректный курсор поиска."}, status=400)
 
+    membership_base = ChatParticipant.objects.filter(
+        user=request.user, is_hidden=False, **membership_scope,
+    )
+    joined_ids = membership_base.values("chat_id")
     chat_results = []
-    chat_by_id = {}
-    for membership in memberships:
-        chat = membership.chat
-        if chat.type != Chat.Type.PRIVATE:
-            chat.member_count_ui = collective_counts.get(chat.pk, 0)
-        _decorate_chat_ui(chat, request.user)
-        chat_by_id[chat.pk] = chat
-        haystack = (chat.search_text_ui or "").lower()
-        if normalized not in haystack:
-            continue
-        chat_results.append(
-            {
+    if not messages_only:
+        # Match against every accessible chat before limiting the result set.
+        # A scalar subquery avoids loading every member of every group.
+        peer_name = (
+            User.objects.filter(chat_memberships__chat_id=OuterRef("chat_id"))
+            .exclude(pk=request.user.pk)
+            .annotate(search_name=Concat(Trim(Concat("first_name", Value(" "), "last_name")), Value(" "), "username", output_field=TextField()))
+            .order_by("pk").values("search_name")[:1]
+        )
+        candidates = membership_base.annotate(
+            search_name=Case(
+                When(chat__type=Chat.Type.PRIVATE, chat__direct_key=f"self:{request.user.pk}", then=Value("Избранное")),
+                When(chat__type=Chat.Type.PRIVATE, then=Coalesce(Subquery(peer_name), Value(""), output_field=TextField())),
+                default=Concat(
+                    Case(
+                        When(chat__title="", chat__type=Chat.Type.CHANNEL, then=Value("Канал")),
+                        When(chat__title="", then=Value("Группа")),
+                        default=F("chat__title"), output_field=TextField(),
+                    ),
+                    Value(" "), Coalesce("chat__username", Value("")), output_field=TextField(),
+                ),
+                output_field=TextField(),
+            ),
+        ).order_by("-is_pinned", "-pin_order", "-chat__updated_at", "-pk")
+        if connection.vendor == "sqlite":
+            # SQLite LIKE only folds ASCII; preserve Cyrillic/Unicode names.
+            ids = list(islice((pk for pk, name in candidates.values_list("pk", "search_name").iterator(chunk_size=200)
+                               if normalized in (name or "").lower()), 12))
+            matched = candidates.filter(pk__in=ids)
+        else:
+            matched = candidates.filter(search_name__icontains=normalized)
+        memberships = list(matched.select_related("chat").prefetch_related("chat__participants")[:12])
+        collective_ids = [m.chat_id for m in memberships if m.chat.type != Chat.Type.PRIVATE]
+        collective_counts = dict(
+            ChatParticipant.objects.filter(chat_id__in=collective_ids)
+            .values("chat_id").annotate(total=Count("id")).values_list("chat_id", "total")
+        )
+        for membership in memberships:
+            chat = membership.chat
+            if chat.type != Chat.Type.PRIVATE:
+                chat.member_count_ui = collective_counts.get(chat.pk, 0)
+            _decorate_chat_ui(chat, request.user)
+            chat_results.append({
                 "id": chat.pk,
                 "type": chat.type,
                 "avatar_kind": "user" if chat.type == Chat.Type.PRIVATE and not chat.is_saved_ui else "chat",
@@ -1626,26 +1646,13 @@ def global_search(request):
                 "title": chat.display_name_ui,
                 "username": chat.username_ui,
                 "status": chat.status_ui,
-                "avatar_url": (
-                    chat.other_user_avatar_url_ui
-                    if (
-                        chat.type == Chat.Type.PRIVATE
-                        and chat.other_user
-                        and chat.other_user_avatar_url_ui
-                    )
-                    else chat.avatar.url
-                    if chat.type != Chat.Type.PRIVATE and chat.avatar
-                    else ""
-                ),
+                "avatar_url": chat.other_user_avatar_url_ui if chat.type == Chat.Type.PRIVATE and chat.other_user else chat.avatar.url if chat.type != Chat.Type.PRIVATE and chat.avatar else "",
                 "avatar_text": chat.avatar_text_ui,
                 "url": reverse("messenger:chat", args=[chat.pk]) + (f"?folder={active_folder.pk}" if active_folder else ""),
                 "is_archived": membership.is_archived,
-            }
-        )
-        if len(chat_results) >= 12:
-            break
+            })
 
-    people = [] if archive_only or active_folder else list(
+    people = [] if messages_only or archive_only or active_folder else list(
         User.objects.filter(is_active=True)
         .exclude(pk=request.user.pk)
         .filter(
@@ -1677,7 +1684,7 @@ def global_search(request):
         for user in people
     ]
 
-    communities = [] if archive_only or active_folder else list(
+    communities = [] if messages_only or archive_only or active_folder else list(
         Chat.objects.filter(
             type__in=(Chat.Type.GROUP, Chat.Type.CHANNEL),
         )
@@ -1717,73 +1724,47 @@ def global_search(request):
     ]
 
     message_results = []
-    if memberships:
-        search_matches = (
-            Message.objects.filter(
-                Q(id__gt=F("chat__memberships__cleared_before_message_id")),
-                (
-                    Q(chat__type=Chat.Type.PRIVATE)
-                    | Q(chat__history_visible_to_new_members=True)
-                    | Q(chat__memberships__can_see_pre_join_history=True)
-                    | Q(created_at__gte=F("chat__memberships__joined_at"))
-                ),
-                (
-                    _message_search_condition(query)
-                    or (Q(text__icontains=query)
-                        | Q(attachments__original_name__icontains=query))
-                ),
-                chat__memberships__user=request.user,
-                chat__memberships__is_hidden=False,
-                is_deleted=False,
-                **message_scope,
-            )
-            .exclude(hidden_for_users__user=request.user)
-            .select_related("sender", "chat")
-            .distinct()
-            .order_by("-id")[:18]
+    message_query = (
+        Message.objects.filter(
+            Q(id__gt=F("chat__memberships__cleared_before_message_id")),
+            (
+                Q(chat__type=Chat.Type.PRIVATE)
+                | Q(chat__history_visible_to_new_members=True)
+                | Q(chat__memberships__can_see_pre_join_history=True)
+                | Q(created_at__gte=F("chat__memberships__joined_at"))
+            ),
+            _search_text_condition(query),
+            chat__memberships__user=request.user,
+            chat__memberships__is_hidden=False,
+            is_deleted=False,
+            **message_scope,
         )
-        for message in search_matches:
-            chat = message.chat
-            decorated = chat_by_id.get(chat.pk)
-            if decorated is None:
-                membership = next(
-                    (item for item in memberships if item.chat_id == chat.pk),
-                    None,
-                )
-                if membership is None:
-                    # Sidebar is limited to 120 chats for responsiveness,
-                    # but full-text search must still find older conversations.
-                    membership = ChatParticipant.objects.filter(
-                        chat=chat, user=request.user, is_hidden=False,
-                        **membership_scope,
-                    ).first()
-                if membership is None:
-                    continue
-                if chat.type != Chat.Type.PRIVATE:
-                    chat.member_count_ui = collective_counts.get(
-                        chat.pk,
-                    ) or chat.memberships.count()
-                _decorate_chat_ui(chat, request.user)
-                decorated = chat
-                chat_by_id[chat.pk] = chat
-            message_results.append(
-                {
-                    "id": message.pk,
-                    "chat_id": chat.pk,
-                    "chat_title": decorated.display_name_ui,
-                    "sender_name": message.sender.display_name,
-                    "preview": message.preview[:180],
-                    "time": timezone.localtime(message.created_at).strftime(
-                        "%d.%m.%Y %H:%M"
-                    ),
-                    "url": (
-                        f"{reverse('messenger:chat', args=[chat.pk])}"
-                        f"?message={message.pk}"
-                        + (f"&folder={active_folder.pk}" if active_folder else "")
-                        + f"#message-{message.pk}"
-                    ),
-                }
-            )
+        .exclude(hidden_for_users__user=request.user)
+        .select_related("sender", "chat")
+        .distinct()
+    )
+    search_matches, next_before = _search_page(message_query, before, 18)
+    chat_by_id = {}
+    for message in search_matches:
+        chat = message.chat
+        decorated = chat_by_id.get(chat.pk)
+        if decorated is None:
+            _decorate_chat_ui(chat, request.user)
+            decorated = chat
+            chat_by_id[chat.pk] = chat
+        message_results.append({
+            "id": message.pk,
+            "chat_id": chat.pk,
+            "chat_title": decorated.display_name_ui,
+            "sender_name": message.sender.display_name,
+            "preview": message.preview[:180],
+            "time": timezone.localtime(message.created_at).strftime("%d.%m.%Y %H:%M"),
+            "url": (
+                f"{reverse('messenger:chat', args=[chat.pk])}?message={message.pk}"
+                + (f"&folder={active_folder.pk}" if active_folder else "")
+                + f"#message-{message.pk}"
+            ),
+        })
 
     return JsonResponse(
         {
@@ -1793,6 +1774,7 @@ def global_search(request):
             "people": people_results,
             "communities": community_results,
             "messages": message_results,
+            "next_before": next_before,
         }
     )
 
@@ -2931,60 +2913,86 @@ def message_reaction(request, chat_id, message_id):
         })
 
 
+def _search_before(request):
+    try:
+        before = int(request.GET.get("before", "0"))
+        if not 0 <= before <= 9223372036854775807:
+            raise ValueError
+        return before
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError("Некорректный курсор поиска.") from None
+
+
+def _search_text_condition(query):
+    return _message_search_condition(query) or (
+        Q(text__icontains=query) | Q(attachments__original_name__icontains=query)
+    )
+
+
+def _search_page(queryset, before, size):
+    if before:
+        queryset = queryset.filter(pk__lt=before)
+    items = list(queryset.order_by("-pk")[:size + 1])
+    has_more = len(items) > size
+    items = items[:size]
+    return items, items[-1].pk if has_more else None
+
+
 @login_required
 @require_GET
 @rate_limit("search_messages")
 def search_messages(request, chat_id):
     chat = _chat_for_user(request.user, chat_id)
     query = request.GET.get("q", "").strip()[:120]
-    if not query:
-        return JsonResponse({"ok": True, "results": []})
+    sender = request.GET.get("sender", "").strip().lstrip("@")
+    kind = request.GET.get("kind", "").strip()
+    raw_from = request.GET.get("date_from", "").strip()
+    raw_to = request.GET.get("date_to", "").strip()
+    try:
+        before = _search_before(request)
+        date_from = parse_date(raw_from) if raw_from else None
+        date_to = parse_date(raw_to) if raw_to else None
+        if (raw_from and date_from is None) or (raw_to and date_to is None):
+            raise ValueError("Укажите корректную дату.")
+        if date_from and date_to and date_from > date_to:
+            raise ValueError("Начальная дата позже конечной.")
+        if len(sender) > 150 or kind not in ("", "text", *MessageAttachment.Kind.values, *Message.SpecialType.values):
+            raise ValueError("Некорректные фильтры поиска.")
+    except (TypeError, ValueError, OverflowError) as error:
+        return JsonResponse({"ok": False, "error": str(error)}, status=400)
+    if not any((query, sender, kind, date_from, date_to)):
+        return JsonResponse({"ok": True, "results": [], "next_before": None})
 
     base = _visible_message_queryset(chat, request.user).filter(is_deleted=False)
-    token_condition = _message_search_condition(query)
-    if token_condition is not None:
-        results = list(base.filter(token_condition).order_by("-id")[:50])
-    elif connection.vendor == "postgresql":
-        from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
-
-        search_query = SearchQuery(query, config="simple", search_type="websearch")
-        search_vector = SearchVector("text", config="simple")
-        results = list(
-            base.annotate(
-                search_document=search_vector,
-                search_rank=SearchRank(search_vector, search_query),
-            )
-            .filter(
-                Q(search_document=search_query)
-                | Q(attachments__original_name__icontains=query)
-            )
-            .distinct()
-            .order_by("-search_rank", "-id")[:50]
-        )
-    else:
-        results = list(
-            base.filter(
-                Q(text__icontains=query)
-                | Q(attachments__original_name__icontains=query)
-            )
-            .distinct()
-            .order_by("-id")[:50]
-        )
-    return JsonResponse(
-        {
-            "ok": True,
-            "results": [
-                {
-                    "id": message.pk,
-                    "sender_name": message.sender.display_name,
-                    "preview": message.preview[:220],
-                    "time": timezone.localtime(message.created_at).strftime("%d.%m.%Y %H:%M"),
-                    "url": f"{reverse('messenger:chat', args=[chat.pk])}?message={message.pk}#message-{message.pk}",
-                }
-                for message in results
-            ],
-        }
-    )
+    if query:
+        base = base.filter(_search_text_condition(query))
+    if sender:
+        base = base.filter(sender__username__iexact=sender)
+    if date_from:
+        base = base.filter(created_at__date__gte=date_from)
+    if date_to:
+        base = base.filter(created_at__date__lte=date_to)
+    if kind == "text":
+        base = base.filter(special_type="", attachments__isnull=True).exclude(text="")
+    elif kind in MessageAttachment.Kind.values:
+        base = base.filter(attachments__kind=kind)
+    elif kind:
+        base = base.filter(special_type=kind)
+    results, next_before = _search_page(base, before, 50)
+    return JsonResponse({
+        "ok": True,
+        "results": [
+            {
+                "id": message.pk,
+                "sender_name": message.sender.display_name,
+                "preview": message.preview[:220],
+                "time": timezone.localtime(message.created_at).strftime("%d.%m.%Y %H:%M"),
+                "url": f"{reverse('messenger:chat', args=[chat.pk])}?message={message.pk}#message-{message.pk}",
+            }
+            for message in results
+        ],
+        "next_before": next_before,
+    })
 
 
 @login_required

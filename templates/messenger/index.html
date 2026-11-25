@@ -27,7 +27,7 @@
       {% endif %}
       <label class="sidebar-searchbar__field" for="chatFilter">
         <span class="tg-native-icon tg-native-icon--search sidebar-searchbar__icon" aria-hidden="true"></span>
-        <input id="chatFilter" type="search" data-global-search-url="{% url 'messenger:global_search' %}{% if show_archived %}?archived=1{% elif active_folder %}?folder={{ active_folder.pk }}{% endif %}" placeholder="{% if show_archived %}Поиск в архиве{% else %}Поиск{% endif %}" autocomplete="off">
+        <input id="chatFilter" type="search" maxlength="120" data-global-search-url="{% url 'messenger:global_search' %}{% if show_archived %}?archived=1{% elif active_folder %}?folder={{ active_folder.pk }}{% endif %}" placeholder="{% if show_archived %}Поиск в архиве{% else %}Поиск{% endif %}" autocomplete="off">
       </label>
     </header>
 
@@ -280,11 +280,36 @@
       <section class="chat-search-panel" id="chatSearchPanel" data-search-url="{{ search_url }}" hidden>
         <div class="chat-search-box">
           <span class="tg-native-icon tg-native-icon--search tg-native-icon--compact" aria-hidden="true"></span>
-          <input id="chatSearchInput" type="search" placeholder="Поиск сообщений" autocomplete="off">
+          <input id="chatSearchInput" type="search" maxlength="120" placeholder="Поиск сообщений" autocomplete="off">
           <button id="chatSearchClose" type="button" aria-label="Закрыть"><span class="tg-native-icon tg-native-icon--close tg-native-icon--compact" aria-hidden="true"></span></button>
         </div>
-        <div class="chat-search-results" id="chatSearchResults">
-          <div class="chat-search-empty">Введите текст сообщения или название файла.</div>
+        <details class="chat-search-filters">
+          <summary>Фильтры поиска</summary>
+          <div class="chat-search-filter-grid">
+            <label>Отправитель<input id="chatSearchSender" name="sender" type="search" maxlength="150" placeholder="@username" autocomplete="off"></label>
+            <label>Тип сообщения
+              <select id="chatSearchKind" name="kind">
+                <option value="">Все</option>
+                <option value="text">Текст</option>
+                <option value="image">Фото и GIF</option>
+                <option value="video">Видео</option>
+                <option value="file">Файлы</option>
+                <option value="audio">Музыка</option>
+                <option value="voice">Голосовые</option>
+                <option value="sticker">Стикеры</option>
+                <option value="poll">Опросы</option>
+                <option value="todo">Списки задач</option>
+                <option value="article">Статьи</option>
+                <option value="location">Геопозиции</option>
+              </select>
+            </label>
+            <label>С даты<input id="chatSearchFrom" name="date_from" type="date"></label>
+            <label>По дату<input id="chatSearchTo" name="date_to" type="date"></label>
+            <button type="button" class="chat-search-more" id="chatSearchReset">Сбросить фильтры</button>
+          </div>
+        </details>
+        <div class="chat-search-results" id="chatSearchResults" aria-live="polite">
+          <div class="chat-search-empty">Введите текст, название файла или выберите фильтры.</div>
         </div>
       </section>
 

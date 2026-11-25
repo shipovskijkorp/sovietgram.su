@@ -24,12 +24,16 @@
     return item ? decodeURIComponent(item.split("=").slice(1).join("=")) : "";
   }
 
-  async function fetchSearch(input, controller) {
+  async function fetchSearch(input, controller, before = null) {
     const endpoint = input && input.dataset.globalSearchUrl;
     const query = input ? input.value.trim() : "";
     if (!endpoint || !query) return null;
     const url = new URL(endpoint, window.location.origin);
     url.searchParams.set("q", query);
+    if (before) {
+      url.searchParams.set("before", String(before));
+      url.searchParams.set("messages_only", "1");
+    }
     const response = await fetch(url, {
       credentials: "same-origin",
       signal: controller.signal,
@@ -191,6 +195,35 @@
       blocks.forEach((block) => sidebarResults.appendChild(block));
     }
     sidebarResults.hidden = false;
+    if (payload.next_before) {
+      const more = document.createElement("button");
+      more.type = "button";
+      more.className = "chat-search-more";
+      more.textContent = "Ещё сообщения";
+      more.addEventListener("click", async () => {
+        if (sidebarInput.value.trim() !== payload.query) return;
+        more.disabled = true;
+        sidebarController?.abort();
+        const controller = new AbortController();
+        sidebarController = controller;
+        try {
+          const page = await fetchSearch(sidebarInput, controller, payload.next_before);
+          if (!page || controller !== sidebarController || controller.signal.aborted || sidebarInput.value.trim() !== page.query) return;
+          const offset = sidebarResults.scrollTop;
+          const messages = payload.messages || [];
+          renderSidebar({
+            ...payload, next_before: page.next_before,
+            messages: [...messages, ...(page.messages || []).filter(item => !messages.some(old => old.id === item.id))],
+          });
+          sidebarResults.scrollTop = offset;
+        } catch (error) {
+          if (error.name !== "AbortError" && controller === sidebarController) toast(error.message);
+        } finally {
+          if (more.isConnected) more.disabled = false;
+        }
+      });
+      sidebarResults.appendChild(more);
+    }
   }
 
   function renderContacts(payload) {
@@ -285,6 +318,7 @@
   applyLocalChatFilter();
 
   function resetSidebarSearch() {
+    window.clearTimeout(sidebarTimer);
     if (sidebarController) sidebarController.abort();
     sidebarController = null;
     if (sidebarResults) {
@@ -297,6 +331,12 @@
   if (sidebarInput) {
     sidebarInput.addEventListener("input", () => {
       window.clearTimeout(sidebarTimer);
+      sidebarController?.abort();
+      sidebarController = null;
+      if (sidebarResults) {
+        sidebarResults.hidden = true;
+        sidebarResults.replaceChildren();
+      }
       applyLocalChatFilter();
       const query = sidebarInput.value.trim();
       if (!query) {
@@ -305,10 +345,11 @@
       }
       sidebarTimer = window.setTimeout(async () => {
         if (sidebarController) sidebarController.abort();
-        sidebarController = new AbortController();
+        const controller = new AbortController();
+        sidebarController = controller;
         try {
-          const payload = await fetchSearch(sidebarInput, sidebarController);
-          if (payload && sidebarInput.value.trim() === payload.query.trim()) renderSidebar(payload);
+          const payload = await fetchSearch(sidebarInput, controller);
+          if (payload && controller === sidebarController && !controller.signal.aborted && sidebarInput.value.trim() === payload.query.trim()) renderSidebar(payload);
         } catch (error) {
           if (error.name !== "AbortError") toast(error.message);
         }
