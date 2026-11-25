@@ -966,11 +966,11 @@
       <div class="shared-media-grid">
         {% for attachment in shared_attachments %}
           {% if attachment.kind == 'image' %}
-            <a class="shared-media-item shared-media-item--image" href="{% url 'messenger:view_attachment' attachment.pk %}" target="_blank" rel="noopener" data-lightbox-image="{% url 'messenger:view_attachment' attachment.pk %}"><img src="{% url 'messenger:view_attachment' attachment.pk %}" alt="{{ attachment.original_name }}" loading="lazy"></a>
+            <a class="shared-media-item shared-media-item--image" href="{% url 'messenger:view_attachment' attachment.pk %}" target="_blank" rel="noopener" data-lightbox-image="{% url 'messenger:view_attachment' attachment.pk %}" data-media-name="{{ attachment.original_name }}" data-media-download="{% if not selected_chat.protect_content %}{% url 'messenger:download_attachment' attachment.pk %}{% endif %}"><img src="{% url 'messenger:thumbnail_attachment' attachment.pk %}" alt="{{ attachment.original_name }}" loading="lazy"></a>
           {% elif attachment.kind == 'video' %}
             <a class="shared-media-item shared-media-item--video" href="{% url 'messenger:view_attachment' attachment.pk %}" target="_blank" rel="noopener" data-lightbox-video="{% url 'messenger:view_attachment' attachment.pk %}" data-media-name="{{ attachment.original_name }}" data-media-download="{% if not selected_chat.protect_content %}{% url 'messenger:download_attachment' attachment.pk %}{% endif %}"><span>▶</span><small>{{ attachment.original_name }}</small></a>
           {% else %}
-            <a class="shared-file-item" href="{{ attachment.ui_url }}"><span>↓</span><span><strong>{{ attachment.original_name }}</strong><small>{{ attachment.size|filesizeformat }}</small></span></a>
+            <a class="shared-file-item" href="{% if selected_chat.protect_content and attachment.kind == 'file' %}{% url 'messenger:chat' selected_chat.pk %}?message={{ attachment.message_id }}#message-{{ attachment.message_id }}{% else %}{{ attachment.ui_url }}{% endif %}"><span>↓</span><span><strong>{{ attachment.original_name }}</strong><small>{{ attachment.size|filesizeformat }}</small></span></a>
           {% endif %}
         {% endfor %}
       </div>

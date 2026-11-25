@@ -107,7 +107,7 @@
       } else {
         button.dataset.lightboxImage = item.url;
         const thumbnail = node("img");
-        thumbnail.src = item.url; thumbnail.alt = item.name; thumbnail.loading = "lazy";
+        thumbnail.src = item.thumbnail_url || item.url; thumbnail.alt = item.name; thumbnail.loading = "lazy";
         button.append(thumbnail);
       }
       button.setAttribute("aria-label", "Открыть " + item.name);

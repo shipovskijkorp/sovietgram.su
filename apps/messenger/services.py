@@ -283,6 +283,8 @@ def shared_attachment_payload(attachment, chat):
         "name": attachment.original_name,
         "size": attachment.size,
         "url": attachment_url(attachment),
+        "thumbnail_url": reverse("messenger:thumbnail_attachment", args=[attachment.pk])
+            if attachment.kind in {MessageAttachment.Kind.IMAGE, MessageAttachment.Kind.STICKER} else "",
         "download_url": "" if chat.protect_content else reverse(
             "messenger:download_attachment", args=[attachment.pk]
         ),

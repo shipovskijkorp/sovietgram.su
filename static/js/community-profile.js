@@ -165,7 +165,7 @@
       if (item.kind === "image") {
         link.dataset.lightboxImage = item.url;
         const image = document.createElement("img");
-        image.src = item.url;
+        image.src = item.thumbnail_url || item.url;
         image.alt = item.name;
         image.loading = "lazy";
         link.appendChild(image);

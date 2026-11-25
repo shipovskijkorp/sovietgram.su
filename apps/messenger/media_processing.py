@@ -34,6 +34,13 @@ def compress_image_upload(uploaded):
             if fmt == "JPEG":
                 image.draft("RGB", (COMPRESS_EDGE, COMPRESS_EDGE))
             oriented = ImageOps.exif_transpose(image)
+            # Expand palette/tRNS transparency before resampling. Otherwise
+            # palette PNGs can acquire jagged edges or lose their alpha.
+            if fmt != "JPEG" and ("transparency" in oriented.info or "A" in oriented.getbands()):
+                oriented = oriented.convert("RGBA")
+                oriented.info.pop("transparency", None)
+            elif fmt != "JPEG" and oriented.mode not in {"RGB", "L"}:
+                oriented = oriented.convert("RGB")
             oriented.thumbnail((COMPRESS_EDGE, COMPRESS_EDGE), Image.Resampling.LANCZOS)
             if fmt == "JPEG":
                 oriented = oriented.convert("RGB")
@@ -54,3 +61,33 @@ def compress_image_upload(uploaded):
         return uploaded
     finally:
         uploaded.seek(0)
+
+
+
+THUMBNAIL_EDGE = 384
+THUMBNAIL_VERSION = "v1"
+
+
+def make_thumbnail(source):
+    """A bounded static preview, not a replacement for the stored media."""
+    with Image.open(source) as image:
+        width, height = image.size
+        if image.format not in {"JPEG", "PNG", "WEBP", "GIF"}:
+            raise ValueError("Unsupported image")
+        if max(width, height) > MAX_IMAGE_DIMENSION or width * height > MAX_IMAGE_PIXELS:
+            raise ValueError("Image too large")
+        # Preview just the first frame of animated media. The viewer uses
+        # the untouched full file and still plays the animation.
+        if image.format == "JPEG":
+            image.draft("RGB", (THUMBNAIL_EDGE, THUMBNAIL_EDGE))
+        oriented = ImageOps.exif_transpose(image)
+        alpha = "A" in oriented.getbands() or "transparency" in oriented.info
+        oriented = oriented.convert("RGBA" if alpha else "RGB")
+        oriented.thumbnail((THUMBNAIL_EDGE, THUMBNAIL_EDGE), Image.Resampling.LANCZOS)
+        # Paste into a fresh image to avoid retaining EXIF, ICC or arbitrary
+        # metadata inherited from the uploaded image.
+        clean = Image.new(oriented.mode, oriented.size)
+        clean.paste(oriented)
+        output = BytesIO()
+        clean.save(output, format="WEBP", quality=80, method=2)
+        return output.getvalue()

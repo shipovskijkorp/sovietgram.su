@@ -37,6 +37,8 @@ from django.db.models.functions import Coalesce, Concat, Greatest, Trim
 from django.http import (
     FileResponse,
     Http404,
+    HttpResponse,
+    HttpResponseNotModified,
     HttpResponseForbidden,
     JsonResponse,
     StreamingHttpResponse,
@@ -46,7 +48,8 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import escape
 from django.utils.dateparse import parse_date, parse_datetime
-from django.utils.http import url_has_allowed_host_and_scheme
+from django.utils.http import parse_etags, url_has_allowed_host_and_scheme
+from django.utils.cache import patch_vary_headers
 from django.views.decorators.http import require_GET, require_POST
 
 from apps.accounts.multiaccount import account_slots
@@ -63,7 +66,8 @@ from apps.accounts.privacy import (
 )
 
 from .forms import CommunityForm, EditMessageForm, MessageForm
-from .media_processing import compress_image_upload
+from .media_processing import THUMBNAIL_VERSION, compress_image_upload, make_thumbnail
+from PIL import Image
 from .community_permissions import can_pin_messages, has_admin_right, is_banned, member_denials
 from .folder_rules import decorate_folder_categories, matching_chats, requested_folder
 from .markdown import render_message_markdown
@@ -3560,6 +3564,36 @@ def _inline_file_response(request, attachment, content_type):
 
 @login_required
 @require_GET
+def thumbnail_attachment(request, attachment_id):
+    # Authorize even conditional requests: an ETag must not circumvent
+    # revoked membership, cleared history, expiry, or per-user deletion.
+    attachment = _attachment_for_user(request.user, attachment_id)
+    if attachment.kind not in {MessageAttachment.Kind.IMAGE, MessageAttachment.Kind.STICKER}:
+        raise Http404
+    if not attachment.file or not attachment.file.storage.exists(attachment.file.name):
+        raise Http404
+    version = hashlib.sha256(
+        f"{THUMBNAIL_VERSION}:{attachment.pk}:{attachment.file.name}:{attachment.size}".encode()
+    ).hexdigest()
+    etag = f'"{version}"'
+    if etag in parse_etags(request.headers.get("If-None-Match", "")):
+        response = HttpResponseNotModified()
+    else:
+        try:
+            with attachment.file.open("rb") as source:
+                content = make_thumbnail(source)
+        except (OSError, ValueError, EOFError, SyntaxError, Image.DecompressionBombError):
+            raise Http404("Миниатюра недоступна.") from None
+        response = HttpResponse(content, content_type="image/webp")
+    response["ETag"] = etag
+    response["Cache-Control"] = "private, no-cache, must-revalidate"
+    response["X-Content-Type-Options"] = "nosniff"
+    patch_vary_headers(response, ["Cookie"])
+    return response
+
+
+@login_required
+@require_GET
 def view_attachment(request, attachment_id):
     attachment = _attachment_for_user(request.user, attachment_id)
     if attachment.kind not in {
@@ -3597,7 +3631,15 @@ def view_attachment(request, attachment_id):
     if content_type is None:
         return JsonResponse({"ok": False, "error": "Неподдерживаемый тип медиа."}, status=404)
 
-    return _inline_file_response(request, attachment, content_type)
+    if not attachment.file or not attachment.file.storage.exists(attachment.file.name):
+        raise Http404
+    try:
+        response = _inline_file_response(request, attachment, content_type)
+    except FileNotFoundError:
+        raise Http404 from None
+    response["Cache-Control"] = "private, no-store"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @login_required
@@ -3625,13 +3667,18 @@ def download_attachment(request, attachment_id):
         return HttpResponseForbidden(
             "Скачивание вложений отключено для этой переписки."
         )
-    attachment.file.open("rb")
-    return FileResponse(
+    try:
+        attachment.file.open("rb")
+    except (FileNotFoundError, ValueError):
+        raise Http404 from None
+    response = FileResponse(
         attachment.file,
         as_attachment=True,
         filename=Path(attachment.original_name).name or "file",
         content_type="application/octet-stream",
     )
+    response["Cache-Control"] = "private, no-store"
+    return response
 
 
 @login_required
