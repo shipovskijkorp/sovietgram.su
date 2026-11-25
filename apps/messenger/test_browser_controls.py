@@ -418,6 +418,34 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.expect(self.page.locator(".platform-table-wrap")).to_contain_text("Browser moderation")
         self.assertFalse(Message.objects.filter(pk=reported.pk,is_deleted=False).exists())
 
+    def test_native_select_colors_follow_account_theme(self):
+        from apps.accounts.two_factor import encrypt_secret
+        import pyotp
+
+        self.owner.platform_role = User.PlatformRole.OWNER
+        self.owner.two_factor_secret = encrypt_secret(pyotp.random_base32())
+        self.owner.save(update_fields=["platform_role", "two_factor_secret"])
+        pages = [
+            (reverse("administration:user_detail", args=[self.peer.pk]), 'select[name="role"]'),
+            (reverse("administration:users"), 'select[name="status"]'),
+            (reverse("administration:submit_report", args=["user", self.peer.pk]), 'select[name="reason"]'),
+        ]
+        for theme, ink, surface in (
+            ("dark", "rgb(238, 229, 216)", "rgb(33, 29, 26)"),
+            ("light", "rgb(42, 36, 29)", "rgb(255, 250, 241)"),
+        ):
+            User.objects.filter(pk=self.owner.pk).update(theme=theme)
+            for path, selector in pages:
+                with self.subTest(theme=theme, path=path):
+                    self.page.goto(self.live_server_url + path, wait_until="domcontentloaded")
+                    control = self.page.locator(selector)
+                    self.expect(control).to_be_visible()
+                    self.expect(control).to_have_css("color-scheme", theme)
+                    self.expect(control).to_have_css("background-color", surface)
+                    for option in control.locator("option").all():
+                        self.expect(option).to_have_css("color", ink)
+                        self.expect(option).to_have_css("background-color", surface)
+
     def test_foreign_profile_controls(self):
         self.go(query="?profile=peer")
         self.visible("#userProfileOverlay")

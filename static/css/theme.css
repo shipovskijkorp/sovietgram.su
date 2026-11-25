@@ -230,3 +230,27 @@ body[data-theme="dark"] .brand__mark {
   background-color: #d3aa40;
   color: transparent;
 }
+
+/* Native select popups may ignore a transparent control background and
+   use the OS palette. Give both the control and its options theme colors. */
+body select {
+  color-scheme: light;
+  color: var(--ink);
+  background-color: var(--panel-strong);
+}
+
+body[data-theme="dark"] select {
+  color-scheme: dark;
+}
+
+body select option,
+body select optgroup {
+  color: var(--ink);
+  background-color: var(--panel-strong);
+}
+
+body select option:disabled,
+body select optgroup:disabled,
+body select optgroup:disabled option {
+  color: var(--muted);
+}

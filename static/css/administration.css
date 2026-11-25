@@ -13,3 +13,10 @@
 .platform-filter,.platform-action{display:flex;align-items:end;gap:9px;flex-wrap:wrap;margin:12px 0}.platform-action label{display:grid;gap:5px;flex:1 1 210px;font-size:12px}.platform-filter input{flex:1 1 220px}.platform-filter input,.platform-action input,.platform-filter select,.platform-action select{font:inherit;padding:10px;border:1px solid var(--line,#d5c9b9);border-radius:7px;background:transparent;color:inherit;min-width:0;max-width:100%}.platform-filter button,.platform-action button{background:var(--red,#b42318);color:white;border:0;border-radius:7px;padding:11px 14px;font:inherit;font-size:12px;font-weight:650;cursor:pointer}.platform-action .platform-danger{background:#982b25}.platform-pagination{display:flex;justify-content:center;gap:16px;padding:16px;font-size:12px}.platform-notice{padding:10px 12px;border:1px solid var(--line,#d5c9b9);border-radius:7px;font-size:13px}.platform-evidence{white-space:normal;overflow-wrap:anywhere;border-left:3px solid var(--red,#b42318);padding:10px;background:color-mix(in srgb,var(--red,#b42318) 5%,transparent)}
 body[data-theme="dark"] .platform-sidebar,body[data-theme="dark"] .platform-metrics section,body[data-theme="dark"] .platform-section,body[data-theme="dark"] .platform-table-wrap{background:#221e1b}
 @media(max-width:760px){.platform-shell{display:block}.platform-sidebar{padding:10px;border-right:0;border-bottom:1px solid var(--line,#d5c9b9)}.platform-identity{padding:6px 8px}.platform-sidebar nav{display:flex;overflow:auto;white-space:nowrap;margin-top:8px}.platform-sidebar nav a{font-size:12px}.platform-main{padding:16px 10px}.platform-heading h1{font-size:24px}.platform-details{grid-template-columns:1fr;gap:4px}.platform-details dd{margin-bottom:8px}.platform-status{white-space:normal}.platform-heading{flex-wrap:wrap}}
+
+/* Do not inherit the transparent input background for native dropdowns. */
+.platform-filter select,
+.platform-action select {
+  color: var(--ink);
+  background-color: var(--panel-strong);
+}
