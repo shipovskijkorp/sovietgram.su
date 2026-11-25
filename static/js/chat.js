@@ -1517,6 +1517,14 @@ let reactionCursorAt = newestUpdateAt;
 let reactionCursorId = 0;
 let pollBusy = false;
 let pollRendering = false;
+// Rotate over mounted messages, not the entire chat history. Bounded requests
+// recover even hard deletes and per-user visibility changes missed offline.
+let knownMessageCursor = 0;
+function knownMessageBatch() {
+  const ids = historyNodes().map(nodeId).filter(id => Number.isSafeInteger(id) && id > 0).sort((a,b) => a-b);
+  const next = ids.filter(id => id > knownMessageCursor);
+  return (next.length ? next : ids).slice(0, 100);
+}
 let scrollTimer = 0;
 
 function updateHistoryControls() {
@@ -1724,6 +1732,9 @@ async function pollMessages() {
   const generation = historyGeneration;
   try {
     const url = new URL(messageStage.dataset.pollUrl, window.location.origin);
+    const knownIds = knownMessageBatch();
+    if (knownIds.length) url.searchParams.set("known_ids", knownIds.join(","));
+    if (messageStage.dataset.accountId) url.searchParams.set("account_id", messageStage.dataset.accountId);
     url.searchParams.set("after", String(newestMessageId));
     url.searchParams.set("since", newestUpdateAt);
     url.searchParams.set("after_update_id", String(newestUpdateId));
@@ -1731,9 +1742,16 @@ async function pollMessages() {
     url.searchParams.set("reaction_after_id", String(reactionCursorId));
     if (historyHasNewer) url.searchParams.set("skip_new", "1");
     const response = await fetch(url, { credentials: "same-origin", cache: "no-store" });
+    if (generation !== historyGeneration) return;
+    if (response.status === 404 || response.status === 409) {
+      // Membership/chat may have been removed or another tab switched accounts.
+      window.location.assign("/");
+      return;
+    }
     if (!response.ok) return;
     const payload = await response.json();
     if (generation !== historyGeneration) return;
+    knownMessageCursor = knownIds.at(-1) || 0;
     document.dispatchEvent(new CustomEvent("sovietgram:chat-protection", {
       detail: { enabled: Boolean(payload.protect_content) },
     }));
@@ -1745,6 +1763,16 @@ async function pollMessages() {
     const anchor = follow ? null : visibleAnchor();
     for (const message of payload.messages || []) renderMessage(message);
     for (const message of payload.updates || []) applyMessageUpdate(message);
+    const requestedIds = new Set(knownIds);
+    for (const id of payload.removed_ids || []) {
+      if (requestedIds.has(Number(id))) applyMessageUpdate({id: Number(id), is_deleted: true});
+    }
+    if (!historyNodes().length && (historyHasOlder || historyHasNewer)) {
+      // A whole mounted window can disappear after remote history clearing.
+      // Reload the latest visible page so pagination cannot get stuck.
+      void loadLatestHistory();
+      return;
+    }
     for (const update of payload.reaction_updates || []) {
       const article = historyNodes().find(node => nodeId(node) === Number(update.message_id));
       if (article) window.SovietgramSocial.renderReactions(article, update);

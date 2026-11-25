@@ -375,14 +375,15 @@
                          data-special-type="poll"
                          data-action-url="{{ message.special_ui.action_url }}"
                          data-multiple="{{ message.special_ui.multiple|yesno:'true,false' }}"
-                         data-quiz="{{ message.special_ui.quiz|yesno:'true,false' }}">
+                         data-quiz="{{ message.special_ui.quiz|yesno:'true,false' }}"
+                         data-can-vote="{{ message.special_ui.can_vote|yesno:'true,false' }}">
                   <strong class="message-special__title">{{ message.special_ui.question }}</strong>
                   <small class="message-special__eyebrow">{% if message.special_ui.quiz %}Викторина{% else %}Опрос{% endif %}{% if message.special_ui.anonymous %} · анонимный{% endif %}</small>
                   <div class="message-poll__options">
                     {% for option in message.special_ui.options %}
                       <button class="message-poll__option{% if option.selected %} is-selected{% endif %}{% if option.correct %} is-correct{% endif %}"
                               type="button"
-                              data-poll-option="{{ option.index }}">
+                              data-poll-option="{{ option.index }}"{% if not message.special_ui.can_vote %} disabled{% endif %}>
                         <span class="message-poll__radio"></span>
                         <span class="message-poll__label">{{ option.text }}</span>
                         <span class="message-poll__percent">{{ option.percent }}%</span>
@@ -391,7 +392,7 @@
                       </button>
                     {% endfor %}
                   </div>
-                  {% if message.special_ui.multiple %}
+                  {% if message.special_ui.multiple and message.special_ui.can_vote %}
                     <button class="message-poll__submit" type="button" data-poll-submit>Голосовать</button>
                   {% endif %}
                   <small class="message-poll__meta">{{ message.special_ui.total_voters }} голосов{% if message.special_ui.closed %} · завершён{% endif %}</small>

@@ -438,6 +438,8 @@
     card.dataset.multiple = data.multiple ? "true" : "false";
     card.dataset.quiz = data.quiz ? "true" : "false";
     card.dataset.voted = data.selected_indexes?.length ? "true" : "false";
+    const canVote = data.can_vote ?? (!data.closed && !(data.quiz && data.selected_indexes?.length));
+    card.dataset.canVote = String(canVote);
 
     card.appendChild(el("strong", "message-special__title", data.question || "Опрос"));
     card.appendChild(
@@ -458,7 +460,7 @@
       button.type = "button";
       button.dataset.pollOption = String(option.index);
       button.style.setProperty("--poll-percent", (option.percent || 0) + "%");
-      button.disabled = Boolean(data.closed);
+      button.disabled = !canVote;
 
       button.appendChild(el("span", "message-poll__radio"));
       button.appendChild(el("span", "message-poll__label", option.text || ""));
@@ -473,7 +475,7 @@
     });
     card.appendChild(options);
 
-    if (data.multiple) {
+    if (data.multiple && canVote) {
       const submit = el("button", "message-poll__submit", "Голосовать");
       submit.type = "button";
       submit.dataset.pollSubmit = "";
@@ -633,7 +635,7 @@
     const option = event.target.closest("[data-poll-option]");
     if (option) {
       const card = option.closest("[data-special-type='poll']");
-      if (!card || card.classList.contains("is-busy")) return;
+      if (!card || option.disabled || card.dataset.canVote === "false" || card.classList.contains("is-busy")) return;
       const index = Number(option.dataset.pollOption);
       if (card.dataset.multiple === "true") {
         beginMultipleChoice(card);
@@ -653,7 +655,7 @@
     const pollSubmit = event.target.closest("[data-poll-submit]");
     if (pollSubmit) {
       const card = pollSubmit.closest("[data-special-type='poll']");
-      if (!card || card.classList.contains("is-busy")) return;
+      if (!card || card.dataset.canVote === "false" || card.classList.contains("is-busy")) return;
       beginMultipleChoice(card);
       const selected = [...card.querySelectorAll("[data-poll-option].is-pending")]
         .map((node) => Number(node.dataset.pollOption))

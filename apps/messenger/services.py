@@ -295,6 +295,11 @@ def serialize_special_content(message, current_user):
         quiz = bool(data.get("quiz"))
         reveal_quiz = bool(selected_indexes) or message.sender_id == current_user.pk
         correct_index = data.get("correct_option")
+        closed = bool(data.get("closed", False))
+        can_close = message.sender_id == current_user.pk
+        if not can_close and not closed and message.chat.type != Chat.Type.PRIVATE:
+            membership = ChatParticipant.objects.filter(chat=message.chat, user=current_user).first()
+            can_close = has_admin_right(membership, "edit_messages")
         serialized_options = []
         for index, option in enumerate(options):
             voters = option.get("voters") or []
@@ -329,11 +334,9 @@ def serialize_special_content(message, current_user):
             "anonymous": anonymous,
             "multiple": bool(data.get("multiple", False)) and not quiz,
             "quiz": quiz,
-            "closed": bool(data.get("closed", False)),
-            "can_close": (
-                message.sender_id == current_user.pk
-                and not bool(data.get("closed", False))
-            ),
+            "closed": closed,
+            "can_close": can_close and not closed,
+            "can_vote": not closed and not (quiz and selected_indexes),
             "total_voters": len(voter_ids),
             "selected_indexes": selected_indexes,
             "options": serialized_options,

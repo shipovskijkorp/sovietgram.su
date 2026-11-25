@@ -1340,7 +1340,7 @@ def export_chat_history(request, chat_id):
 
                 if message.special_type:
                     special_json = escape(
-                        json.dumps(message.special_data or {}, ensure_ascii=False, indent=2)
+                        json.dumps(serialize_special_content(message, request.user), ensure_ascii=False, indent=2)
                     )
                     html.write(
                         "<details><summary>Данные вложения</summary>"
@@ -2331,6 +2331,17 @@ def special_message_action(request, chat_id, message_id):
                     )
                 if data.get("quiz") or not data.get("multiple"):
                     indexes = indexes[:1]
+
+                if data.get("quiz"):
+                    previous = [
+                        index for index, option in enumerate(options)
+                        if any(str(value) == str(request.user.pk) for value in option.get("voters") or [])
+                    ]
+                    if previous and previous != indexes:
+                        return JsonResponse(
+                            {"ok": False, "error": "Ответ в викторине нельзя изменить."},
+                            status=409,
+                        )
 
                 for option in options:
                     cleaned = []
@@ -3530,6 +3541,24 @@ def download_attachment(request, attachment_id):
 @login_required
 @require_GET
 def poll_messages(request, chat_id):
+    account_id = request.GET.get("account_id")
+    if account_id is not None and account_id != str(request.user.pk):
+        return JsonResponse({"ok": False, "error": "Аккаунт изменился. Обновите страницу."}, status=409)
+    # Only reconcile IDs already known to the requesting client. Returning
+    # absent IDs (without any reason) does not disclose foreign messages.
+    raw_known_ids = request.GET.get("known_ids", "")
+    try:
+        if len(raw_known_ids) > 2100:
+            raise ValueError
+        values = raw_known_ids.split(",") if raw_known_ids else []
+        if len(values) > 100:
+            raise ValueError
+        known_ids = {int(value) for value in values}
+        if any(not 0 < value <= 9223372036854775807 for value in known_ids):
+            raise ValueError
+    except (TypeError, ValueError, OverflowError):
+        return JsonResponse({"ok": False, "error": "Некорректные идентификаторы сообщений."}, status=400)
+
     chat = _chat_for_user(request.user, chat_id)
     membership = _membership(chat, request.user)
     try:
@@ -3563,6 +3592,13 @@ def poll_messages(request, chat_id):
     )
     _hide_inaccessible_reply_previews(chat, request.user, new_messages)
     _hide_inaccessible_reply_previews(chat, request.user, updated_messages)
+    removed_ids = []
+    if known_ids:
+        visible_ids = set(
+            base.filter(pk__in=known_ids, is_deleted=False)
+            .order_by().values_list("pk", flat=True)
+        )
+        removed_ids = sorted(known_ids - visible_ids)
 
     # Independent reaction cursor: changing an emoji must not rebuild media
     # or reset playback on the receiving client's existing message element.
@@ -3698,6 +3734,7 @@ def poll_messages(request, chat_id):
                 )
                 for message in updated_messages
             ],
+            "removed_ids": removed_ids,
             "reaction_updates": [
                 {
                     "message_id": message.pk,
