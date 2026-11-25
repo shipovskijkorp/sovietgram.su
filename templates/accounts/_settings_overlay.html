@@ -96,6 +96,10 @@
             <span class="tg-settings-row__value">Изменить</span>
           </button>
 
+          <a class="tg-settings-row tg-settings-row--plain" href="{% url 'accounts:two_factor' %}">
+            <span class="tg-settings-row__label">Двухфакторная аутентификация</span>
+            <span class="tg-settings-row__value">{% if request.user.two_factor_enabled %}Включена{% else %}Выключена{% endif %}</span>
+          </a>
           <a class="tg-settings-row tg-settings-row--plain" href="{% url 'accounts:email_change' %}">
             <span class="tg-settings-row__label">Электронная почта</span>
             <span class="tg-settings-row__value">{% if request.user.email_verified_at %}Изменить{% else %}Подтвердить{% endif %}</span>

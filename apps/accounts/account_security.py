@@ -68,7 +68,8 @@ def _state(user):
     # Changing either credential or verification status invalidates old links.
     return salted_hmac(
         "sovietgram.account-security.state.v1",
-        f"{user.pk}|{user.password}|{user.email}|{user.email_verified_at}",
+        f"{user.pk}|{user.password}|{user.email}|{user.email_verified_at}"
+        + (f"|{user.security_version}" if user.security_version else ""),
         algorithm="sha256",
     ).hexdigest()
 

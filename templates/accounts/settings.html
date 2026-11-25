@@ -93,6 +93,11 @@
             <span class="tg-settings-row__label">Пароль</span>
             <span class="tg-settings-row__value">Изменить</span>
           </a>
+          <a class="tg-settings-row" href="{% url 'accounts:two_factor' %}">
+            <span class="tg-native-icon tg-native-icon--lock tg-settings-row__icon" aria-hidden="true"></span>
+            <span class="tg-settings-row__label">Двухфакторная аутентификация</span>
+            <span class="tg-settings-row__value">{% if request.user.two_factor_enabled %}Включена{% else %}Выключена{% endif %}</span>
+          </a>
         </div>
 
         <div class="tg-settings-divider" aria-hidden="true"></div>

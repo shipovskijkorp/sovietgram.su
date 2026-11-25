@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% block title %}Двухфакторная защита — Sovietgram{% endblock %}
+{% block body_class %}auth-body{% endblock %}
+{% block content %}
+<main class="auth-shell"><section class="auth-card auth-card--wide">
+  <button class="auth-theme-toggle" type="button" data-auth-theme-toggle aria-label="Переключить тему"><span data-auth-theme-icon aria-hidden="true">☾</span></button>
+  <a class="auth-brand" href="{% url 'messenger:home' %}"><span class="brand__mark">★</span><span>SOVIETGRAM</span></a>
+  <div class="auth-heading"><p class="eyebrow">Безопасность аккаунта</p><h1>Двухфакторная аутентификация</h1>
+    <p>Аккаунт @{{ request.user.username }}. {% if enabled %}Защита включена.{% else %}Защита выключена.{% endif %}</p></div>
+  {% if error %}<div class="form-alert" role="alert">{{ error }}</div>{% endif %}
+  {% if codes %}
+    <h2>Сохраните резервные коды</h2><p>Каждый код можно использовать один раз вместо кода приложения. Они показаны только сейчас. Не передавайте их другим людям.</p>
+    <pre id="recoveryCodes" style="white-space:pre-wrap;line-height:1.6;font-size:14px;user-select:text">{% for code in codes %}{{ code }}
+{% endfor %}</pre>
+    <p>Старые сеансы и прежние резервные коды больше не действуют.</p>
+    <a class="primary-button" href="{% url 'accounts:two_factor' %}">Я сохранил коды</a>
+  {% elif secret %}
+    <h2>Подключите приложение-аутентификатор</h2><p>Отсканируйте QR-код приложением с поддержкой TOTP или введите ключ вручную.</p>
+    <img src="data:image/png;base64,{{ qr }}" alt="QR-код для приложения-аутентификатора" width="220" height="220" style="display:block;max-width:100%;height:auto;margin:12px auto">
+    <label class="field"><span>Секретный ключ</span><input id="totpSetupSecret" readonly value="{{ secret }}" autocomplete="off" spellcheck="false"></label>
+    <form method="post" class="auth-form">
+      {% csrf_token %}<input type="hidden" name="account_id" value="{{ request.user.pk }}"><input type="hidden" name="action" value="enable">
+      <label class="field"><span>Код из приложения</span><input name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required pattern="[0-9]{6}"></label>
+      <button class="primary-button" type="submit">Включить защиту</button>
+    </form>
+    <form method="post" class="auth-form">{% csrf_token %}<input type="hidden" name="account_id" value="{{ request.user.pk }}"><button type="submit" class="primary-button" name="action" value="cancel">Отмена настройки</button></form>
+  {% elif enabled %}
+    <p>Неиспользованных резервных кодов: <strong id="recoveryRemaining">{{ recovery_remaining }}</strong>.</p>
+    <p>Для отключения защиты или выпуска новых кодов подтвердите пароль и свежий код приложения либо резервный код. Все прежние сеансы этого аккаунта будут аннулированы.</p>
+    <form method="post" class="auth-form">
+      {% csrf_token %}<input type="hidden" name="account_id" value="{{ request.user.pk }}">
+      <label class="field"><span>Текущий пароль</span><input type="password" name="password" autocomplete="current-password" required></label>
+      <label class="field"><span>Код двухфакторной защиты</span><input type="password" name="otp" autocomplete="one-time-code" maxlength="64" required></label>
+      <button class="primary-button" type="submit" name="action" value="regenerate">Получить новые резервные коды</button>
+      <button class="primary-button" type="submit" name="action" value="disable">Отключить защиту</button>
+    </form>
+  {% else %}
+    <p>После включения при входе потребуется пароль и одноразовый код. Подойдёт любое приложение с поддержкой TOTP. Остальные сеансы аккаунта будут аннулированы.</p>
+    <form method="post" class="auth-form">
+      {% csrf_token %}<input type="hidden" name="account_id" value="{{ request.user.pk }}"><input type="hidden" name="action" value="start">
+      <label class="field"><span>Текущий пароль</span><input type="password" name="password" autocomplete="current-password" required></label>
+      <button class="primary-button" type="submit">Настроить двухфакторную защиту</button>
+    </form>
+  {% endif %}
+  <p class="auth-switch"><a href="{% url 'messenger:home' %}?settings=privacy">Назад к настройкам</a></p>
+</section></main>
+{% endblock %}
