@@ -3,7 +3,7 @@ from pathlib import Path
 from django import forms
 from django.core.files.uploadedfile import UploadedFile
 from django.contrib.auth import authenticate
-from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
+from django.contrib.auth.forms import AuthenticationForm, PasswordChangeForm, UserCreationForm
 
 from .models import User
 
@@ -72,6 +72,20 @@ class SovietgramAdminAuthenticationForm(IdentifierAuthenticationForm):
         super().confirm_login_allowed(user)
         if not user.is_staff:
             raise self.get_invalid_login_error()
+
+
+class FactorPasswordChangeForm(PasswordChangeForm):
+    account_id = forms.IntegerField(required=False, widget=forms.HiddenInput())
+    otp = forms.CharField(
+        label="Код двухфакторной защиты", required=False, max_length=64,
+        widget=forms.PasswordInput(attrs={"autocomplete": "one-time-code"}),
+    )
+
+    def __init__(self, user, *args, **kwargs):
+        super().__init__(user, *args, **kwargs)
+        self.fields["account_id"].initial = user.pk
+        if not user.two_factor_enabled:
+            self.fields["otp"].widget = forms.HiddenInput()
 
 
 class RegisterForm(UserCreationForm):

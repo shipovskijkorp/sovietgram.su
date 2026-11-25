@@ -27,12 +27,14 @@ from django.utils import timezone
 from django.utils.crypto import constant_time_compare, salted_hmac
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
+from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_GET, require_http_methods
 
 from .models import AccountSecurityRequest, User
 from .lifecycle import delete_user_account
 from .multiaccount import remove_current_account
 from .privacy import account_expired_for_inactivity
+from .two_factor import verify_factor_locked
 
 logger = logging.getLogger(__name__)
 RESET = AccountSecurityRequest.Purpose.PASSWORD_RESET
@@ -49,7 +51,16 @@ class RecoveryForm(forms.Form):
     )
 
 
-class EmailChangeForm(RecoveryForm):
+class FactorConfirmedForm:
+    def configure_factor(self, user):
+        if not user.two_factor_enabled:
+            self.fields["otp"].widget = forms.HiddenInput()
+
+    def configure_account(self, user):
+        self.fields["account_id"].initial = user.pk
+
+
+class EmailChangeForm(RecoveryForm, FactorConfirmedForm):
     email = forms.EmailField(
         label="Новая или текущая неподтверждённая почта", max_length=254,
         widget=forms.EmailInput(attrs={"autocomplete": "email", "autofocus": True}),
@@ -57,6 +68,11 @@ class EmailChangeForm(RecoveryForm):
     password = forms.CharField(
         label="Текущий пароль", strip=False,
         widget=forms.PasswordInput(attrs={"autocomplete": "current-password"}),
+    )
+    account_id = forms.IntegerField(required=False, widget=forms.HiddenInput())
+    otp = forms.CharField(
+        label="Код двухфакторной защиты", required=False, max_length=64,
+        widget=forms.PasswordInput(attrs={"autocomplete":"one-time-code"}),
     )
 
 
@@ -269,16 +285,22 @@ def password_reset_confirm(request, token):
 @login_required
 @never_cache
 @ensure_csrf_cookie
+@sensitive_post_parameters("password", "otp")
 @require_http_methods(["GET", "POST"])
 def email_change_request(request):
     form = EmailChangeForm(
         request.POST if request.method == "POST" else None,
         initial={"email": request.user.email if not request.user.email_verified_at else ""},
     )
+    form.configure_factor(request.user)
+    form.configure_account(request.user)
     if request.method == "POST" and form.is_valid():
         email = form.cleaned_data["email"].strip().lower()
         token = None
-        if _limited("change-user", request.user.pk, 10):
+        actor = form.cleaned_data.get("account_id")
+        if actor is not None and actor != request.user.pk:
+            form.add_error(None, "Аккаунт изменился. Откройте настройки заново.")
+        elif _limited("change-user", request.user.pk, 10):
             form.add_error(None, "Слишком много попыток. Повторите позже.")
         else:
             with transaction.atomic():
@@ -289,6 +311,8 @@ def email_change_request(request):
                     form.add_error("email", "Этот адрес уже подтверждён.")
                 elif not _email_available(user, email):
                     form.add_error("email", "Этот адрес недоступен.")
+                elif not verify_factor_locked(user, form.cleaned_data.get("otp")):
+                    form.add_error("otp", "Нужен действительный код двухфакторной защиты.")
                 else:
                     token = _reserve(user, CHANGE, email)
                     if not token:
@@ -356,7 +380,7 @@ def _invalid(request, purpose):
                  status=400 if request.method == "POST" else 200)
 
 
-class DeleteAccountForm(forms.Form):
+class DeleteAccountForm(forms.Form, FactorConfirmedForm):
     account_id = forms.IntegerField(widget=forms.HiddenInput())
     username = forms.CharField(
         label="Введите имя пользователя для подтверждения", max_length=150,
@@ -366,6 +390,10 @@ class DeleteAccountForm(forms.Form):
         label="Текущий пароль", strip=False,
         widget=forms.PasswordInput(attrs={"autocomplete": "current-password"}),
     )
+    otp = forms.CharField(
+        label="Код двухфакторной защиты", required=False, max_length=64,
+        widget=forms.PasswordInput(attrs={"autocomplete":"one-time-code"}),
+    )
     confirm = forms.BooleanField(
         label="Я понимаю, что удаление необратимо.", required=True,
     )
@@ -374,6 +402,7 @@ class DeleteAccountForm(forms.Form):
 @login_required
 @never_cache
 @ensure_csrf_cookie
+@sensitive_post_parameters("password", "otp")
 @require_http_methods(["GET", "POST"])
 def delete_account(request):
     """Explicit, password-confirmed use of the existing account lifecycle."""
@@ -381,6 +410,7 @@ def delete_account(request):
         request.POST if request.method == "POST" else None,
         initial={"account_id": request.user.pk},
     )
+    form.configure_factor(request.user)
     if request.method == "POST" and form.is_valid():
         if form.cleaned_data["account_id"] != request.user.pk:
             form.add_error(None, "Аккаунт изменился. Откройте настройки заново.")
@@ -396,6 +426,8 @@ def delete_account(request):
                     form.add_error("username", "Имя пользователя не совпадает.")
                 elif not user.check_password(form.cleaned_data["password"]):
                     form.add_error("password", "Неверный пароль.")
+                elif not verify_factor_locked(user, form.cleaned_data.get("otp")):
+                    form.add_error("otp", "Нужен действительный код двухфакторной защиты.")
                 else:
                     delete_user_account(user)
                     deleted = True

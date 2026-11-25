@@ -408,6 +408,8 @@
         </div>
         <form class="tg-settings-password-form" id="settingsPasswordForm" method="post" action="{% url 'accounts:password_change' %}" novalidate>
           {% csrf_token %}
+          <input type="hidden" name="account_id" value="{{ request.user.pk }}">
+          {% if request.user.two_factor_enabled %}<label class="tg-settings-password-field"><span>Код двухфакторной защиты</span><input type="password" name="otp" autocomplete="one-time-code" maxlength="64" required></label>{% endif %}
           <label class="tg-settings-password-field"><span>Текущий пароль</span><input type="password" name="old_password" autocomplete="current-password" required></label>
           <label class="tg-settings-password-field"><span>Новый пароль</span><input type="password" name="new_password1" autocomplete="new-password" required></label>
           <label class="tg-settings-password-field"><span>Повторите новый пароль</span><input type="password" name="new_password2" autocomplete="new-password" required></label>

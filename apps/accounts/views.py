@@ -6,14 +6,18 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import login, logout, update_session_auth_hash
+from django.contrib.auth import HASH_SESSION_KEY, login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.views import LoginView, PasswordChangeView
+from django.db import transaction
 from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.crypto import constant_time_compare
+from django.views.decorators.cache import never_cache
+from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
@@ -25,12 +29,14 @@ from .email_verification import (
 )
 from .forms import (
     IdentifierAuthenticationForm,
+    FactorPasswordChangeForm,
     OverlayProfileForm,
     ProfileForm,
     RegisterForm,
     UserSettingsForm,
 )
 from .models import User, UserBlock
+from .two_factor import verify_factor_locked
 from .multiaccount import (
     activate_account,
     add_authenticated_account,
@@ -229,6 +235,7 @@ class SovietgramLogoutView:
 
 class SovietgramPasswordChangeView(LoginRequiredMixin, PasswordChangeView):
     template_name = "accounts/password_change.html"
+    form_class = FactorPasswordChangeForm
 
     def get_success_url(self):
         return f"{reverse('messenger:home')}?settings=privacy"
@@ -237,9 +244,24 @@ class SovietgramPasswordChangeView(LoginRequiredMixin, PasswordChangeView):
         return redirect(f"{reverse('messenger:home')}?settings=password")
 
     def form_valid(self, form):
-        user = form.save(commit=False)
-        user.save(update_fields=["password"])
+        with transaction.atomic():
+            user = User.objects.select_for_update().get(pk=self.request.user.pk)
+            actor = form.cleaned_data.get("account_id")
+            if (actor is not None and actor != user.pk) or not constant_time_compare(
+                str(self.request.session.get(HASH_SESSION_KEY, "")), user.get_session_auth_hash()
+            ):
+                form.add_error(None, "Аккаунт или его настройки безопасности изменились. Откройте страницу заново.")
+            elif not user.check_password(form.cleaned_data["old_password"]):
+                form.add_error("old_password", "Неверный пароль.")
+            elif not verify_factor_locked(user, form.cleaned_data.get("otp")):
+                form.add_error("otp", "Нужен действительный код двухфакторной защиты.")
+            else:
+                user.set_password(form.cleaned_data["new_password1"])
+                user.save(update_fields=["password"])
+        if form.errors:
+            return self.form_invalid(form)
         update_session_auth_hash(self.request, user)
+        self.request.user = user
         # Password changes rotate the Django auth hash. Refresh the saved
         # multi-account slot in the same request so switching away and back
         # never invalidates the freshly changed account.
@@ -285,6 +307,8 @@ def register(request):
 
 
 @login_required
+@never_cache
+@sensitive_post_parameters("password", "password1", "password2", "otp")
 def add_account(request):
     mode = request.POST.get("mode") or request.GET.get("mode") or "login"
     mode = "register" if mode == "register" else "login"
