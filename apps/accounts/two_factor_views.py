@@ -42,7 +42,7 @@ def pending_secret(request, user):
         return None
 
 
-def render_security(request, *, error="", codes=None, status=200):
+def render_security(request, *, error="", codes=None, status=200, enrollment_completed=False):
     user = request.user
     secret = None if codes else pending_secret(request, user)
     qr = ""
@@ -55,6 +55,7 @@ def render_security(request, *, error="", codes=None, status=200):
     response = render(request, "accounts/two_factor.html", {
         "error": error, "enabled": user.two_factor_enabled,
         "secret": secret, "qr": qr, "codes": codes,
+        "enrollment_completed": enrollment_completed,
         "recovery_remaining": len(user.two_factor_recovery_hashes or []),
     }, status=status)
     response["Referrer-Policy"] = "same-origin"
@@ -161,4 +162,7 @@ def two_factor_settings(request):
         request.session.pop(PENDING, None)
     if started or (rotate and codes is None):
         return redirect("accounts:two_factor")
-    return render_security(request, error=error, codes=codes, status=400 if error else 200)
+    return render_security(
+        request, error=error, codes=codes, status=400 if error else 200,
+        enrollment_completed=action == "enable" and rotate,
+    )

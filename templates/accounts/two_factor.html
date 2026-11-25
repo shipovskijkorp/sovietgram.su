@@ -13,7 +13,7 @@
     <pre id="recoveryCodes" style="white-space:pre-wrap;line-height:1.6;font-size:14px;user-select:text">{% for code in codes %}{{ code }}
 {% endfor %}</pre>
     <p>Старые сеансы и прежние резервные коды больше не действуют.</p>
-    <a class="primary-button" href="{% url 'accounts:two_factor' %}">Я сохранил коды</a>
+    <a class="primary-button" href="{% if enrollment_completed %}{% url 'messenger:home' %}{% else %}{% url 'accounts:two_factor' %}{% endif %}">Я сохранил коды</a>
   {% elif secret %}
     <h2>Подключите приложение-аутентификатор</h2><p>Отсканируйте QR-код приложением с поддержкой TOTP или введите ключ вручную.</p>
     <img src="data:image/png;base64,{{ qr }}" alt="QR-код для приложения-аутентификатора" width="220" height="220" style="display:block;max-width:100%;height:auto;margin:12px auto">
@@ -42,6 +42,6 @@
       <button class="primary-button" type="submit">Настроить двухфакторную защиту</button>
     </form>
   {% endif %}
-  <p class="auth-switch"><a href="{% url 'messenger:home' %}?settings=privacy">Назад к настройкам</a></p>
+  {% if not enrollment_completed %}<p class="auth-switch"><a href="{% url 'messenger:home' %}?settings=privacy">Назад к настройкам</a></p>{% endif %}
 </section></main>
 {% endblock %}

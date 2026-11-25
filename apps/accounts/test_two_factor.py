@@ -61,6 +61,8 @@ class TwoFactorTests(TestCase):
         self.assertEqual(response.status_code,200,response.content)
         codes = response.context["codes"]
         self.assertEqual(len(codes),10)
+        self.assertContains(response, f'<a class="primary-button" href="{reverse("messenger:home")}">Я сохранил коды</a>', html=True)
+        self.assertNotContains(response, "Назад к настройкам")
         self.user.refresh_from_db()
         self.assertTrue(self.user.two_factor_enabled)
         self.assertEqual(decrypt_secret(self.user.two_factor_secret),secret)
@@ -134,6 +136,7 @@ class TwoFactorTests(TestCase):
         response = self.act("regenerate",password=self.password,otp=self.codes[1])
         self.assertEqual(response.status_code,200,response.content)
         replacement = response.context["codes"]
+        self.assertContains(response, f'<a class="primary-button" href="{self.url}">Я сохранил коды</a>', html=True)
         self.assertNotEqual(replacement,self.codes)
         self.assertFalse(Client().login(username=self.user.username,password=self.password,otp=self.codes[2]))
         second.post(reverse("accounts:switch_account",args=[self.user.pk]))
