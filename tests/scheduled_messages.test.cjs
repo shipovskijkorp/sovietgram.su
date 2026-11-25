@@ -31,8 +31,9 @@ test("notification overlap does not replay the same messages", () => {
 
 test("text and media retries include silent mode and outbox uses a private endpoint", () => {
   const chat=read("static/js/chat.js");
-  assert.match(chat,/if \(silent\) data.set\("silent", "1"\)/);
-  assert.match(chat,/silent \? \[sentText, sentReply, "silent"\]/);
+  assert.match(chat,/if \(item.silent\) data.set\("silent", "1"\)/);
+  assert.match(chat,/data.set\("client_message_id", item.id\)/);
+  assert.match(chat,/textOutbox.enqueue\(messageInput.value, replyToInput\?\.value \|\| "", silent\)/);
   const media=read("static/js/attachment-files.js");
   assert.match(media,/data.append\("silent", "1"\)/);
   assert.match(media,/clientId, silent, 1/);

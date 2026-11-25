@@ -1900,6 +1900,9 @@ def idempotent_send(view):
     """Serialize keyed sends by sender; commit message and receipt together."""
     @wraps(view)
     def wrapped(request, *args, **kwargs):
+        account_id = request.POST.get("account_id")
+        if account_id is not None and account_id != str(request.user.pk):
+            return JsonResponse({"ok": False, "error": "Аккаунт изменился. Обновите страницу."}, status=409)
         raw = request.POST.get("client_message_id", "")
         if not raw:
             # Backwards-compatible with older clients and non-JS forms.
@@ -2103,7 +2106,9 @@ def send_message(request, chat_id):
             )
         touch_chat(chat)
         apply_archive_rules_on_new_message(chat, message)
-        if sticker:
+        if sticker or request.POST.get("preserve_draft") == "1":
+            # Queued text may arrive after the author has started a different
+            # draft. Do not clear that draft on the server as a side effect.
             ChatParticipant.objects.filter(chat=chat, user=request.user).update(is_hidden=False)
         else:
             ChatParticipant.objects.filter(chat=chat, user=request.user).update(
@@ -3315,6 +3320,9 @@ def chat_action(request, chat_id):
 @login_required
 @require_POST
 def save_draft(request, chat_id):
+    account_id = request.POST.get("account_id")
+    if account_id is not None and account_id != str(request.user.pk):
+        return JsonResponse({"ok": False, "error": "Аккаунт изменился. Обновите страницу."}, status=409)
     chat = _chat_for_user(request.user, chat_id)
     text = request.POST.get("text", "")
     if len(text) > 4096:

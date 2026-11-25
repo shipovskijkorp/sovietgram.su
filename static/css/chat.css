@@ -1633,3 +1633,15 @@ body[data-theme="dark"] .sticker-dialog {background:#251f1b;color:#f2e8dc;color-
 .join-request-page .join-request-item {display:grid;gap:6px;padding:10px 0;border-bottom:1px solid var(--line);}
 .join-request-item span,.join-request-item small {font-size:12px;opacity:.8;}
 .join-request-item button {font:inherit;font-size:12px;cursor:pointer;color:var(--red-soft);background:transparent;border:1px solid var(--line);border-radius:6px;padding:5px 8px;}
+
+
+/* Pending text is deliberately outside the real message-ID window. */
+.pending-text-messages { display:flex; flex-direction:column; align-items:flex-end; gap:6px; padding-top:6px; }
+.pending-text-messages[hidden] { display:none; }
+.pending-text-caption { color:var(--ink); opacity:.72; font-size:11px; align-self:flex-end; }
+.pending-text-card { max-width:min(84%,560px); min-width:120px; padding:9px 12px; border-radius:12px 12px 4px 12px; border:1px dashed var(--line); background:#fffaf1; color:var(--ink); }
+body[data-theme="dark"] .pending-text-card { background:#2a2420; }
+.pending-text-body { white-space:pre-wrap; overflow-wrap:anywhere; font-size:13px; }
+.pending-text-footer { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:7px; font-size:11px; margin-top:5px; }
+.pending-text-footer span { opacity:.78; }
+.pending-text-footer button { border:0; background:transparent; color:var(--red); font:inherit; cursor:pointer; padding:4px; }

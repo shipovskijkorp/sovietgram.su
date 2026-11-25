@@ -1060,6 +1060,7 @@ async function saveDraft(text, keepalive = false) {
   const data = new FormData();
   data.append("csrfmiddlewaretoken", csrfToken);
   data.append("text", text);
+  data.append("account_id", messageStage.dataset.accountId);
   try {
     await fetch(messageStage.dataset.draftUrl, {
       method: "POST",
@@ -1105,53 +1106,119 @@ window.addEventListener("beforeunload", () => {
   const data = new FormData();
   data.append("csrfmiddlewaretoken", csrfToken);
   data.append("text", messageInput.value);
+  data.append("account_id", messageStage.dataset.accountId);
   navigator.sendBeacon?.(messageStage.dataset.draftUrl, data);
 });
 
-const textSendKeys = window.SovietgramSendRetry.batch();
 const stickerSendKeys = window.SovietgramSendRetry.batch();
-const textSendScope = "sovietgram.pending-text." + (messageStage?.dataset.accountId || "") + "." + (conversation?.dataset.chatId || "");
-let textSendBusy = false;
-async function sendTextMessage(silent = false) {
-  if (!form || !messageInput?.value.trim() || messageInput.readOnly || textSendBusy) return;
-  textSendBusy = true;
-  sendButton.disabled = true;
-  const data = new FormData(form);
-  data.delete("attachments");
+let textSendBusy = false; // Existing sticker transport lock.
+const pendingTextList = document.getElementById("pendingTextMessages");
+const queueScope = "sovietgram.outbox.v1." + (messageStage?.dataset.accountId || "") + "." + (conversation?.dataset.chatId || "");
+let textOutbox = null;
+
+function renderPendingText(items, saved = true) {
+  if (!pendingTextList) return;
+  const follow = !historyHasNewer && nearBottom();
+  pendingTextList.replaceChildren();
+  pendingTextList.hidden = !items.length;
+  if (!items.length) return;
+  const caption = document.createElement("small");
+  caption.className = "pending-text-caption";
+  caption.textContent = saved ? "Исходящие · очередь этой вкладки" : "Исходящие · хранение недоступно, не закрывайте вкладку";
+  pendingTextList.appendChild(caption);
+  for (const item of items) {
+    const card = document.createElement("article");
+    card.className = "pending-text-card";
+    const body = document.createElement("div");
+    body.className = "pending-text-body";
+    body.textContent = item.text;
+    const footer = document.createElement("div");
+    footer.className = "pending-text-footer";
+    const status = document.createElement("span");
+    const time = new Date(item.createdAt).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+    status.textContent = time + " · " + (item.state === "sending" ? "Отправляется…" :
+      item.state === "failed" ? "Ошибка: " + item.error :
+      item.error ? "Ожидает повторной отправки" : "Ожидает отправки");
+    status.title = item.error || "";
+    if (item.silent) status.textContent += " · Без звука";
+    footer.appendChild(status);
+    if (item.state !== "sending") {
+      const again = document.createElement("button");
+      again.type = "button"; again.textContent = "Повторить";
+      again.addEventListener("click", () => { textOutbox.retryItem(item.id); void flushTextOutbox(); });
+      const cancel = document.createElement("button");
+      cancel.type = "button"; cancel.textContent = "Убрать";
+      cancel.addEventListener("click", () => {
+        if (item.attempts && !window.confirm("Прекратить повторные попытки? Уже принятое сервером сообщение не удалится.")) return;
+        textOutbox.discard(item.id); void flushTextOutbox();
+      });
+      footer.append(again, cancel);
+    }
+    card.append(body, footer);
+    pendingTextList.appendChild(card);
+  }
+  if (follow) requestAnimationFrame(() => scrollToBottom(true));
+}
+
+async function transmitQueuedText(item) {
+  const data = new FormData();
+  data.set("csrfmiddlewaretoken", form?.querySelector("[name='csrfmiddlewaretoken']")?.value || csrfToken);
+  data.set("account_id", messageStage.dataset.accountId);
+  data.set("client_message_id", item.id);
+  data.set("text", item.text);
+  data.set("reply_to", item.reply);
   data.set("attachment_mode", "media");
-  if (silent) data.set("silent", "1");
-  const sentText = messageInput.value;
-  const sentReply = replyToInput?.value || "";
+  data.set("preserve_draft", "1");
+  if (item.silent) data.set("silent", "1");
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 15000);
   try {
-    data.set("client_message_id", await window.SovietgramSendRetry.textKey(
-      textSendScope, silent ? [sentText, sentReply, "silent"] : [sentText, sentReply], textSendKeys,
-    ));
-    const response = await window.SovietgramSendRetry.fetchSend(form.action, {
-      method: "POST",
-      body: data,
-      headers: { "X-Requested-With": "XMLHttpRequest" },
-      credentials: "same-origin",
+    const response = await fetch(form.action, {
+      method: "POST", body: data, credentials: "same-origin", signal: controller.signal,
+      headers: {"X-Requested-With": "XMLHttpRequest"},
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !payload.ok) throw new Error(errorText(payload, "Не удалось отправить сообщение."));
-    window.SovietgramSendRetry.clearText(textSendScope, textSendKeys);
-    renderMessage(payload.message);
-    if (messageInput.value === sentText && (replyToInput?.value || "") === sentReply) {
-      messageInput.value = "";
-      messageInput.dispatchEvent(new Event("input", { bubbles: true }));
-      autoSizeInput();
-      clearReplyState();
-      clearDraftState();
+    if (response.ok && payload.ok && payload.message) {
+      window.SovietgramConnection?.success();
+      return payload;
     }
-    focusMessageInput();
-    if (!historyHasNewer) scrollToBottom(true);
-  } catch (error) {
-    notify((error.message || "Нет ответа сервера.") + " Повторите отправку, не меняя текст.");
-  } finally {
-    textSendBusy = false;
-    sendButton.disabled = false;
+    if (response.status >= 500 || response.status === 429) {
+      if (response.status >= 500) window.SovietgramConnection?.failure();
+      const delay = Math.max(0, Number(response.headers.get("Retry-After")) || 0) * 1000;
+      return {retry: true, delay, error: errorText(payload, "Сервер временно недоступен")};
+    }
+    if (response.redirected || (response.ok && !payload.ok))
+      return {error: "Сессия истекла или аккаунт изменился. Обновите страницу."};
+    return {error: errorText(payload, "Сообщение не принято сервером")};
+  } catch (_) {
+    window.SovietgramConnection?.failure();
+    return {retry: true, error: "Нет ответа сервера"};
+  } finally { window.clearTimeout(timer); }
+}
+
+async function flushTextOutbox() {
+  if (!textOutbox || !form || messageInput?.readOnly || document.hidden || !navigator.onLine) return;
+  // Continue in order until the first blocked item or temporary failure.
+  while (await textOutbox.flush()) {
+    if (document.hidden || !navigator.onLine) break;
   }
 }
+
+async function sendTextMessage(silent = false) {
+  if (!form || !messageInput?.value.trim() || messageInput.readOnly || !textOutbox) return;
+  if (!textOutbox.enqueue(messageInput.value, replyToInput?.value || "", silent)) {
+    notify("Очередь заполнена (20 сообщений). Повторите или удалите ожидающие сообщения.");
+    return;
+  }
+  messageInput.value = "";
+  messageInput.dispatchEvent(new Event("input", {bubbles:true}));
+  autoSizeInput();
+  clearReplyState();
+  clearDraftState();
+  focusMessageInput();
+  void flushTextOutbox();
+}
+
 form?.addEventListener("submit", (event) => { event.preventDefault(); sendTextMessage(); });
 
 sendButton?.addEventListener("mousedown", (event) => {
@@ -1776,6 +1843,10 @@ async function initializeHistory() {
   historyInitialized = true;
   scheduleReadCheck();
   void pollMessages();
+  if (textOutbox) {
+    renderPendingText(textOutbox.snapshot(), textOutbox.saved);
+    void flushTextOutbox();
+  }
 }
 
 async function pollMessages() {
@@ -1853,6 +1924,21 @@ async function pollMessages() {
 }
 
 if (messageStage) {
+  if (pendingTextList && messageStage.dataset.accountId && conversation?.dataset.chatId) {
+    let storage;
+    try { storage = window.sessionStorage; } catch (_) { storage = null; }
+    textOutbox = window.SovietgramSendRetry.createOutbox({
+      storage, key: queueScope, send: transmitQueuedText, changed: renderPendingText,
+      delivered(payload) {
+        renderMessage(payload.message);
+        void window.SovietgramSidebar?.refresh();
+      },
+    });
+    window.setInterval(flushTextOutbox, 2000);
+    window.addEventListener("online", () => { void flushTextOutbox(); });
+    window.addEventListener("focus", () => { void flushTextOutbox(); });
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) void flushTextOutbox(); });
+  }
   historyOlderButton?.addEventListener("click", () => loadHistoryPage("before"));
   historyNewerButton?.addEventListener("click", () => loadHistoryPage("after"));
   historyLatestButton?.addEventListener("click", loadLatestHistory);
