@@ -542,6 +542,8 @@ def settings_view(request):
             )
 
         if action in {"block", "unblock"}:
+            if request.POST.get("account_id", str(request.user.pk)) != str(request.user.pk):
+                return JsonResponse({"ok": False, "error": "Аккаунт изменился. Обновите страницу."}, status=409)
             username = request.POST.get("username", "").strip().lstrip("@")
             target = get_object_or_404(User, username__iexact=username, is_active=True)
             if target.pk == request.user.pk:
@@ -739,8 +741,9 @@ def profile_avatar(request, username):
     return response
 
 
+@never_cache
 def public_profile(request, username):
-    from apps.messenger.models import Contact
+    from apps.messenger.models import Chat, ChatParticipant, Contact
 
     profile_user = get_object_or_404(User, username__iexact=username, is_active=True)
     viewer = request.user if request.user.is_authenticated else None
@@ -784,6 +787,28 @@ def public_profile(request, username):
             and privacy_allows(profile_user, viewer, "messages")
         )
 
+        direct = None
+        common_groups = []
+        blocked_by_me = False
+        if viewer and not is_self:
+            blocked_by_me = UserBlock.objects.filter(blocker=viewer, blocked=profile_user).exists()
+            direct_key = ":".join(map(str, sorted((viewer.pk, profile_user.pk))))
+            direct = ChatParticipant.objects.select_related("chat").filter(
+                user=viewer, is_hidden=False,
+                chat__type=Chat.Type.PRIVATE, chat__direct_key=direct_key,
+                chat__participants=profile_user,
+            ).first()
+            peer_groups = ChatParticipant.objects.filter(
+                user=profile_user, is_hidden=False, chat__type=Chat.Type.GROUP,
+            ).values("chat_id")
+            common_groups = [
+                {"id": item["chat_id"], "title": item["chat__title"],
+                 "url": reverse("messenger:chat", args=[item["chat_id"]])}
+                for item in ChatParticipant.objects.filter(
+                    user=viewer, is_hidden=False, chat_id__in=peer_groups,
+                ).order_by("chat__title", "chat_id").values("chat_id", "chat__title")
+            ]
+
         return JsonResponse(
             {
                 "ok": True,
@@ -824,6 +849,24 @@ def public_profile(request, username):
                 "is_contact": is_contact,
                 "is_self": is_self,
                 "is_blocked": blocked,
+                "blocked_by_me": blocked_by_me,
+                "viewer_id": viewer.pk if viewer else None,
+                "block_url": reverse("accounts:settings") if viewer and not is_self else "",
+                "report_url": (
+                    reverse("administration:submit_report", args=["user", profile_user.pk])
+                    if viewer and not is_self else ""
+                ),
+                "common_groups": common_groups,
+                "direct_chat": ({
+                    "id": direct.chat_id,
+                    "url": reverse("messenger:chat", args=[direct.chat_id]),
+                    "action_url": reverse("messenger:chat_action", args=[direct.chat_id]),
+                    "is_muted": direct.notifications_muted,
+                    "muted_until": direct.muted_until.isoformat()
+                        if direct.notifications_muted and direct.muted_until else "",
+                    "protect_content": direct.chat.protect_content,
+                    "auto_delete_seconds": direct.chat.auto_delete_seconds,
+                } if direct else None),
                 "first_name": profile_user.first_name,
                 "last_name": profile_user.last_name,
                 "edit_url": reverse("accounts:profile") if is_self else "",

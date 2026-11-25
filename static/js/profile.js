@@ -128,6 +128,13 @@ const userProfileActions = document.getElementById("userProfileActions");
 const userProfileAccounts = document.getElementById("userProfileAccounts");
 const userProfileMessage = document.getElementById("userProfileMessage");
 const userProfileContact = document.getElementById("userProfileContact");
+const peerProfileElements = Object.fromEntries([
+  "Mute", "MuteLabel", "MuteMenu", "Unmute", "More", "MoreMenu", "AutoDelete",
+  "AutoDeleteLabel", "TimerOptions", "MenuContact", "MenuContactLabel", "ContactLabel",
+  "Protection", "ProtectionLabel", "CopyLink", "Report", "Block", "BlockSection",
+  "BlockLabel", "MenuBlock", "MenuBlockLabel", "CommonGroups", "CommonGroupsLabel", "CommonGroupsList",
+].map(key => [key, document.getElementById("userProfile" + key)]));
+let peerProfileActionBusy = false;
 
 const userProfileEditForm = document.getElementById("userProfileEditForm");
 const userProfileEditBack = document.getElementById("userProfileEditBack");
@@ -339,13 +346,16 @@ function formatProfileLastSeen(profile, now = new Date()) {
 
 function updateProfilePresence(profile) {
   const status = formatProfileLastSeen(profile);
-  if (userProfileStatus) userProfileStatus.textContent = status;
+  if (userProfileStatus) {
+    userProfileStatus.textContent = status;
+    userProfileStatus.classList.toggle("is-online", Boolean(profile?.is_online && profile?.last_seen_exact));
+  }
   if (userProfileEditStatus) userProfileEditStatus.textContent = status;
 }
 
 async function refreshProfilePresence() {
   const profileUrl = openedProfile?.profile_url;
-  if (!profileUrl || userProfileOverlay?.hidden || document.hidden || profileRefreshBusy) return;
+  if (!profileUrl || userProfileOverlay?.hidden || document.hidden || profileRefreshBusy || peerProfileActionBusy) return;
   profileRefreshBusy = true;
   try {
     const response = await fetch(profileUrl, {
@@ -355,14 +365,28 @@ async function refreshProfilePresence() {
     });
     if (!response.ok) return;
     const fresh = await response.json();
-    if (!fresh.ok || !openedProfile || userProfileOverlay.hidden
+    if (!fresh.ok || !openedProfile || userProfileOverlay.hidden || peerProfileActionBusy
         || openedProfile.profile_url !== profileUrl) return;
+    if (fresh.viewer_id != null && document.body?.dataset?.accountId &&
+        String(fresh.viewer_id) !== document.body.dataset.accountId) {
+      await closeUserProfile();
+      showProfileToast("Аккаунт изменился. Обновите страницу.");
+      return;
+    }
 
     openedProfile.status = fresh.status;
     openedProfile.is_online = fresh.is_online;
     openedProfile.last_seen_exact = fresh.last_seen_exact;
     openedProfile.last_seen_at = fresh.last_seen_at;
     openedProfile.is_contact = fresh.is_contact;
+    if (!openedProfile.is_self) {
+      for (const key of ["bio", "birthday", "birthday_display", "start_chat_url", "is_blocked",
+        "blocked_by_me", "direct_chat", "common_groups", "report_url", "block_url"]) {
+        if (Object.prototype.hasOwnProperty.call(fresh, key)) openedProfile[key] = fresh[key];
+      }
+      renderPeerProfileDetails(openedProfile);
+      renderPeerProfileActions(openedProfile);
+    }
 
     if (Object.prototype.hasOwnProperty.call(fresh, "avatar_url")) {
       const avatarChanged = (openedProfile.avatar_url || "") !== (fresh.avatar_url || "");
@@ -528,6 +552,8 @@ async function closeUserProfile() {
   closeProfileFieldEditor();
   closeProfilePhotoViewer();
   closeProfileChannelContext();
+  closePeerProfileMenus();
+  if (peerProfileElements.CommonGroups) peerProfileElements.CommonGroups.open = false;
   if (userProfileChannelPicker) userProfileChannelPicker.hidden = true;
   stopProfileRefresh();
   userProfileOverlay.hidden = true;
@@ -578,6 +604,110 @@ function renderProfilePersonalChannel(channel) {
   }
 }
 
+function renderPeerProfileDetails(profile) {
+  if (userProfileBioSection && userProfileBio) {
+    const hasBio = Boolean(profile.bio?.trim());
+    userProfileBioSection.hidden = !hasBio;
+    userProfileBio.textContent = hasBio ? profile.bio.trim() : "";
+  }
+  const hasBirthday = Boolean(profile.birthday_display);
+  if (userProfileBirthdayRow) userProfileBirthdayRow.hidden = !hasBirthday;
+  if (userProfileBirthday) {
+    let label = profile.birthday_display || "";
+    if (!profile.is_self && profile.birthday && /^\d{4}-\d{2}-\d{2}$/.test(profile.birthday)) {
+      const [year, month, day] = profile.birthday.split("-").map(Number);
+      const birthday = new Date(year, month - 1, day);
+      const now = new Date();
+      let age = now.getFullYear() - year;
+      if (now.getMonth() < month - 1 || (now.getMonth() === month - 1 && now.getDate() < day)) age--;
+      const ending = age % 100 >= 11 && age % 100 <= 14 ? "лет"
+        : age % 10 === 1 ? "год" : age % 10 >= 2 && age % 10 <= 4 ? "года" : "лет";
+      if (age >= 0) label = birthday.toLocaleDateString("ru-RU", {day:"numeric", month:"long", year:"numeric"}).replace(/ г\.$/, "") + " (" + age + " " + ending + ")";
+    }
+    userProfileBirthday.textContent = label;
+  }
+}
+
+function closePeerProfileMenus() {
+  const e = peerProfileElements;
+  for (const key of ["MuteMenu", "MoreMenu", "TimerOptions"]) {
+    if (e[key]) e[key].hidden = true;
+  }
+  for (const key of ["Mute", "More"]) e[key]?.setAttribute("aria-expanded", "false");
+}
+
+function togglePeerProfileMenu(key) {
+  const e = peerProfileElements;
+  const opening = e[key + "Menu"]?.hidden;
+  closePeerProfileMenus();
+  if (opening) {
+    e[key + "Menu"].hidden = false;
+    e[key]?.setAttribute("aria-expanded", "true");
+  }
+}
+
+function renderPeerProfileActions(profile) {
+  const e = peerProfileElements;
+  const foreign = !profile.is_self;
+  const direct = foreign ? profile.direct_chat : null;
+  const showContact = foreign && Boolean(profile.is_contact ? profile.remove_contact_url : profile.add_contact_url);
+  const contactText = profile.is_contact ? "Удалить контакт" : "Добавить в контакты";
+  const blockText = profile.blocked_by_me ? "Разблокировать" : "Заблокировать";
+  if (userProfileActions) userProfileActions.hidden = !foreign;
+  if (userProfileMessage) userProfileMessage.hidden = !foreign || !(direct?.url || profile.start_chat_url);
+  if (userProfileContact) userProfileContact.hidden = !showContact;
+  if (e.ContactLabel) e.ContactLabel.textContent = contactText;
+  if (e.MenuContact) e.MenuContact.hidden = !showContact;
+  if (e.MenuContactLabel) e.MenuContactLabel.textContent = contactText;
+  if (e.Mute) {
+    e.Mute.hidden = !direct?.action_url;
+    e.Mute.classList.toggle("is-muted", Boolean(direct?.is_muted));
+    e.Mute.title = direct?.is_muted ? "Уведомления выключены" : "Уведомления включены";
+  }
+  if (e.MuteLabel) e.MuteLabel.textContent = direct?.is_muted ? "Без звука" : "Звук";
+  if (e.Unmute) e.Unmute.hidden = !direct?.is_muted;
+  if (e.Protection) e.Protection.hidden = !direct?.action_url;
+  if (e.ProtectionLabel) e.ProtectionLabel.textContent = direct?.protect_content ? "Разрешить копирование" : "Запретить копирование";
+  if (e.AutoDelete) e.AutoDelete.hidden = !direct?.action_url;
+  const timerNames = {0:"Выкл.",86400:"1 день",604800:"1 неделя",2592000:"1 месяц"};
+  if (e.AutoDeleteLabel) e.AutoDeleteLabel.textContent = "Автоудаление · " + (timerNames[direct?.auto_delete_seconds || 0] || "Настроено");
+  e.TimerOptions?.querySelectorAll("[data-peer-timer]").forEach(button => {
+    button.setAttribute("aria-pressed", String(Number(button.dataset.peerTimer) === Number(direct?.auto_delete_seconds || 0)));
+  });
+  if (e.Report) {
+    e.Report.hidden = !foreign || !profile.report_url;
+    if (profile.report_url) e.Report.href = profile.report_url;
+    else e.Report.removeAttribute("href");
+  }
+  if (e.BlockSection) e.BlockSection.hidden = !foreign || !profile.block_url;
+  if (e.MenuBlock) e.MenuBlock.hidden = !foreign || !profile.block_url;
+  if (e.BlockLabel) e.BlockLabel.textContent = blockText;
+  if (e.MenuBlockLabel) e.MenuBlockLabel.textContent = blockText;
+  const groups = foreign ? profile.common_groups || [] : [];
+  if (e.CommonGroups) {
+    e.CommonGroups.hidden = !groups.length;
+    if (!groups.length) e.CommonGroups.open = false;
+  }
+  if (e.CommonGroupsLabel) {
+    const n = groups.length, mod = n % 100;
+    e.CommonGroupsLabel.textContent = n + (mod >= 11 && mod <= 14 ? " общих групп" :
+      n % 10 === 1 ? " общая группа" : n % 10 >= 2 && n % 10 <= 4 ? " общие группы" : " общих групп");
+  }
+  if (e.CommonGroupsList) {
+    const signature = JSON.stringify(groups);
+    if (e.CommonGroupsList.dataset.signature !== signature) {
+      e.CommonGroupsList.dataset.signature = signature;
+      e.CommonGroupsList.replaceChildren();
+      for (const group of groups) {
+        const link = document.createElement("a");
+        link.href = group.url;
+        link.textContent = group.title || "Группа";
+        e.CommonGroupsList.appendChild(link);
+      }
+    }
+  }
+}
+
 function renderUserProfile(profile) {
   if (!userProfileOverlay) return;
   openedProfile = profile;
@@ -591,26 +721,15 @@ function renderUserProfile(profile) {
   updateProfilePresence(profile);
   if (userProfileUsername) userProfileUsername.textContent = `@${profile.username || ""}`;
 
-  if (userProfileBioSection && userProfileBio) {
-    const hasBio = Boolean(profile.bio?.trim());
-    userProfileBioSection.hidden = !hasBio;
-    userProfileBio.textContent = hasBio ? profile.bio.trim() : "";
-  }
-
+  userProfileView?.classList.toggle("is-foreign", !profile.is_self);
+  renderPeerProfileDetails(profile);
   renderProfilePersonalChannel(profile.personal_channel);
 
-  const hasBirthday = Boolean(profile.birthday_display);
-  if (userProfileBirthdayRow) userProfileBirthdayRow.hidden = !hasBirthday;
-  if (userProfileBirthday && hasBirthday) userProfileBirthday.textContent = profile.birthday_display;
-
   if (userProfileEdit) userProfileEdit.hidden = !profile.is_self;
-  if (userProfileActions) userProfileActions.hidden = Boolean(profile.is_self);
   if (userProfileAccounts) userProfileAccounts.hidden = !profile.is_self;
-
-  if (userProfileContact) {
-    userProfileContact.textContent = profile.is_contact ? "Удалить контакт" : "Добавить в контакты";
-    userProfileContact.classList.toggle("is-danger", Boolean(profile.is_contact));
-  }
+  closePeerProfileMenus();
+  if (peerProfileElements.CommonGroups) peerProfileElements.CommonGroups.open = false;
+  renderPeerProfileActions(profile);
 
   setUserProfileMode("view");
   userProfileOverlay.hidden = false;
@@ -926,6 +1045,7 @@ userProfileEditClose?.addEventListener("click", () => {
 
 userProfileOverlay?.addEventListener("click", (event) => {
   if (event.target === userProfileOverlay) void closeUserProfile();
+  if (userProfileActions && !userProfileActions.contains(event.target)) closePeerProfileMenus();
   if (!userProfileChannelContext?.hidden && !userProfileChannelContext.contains(event.target)) {
     closeProfileChannelContext();
   }
@@ -1108,58 +1228,145 @@ userProfileEditForm?.addEventListener("submit", (event) => {
 });
 
 userProfileMessage?.addEventListener("click", () => {
-  if (!openedProfile?.start_chat_url) return;
-
+  if (!openedProfile) return;
+  if (openedProfile.direct_chat?.url) {
+    window.location.assign(openedProfile.direct_chat.url);
+    return;
+  }
+  if (!openedProfile.start_chat_url) return;
   const form = document.createElement("form");
   form.method = "post";
   form.action = openedProfile.start_chat_url;
-
-  const token = document.createElement("input");
-  token.type = "hidden";
-  token.name = "csrfmiddlewaretoken";
-  token.value = csrfToken();
-
-  form.appendChild(token);
+  for (const [name, value] of Object.entries({
+    csrfmiddlewaretoken: csrfToken(), account_id: document.body.dataset.accountId,
+  })) {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value;
+    form.appendChild(input);
+  }
   document.body.appendChild(form);
   form.submit();
 });
 
-userProfileContact?.addEventListener("click", async () => {
-  if (!openedProfile) return;
+async function postPeerProfileAction(url, values) {
+  const body = new URLSearchParams();
+  body.set("csrfmiddlewaretoken", csrfToken());
+  if (document.body.dataset.accountId) body.set("account_id", document.body.dataset.accountId);
+  for (const [key, value] of Object.entries(values)) body.set(key, String(value));
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {"X-Requested-With": "XMLHttpRequest", "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8"},
+    body, credentials: "same-origin",
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || response.redirected || payload.ok !== true) {
+    throw new Error(payload.error || "Не удалось выполнить действие. Обновите страницу и повторите попытку.");
+  }
+  return payload;
+}
 
+async function runPeerProfileAction(url, values, onSuccess) {
+  if (!openedProfile || !url || peerProfileActionBusy) return;
+  const target = openedProfile;
+  peerProfileActionBusy = true;
+  closePeerProfileMenus();
+  try {
+    const payload = await postPeerProfileAction(url, values);
+    if (openedProfile === target) {
+      onSuccess(payload, target);
+      renderPeerProfileActions(target);
+    }
+    showProfileToast(payload.message || "Готово.");
+  } catch (error) {
+    showProfileToast(error.message);
+  } finally {
+    peerProfileActionBusy = false;
+    void refreshProfilePresence();
+  }
+}
+
+function changePeerProfileContact() {
+  if (!openedProfile) return;
   const removing = Boolean(openedProfile.is_contact);
   if (removing && !window.confirm("Удалить пользователя из контактов?")) return;
-  const url = removing ? openedProfile.remove_contact_url : openedProfile.add_contact_url;
-  if (!url) return;
+  void runPeerProfileAction(removing ? openedProfile.remove_contact_url : openedProfile.add_contact_url,
+    {}, (payload, target) => { target.is_contact = Boolean(payload.is_contact); });
+}
 
-  userProfileContact.disabled = true;
-  try {
-    const body = new URLSearchParams();
-    body.set("csrfmiddlewaretoken", csrfToken());
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "X-Requested-With": "XMLHttpRequest",
-        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-      },
-      body,
-      credentials: "same-origin",
-    });
-    if (!response.ok) throw new Error("contact action failed");
+function changePeerProfileBlock() {
+  if (!openedProfile?.block_url) return;
+  const blocking = !openedProfile.blocked_by_me;
+  if (!window.confirm(blocking ? "Заблокировать пользователя?" : "Разблокировать пользователя?")) return;
+  void runPeerProfileAction(openedProfile.block_url, {
+    action: blocking ? "block" : "unblock", username: openedProfile.username,
+  }, (_payload, target) => {
+    target.blocked_by_me = blocking;
+    if (blocking) target.start_chat_url = "";
+    const conversation = document.querySelector(".conversation--chat");
+    if (String(target.direct_chat?.id) === conversation?.dataset.chatId) window.location.reload();
+  });
+}
 
-    openedProfile.is_contact = !removing;
-    userProfileContact.textContent = openedProfile.is_contact ? "Удалить контакт" : "Добавить в контакты";
-    userProfileContact.classList.toggle("is-danger", openedProfile.is_contact);
-  } catch (_error) {
-    showProfileToast("Не удалось изменить контакт.");
-  } finally {
-    userProfileContact.disabled = false;
-  }
+function changePeerChatSetting(values) {
+  const direct = openedProfile?.direct_chat;
+  if (!direct?.action_url) return;
+  void runPeerProfileAction(direct.action_url, values, (payload, target) => {
+    const chat = target.direct_chat;
+    if (!chat || chat.id !== direct.id) return;
+    const conversation = document.querySelector(".conversation--chat");
+    const active = String(chat.id) === conversation?.dataset.chatId;
+    if (values.action === "mute") {
+      chat.is_muted = Boolean(payload.is_muted);
+      chat.muted_until = payload.muted_until || "";
+      if (active) document.dispatchEvent(new CustomEvent("sovietgram:chat-mute-state", {
+        detail: {isMuted: chat.is_muted, mutedUntil: chat.muted_until},
+      }));
+      void window.SovietgramSidebar?.refresh?.();
+    } else if (values.action === "toggle_protection") {
+      chat.protect_content = Boolean(payload.protect_content);
+      if (active) document.dispatchEvent(new CustomEvent("sovietgram:chat-protection", {
+        detail: {enabled: chat.protect_content},
+      }));
+    } else if (values.action === "auto_delete") {
+      chat.auto_delete_seconds = Number(payload.auto_delete_seconds);
+    }
+  });
+}
+
+userProfileContact?.addEventListener("click", changePeerProfileContact);
+peerProfileElements.MenuContact?.addEventListener("click", changePeerProfileContact);
+peerProfileElements.Block?.addEventListener("click", changePeerProfileBlock);
+peerProfileElements.MenuBlock?.addEventListener("click", changePeerProfileBlock);
+peerProfileElements.More?.addEventListener("click", () => togglePeerProfileMenu("More"));
+peerProfileElements.Mute?.addEventListener("click", () => togglePeerProfileMenu("Mute"));
+peerProfileElements.CopyLink?.addEventListener("click", () => {
+  closePeerProfileMenus();
+  userProfileUsernameRow?.click();
+});
+peerProfileElements.AutoDelete?.addEventListener("click", () => {
+  const options = peerProfileElements.TimerOptions;
+  if (options) options.hidden = !options.hidden;
+});
+peerProfileElements.Protection?.addEventListener("click", () => {
+  const direct = openedProfile?.direct_chat;
+  if (direct) changePeerChatSetting({action:"toggle_protection", enabled:direct.protect_content ? "0" : "1"});
+});
+peerProfileElements.MuteMenu?.querySelectorAll("[data-peer-mute]").forEach(button => {
+  button.addEventListener("click", () => changePeerChatSetting({action:"mute", duration:button.dataset.peerMute}));
+});
+peerProfileElements.TimerOptions?.querySelectorAll("[data-peer-timer]").forEach(button => {
+  button.addEventListener("click", () => changePeerChatSetting({action:"auto_delete", seconds:button.dataset.peerTimer}));
 });
 
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
 
+  if ([peerProfileElements.MoreMenu, peerProfileElements.MuteMenu].some(menu => menu && !menu.hidden)) {
+    closePeerProfileMenus();
+    return;
+  }
   if (userProfileChannelContext && !userProfileChannelContext.hidden) {
     closeProfileChannelContext();
     return;

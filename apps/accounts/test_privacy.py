@@ -314,6 +314,55 @@ class PrivacySettingsTests(TestCase):
         )
         self.assertEqual(update.status_code, 400)
 
+    def test_foreign_profile_actions_and_common_groups(self):
+        direct = get_or_create_direct_chat(self.alice, self.bob)
+        ChatParticipant.objects.filter(chat=direct, user=self.alice).update(is_muted=True)
+        group = Chat.objects.create(type=Chat.Type.GROUP, title="Общая группа")
+        private_group = Chat.objects.create(type=Chat.Type.GROUP, title="Чужая группа")
+        for chat, user in [(group, self.alice), (group, self.bob), (private_group, self.bob)]:
+            ChatParticipant.objects.create(chat=chat, user=user)
+        self.client.force_login(self.alice)
+        url = reverse("accounts:public_profile", args=[self.bob.username])
+        def payload():
+            return self.client.get(url, HTTP_X_REQUESTED_WITH="XMLHttpRequest").json()
+        profile = payload()
+        self.assertEqual(profile["direct_chat"]["id"], direct.pk)
+        self.assertTrue(profile["direct_chat"]["is_muted"])
+        self.assertEqual([g["id"] for g in profile["common_groups"]], [group.pk])
+        self.assertTrue(profile["report_url"])
+        self.assertFalse(profile["blocked_by_me"])
+        UserBlock.objects.create(blocker=self.bob, blocked=self.alice)
+        self.assertFalse(payload()["blocked_by_me"])
+        self.assertEqual(payload()["start_chat_url"], "")
+        UserBlock.objects.create(blocker=self.alice, blocked=self.bob)
+        self.assertTrue(payload()["blocked_by_me"])
+        ChatParticipant.objects.filter(chat=direct, user=self.alice).update(is_hidden=True)
+        self.assertIsNone(payload()["direct_chat"])
+        self.client.logout()
+        self.assertEqual(payload()["common_groups"], [])
+        self.assertIsNone(payload()["direct_chat"])
+        self.assertEqual(payload()["block_url"], "")
+
+    def test_direct_profile_auto_delete_only_changes_new_messages(self):
+        chat = get_or_create_direct_chat(self.alice, self.bob)
+        old = Message.objects.create(chat=chat, sender=self.alice, text="Старое")
+        self.client.force_login(self.alice)
+        url = reverse("messenger:chat_action", args=[chat.pk])
+        data = {"action": "auto_delete", "seconds": "86400", "account_id": self.alice.pk}
+        result = self.client.post(url, data, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.json()["auto_delete_seconds"], 86400)
+        chat.refresh_from_db()
+        old.refresh_from_db()
+        self.assertIsNone(old.expires_at)
+        self.assertIsNotNone(Message.objects.create(chat=chat, sender=self.alice, text="Новое").expires_at)
+        self.assertEqual(self.client.post(url, {**data, "seconds": "7"},
+                         HTTP_X_REQUESTED_WITH="XMLHttpRequest").status_code, 400)
+        self.assertEqual(self.client.post(url, {**data, "account_id": self.bob.pk},
+                         HTTP_X_REQUESTED_WITH="XMLHttpRequest").status_code, 409)
+        self.assertEqual(self.client.post(url, {**data, "seconds": "0"},
+                         HTTP_X_REQUESTED_WITH="XMLHttpRequest").json()["auto_delete_seconds"], 0)
+
     def test_inactivity_and_auto_delete_settings_are_saved(self):
         self.client.force_login(self.alice)
         inactivity = self.client.post(

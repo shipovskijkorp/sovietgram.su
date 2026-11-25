@@ -1544,6 +1544,8 @@ def join_public_chat(request, username):
 @login_required
 @require_POST
 def start_chat(request, username):
+    if request.POST.get("account_id", str(request.user.pk)) != str(request.user.pk):
+        return JsonResponse({"ok": False, "error": "Аккаунт изменился. Обновите страницу."}, status=409)
     target = get_object_or_404(User, username__iexact=username, is_active=True)
     if target.pk != request.user.pk:
         if is_blocked_between(request.user, target):
@@ -1870,6 +1872,8 @@ def contacts(request):
 @login_required
 @require_POST
 def add_contact(request, username):
+    if request.POST.get("account_id", str(request.user.pk)) != str(request.user.pk):
+        return JsonResponse({"ok": False, "error": "Аккаунт изменился. Обновите страницу."}, status=409)
     target = get_object_or_404(User, username__iexact=username, is_active=True)
     if target.pk != request.user.pk:
         Contact.objects.get_or_create(owner=request.user, user=target)
@@ -1885,6 +1889,8 @@ def add_contact(request, username):
 @login_required
 @require_POST
 def remove_contact(request, username):
+    if request.POST.get("account_id", str(request.user.pk)) != str(request.user.pk):
+        return JsonResponse({"ok": False, "error": "Аккаунт изменился. Обновите страницу."}, status=409)
     target = get_object_or_404(User, username__iexact=username, is_active=True)
     Contact.objects.filter(owner=request.user, user=target).delete()
 
@@ -3116,6 +3122,8 @@ def search_messages(request, chat_id):
 @login_required
 @require_POST
 def chat_action(request, chat_id):
+    if request.POST.get("account_id", str(request.user.pk)) != str(request.user.pk):
+        return JsonResponse({"ok": False, "error": "Аккаунт изменился. Обновите страницу."}, status=409)
     chat = _chat_for_user(request.user, chat_id)
     membership = _membership(chat, request.user)
     action = request.POST.get("action", "")
@@ -3213,10 +3221,25 @@ def chat_action(request, chat_id):
             ),
             mute_duration=duration,
         )
+    elif action == "auto_delete":
+        if chat.type != Chat.Type.PRIVATE or chat.direct_key == f"self:{request.user.pk}":
+            return action_error("Автоудаление доступно только в личной переписке.")
+        try:
+            seconds = int(request.POST.get("seconds", ""))
+        except (ValueError, TypeError):
+            seconds = -1
+        if seconds not in AUTO_DELETE_CHOICES:
+            return action_error("Неизвестный срок автоудаления.")
+        chat.auto_delete_seconds = seconds
+        chat.save(update_fields=("auto_delete_seconds",))
+        return action_response("Настройки автоудаления обновлены.", auto_delete_seconds=seconds)
     elif action == "toggle_protection":
         if chat.type != Chat.Type.PRIVATE or chat.direct_key == f"self:{request.user.pk}":
             return action_error("Защита копирования доступна только в личной переписке.")
-        chat.protect_content = not chat.protect_content
+        protection = request.POST.get("enabled")
+        if protection not in (None, "0", "1"):
+            return action_error("Некорректное состояние защиты.")
+        chat.protect_content = not chat.protect_content if protection is None else protection == "1"
         chat.save(update_fields=("protect_content",))
         return action_response(
             "Копирование запрещено." if chat.protect_content else "Копирование разрешено.",
