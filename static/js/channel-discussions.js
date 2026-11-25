@@ -38,7 +38,7 @@
       button.hidden = !enabled;
       if (Object.hasOwn(counts, article.dataset.messageId)) buttonText(button, counts[article.dataset.messageId]);
     }
-    if (!enabled && dialog.open) dialog.close();
+    if (dialog.open && (!enabled || !source?.isConnected)) dialog.close();
   }
   window.SovietgramDiscussions = {renderButton, sync};
   function el(tag, value, cls) {
@@ -131,6 +131,7 @@
         status.textContent = "Обсуждение больше недоступно."; return;
       }
       const data = await response.json().catch(()=>({}));
+      if (mine !== generation || !dialog.open) return;
       if (!response.ok || !data.ok || String(data.account_id) !== account) throw new Error(data.error || "Не удалось загрузить комментарии.");
       if (append) {
         const seen = new Set(rows.map(row=>row.id));

@@ -1528,11 +1528,11 @@ async function pollMessages() {
     const anchor = follow ? null : visibleAnchor();
     for (const message of payload.messages || []) renderMessage(message);
     for (const message of payload.updates || []) applyMessageUpdate(message);
-    window.SovietgramDiscussions?.sync(Boolean(payload.comments_enabled), payload.discussion_counts || {});
     const requestedIds = new Set(knownIds);
     for (const id of payload.removed_ids || []) {
       if (requestedIds.has(Number(id))) applyMessageUpdate({id: Number(id), is_deleted: true});
     }
+    window.SovietgramDiscussions?.sync(Boolean(payload.comments_enabled), payload.discussion_counts || {});
     if (!historyNodes().length && (historyHasOlder || historyHasNewer)) {
       // A whole mounted window can disappear after remote history clearing.
       // Reload the latest visible page so pagination cannot get stuck.
