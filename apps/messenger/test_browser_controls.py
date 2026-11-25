@@ -5,6 +5,7 @@ SOVIETGRAM_BROWSER_TESTS=1. CI runs these in a separate job.
 """
 import os
 from unittest import skipUnless
+from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
@@ -30,6 +31,10 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         super().setUpClass()
         from playwright.sync_api import expect, sync_playwright
 
+        # Sync Playwright uses an asyncio loop in a greenlet on this thread.
+        # Allow Django's synchronous test fixtures/flush only during this isolated
+        # live-server test class; the production process is never affected.
+        cls.enterClassContext(patch.dict(os.environ, {"DJANGO_ALLOW_ASYNC_UNSAFE": "true"}))
         cls.expect = staticmethod(expect)
         cls.playwright = sync_playwright().start()
         cls.addClassCleanup(cls.playwright.stop)
