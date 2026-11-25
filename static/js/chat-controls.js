@@ -75,10 +75,10 @@
   const chatMenu = document.getElementById("chatMenu");
   const searchPanel = document.getElementById("chatSearchPanel");
   const searchInput = document.getElementById("chatSearchInput");
-  const searchResults = document.getElementById("chatSearchResults");
   const contextMenu = document.getElementById("messageContextMenu");
   const messageForm = document.getElementById("messageForm");
-  const csrfToken = messageForm?.querySelector("[name='csrfmiddlewaretoken']")?.value || "";
+  const csrfToken = messageForm?.querySelector("[name='csrfmiddlewaretoken']")?.value
+    || document.querySelector("[name='csrfmiddlewaretoken']")?.value || "";
 
   const chatType = conversation.dataset.chatType || "private";
   const chatRole = conversation.dataset.chatRole || "member";
@@ -128,6 +128,14 @@
   const editSave = document.getElementById("editMessageSave");
   const forwardModal = document.getElementById("forwardMessageModal");
   const forwardSearch = document.getElementById("forwardTargetSearch");
+  const forwardConfirm = document.getElementById("forwardConfirm");
+  const forwardStatus = document.getElementById("forwardStatus");
+  const forwardHideSender = document.getElementById("forwardHideSender");
+  const forwardSilent = document.getElementById("forwardSilent");
+  const forwardTargets = () => [...document.querySelectorAll("[data-forward-target]")];
+  let selectedTargets = new Set();
+  let forwardCompleted = new Set();
+  let forwardStarted = false;
 
   let contextArticle = null;
   let editArticle = null;
@@ -137,8 +145,6 @@
   let deleteArticles = [];
   let selectedArticles = new Set();
   let selectionMode = false;
-  let searchTimer = 0;
-  let searchController = null;
   let busyDelete = false;
 
   function notify(text) {
@@ -176,6 +182,8 @@
 
     const copyButton = contextMenu?.querySelector('[data-message-action="copy"]');
     const forwardButton = contextMenu?.querySelector('[data-message-action="forward"]');
+    const copyLink = contextMenu?.querySelector('[data-message-action="copy-link"]');
+    if (copyLink) copyLink.hidden = chatProtected;
     if (copyButton) {
       copyButton.hidden = chatProtected
         || !(contextArticle?.dataset.messageText || "").trim();
@@ -200,6 +208,7 @@
   async function postForm(url, values) {
     const body = new FormData();
     body.append("csrfmiddlewaretoken", csrfToken);
+    if (document.body.dataset.accountId) body.append("account_id", document.body.dataset.accountId);
     Object.entries(values || {}).forEach(([key, value]) => {
       body.append(key, value == null ? "" : String(value));
     });
@@ -212,7 +221,9 @@
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload.ok === false || (values?.client_message_id && payload.ok !== true)) {
-      throw new Error(payload.error || "Не удалось выполнить действие.");
+      const error = new Error(payload.error || "Не удалось выполнить действие.");
+      error.status = response.status;
+      throw error;
     }
     return payload;
   }
@@ -323,6 +334,8 @@
     const editButton = contextMenu.querySelector('[data-message-action="edit"]');
     const copyButton = contextMenu.querySelector('[data-message-action="copy"]');
     const forwardButton = contextMenu.querySelector('[data-message-action="forward"]');
+    const copyLink = contextMenu.querySelector('[data-message-action="copy-link"]');
+    if (copyLink) copyLink.hidden = chatProtected;
     const deleteButton = contextMenu.querySelector('[data-message-action="delete"]');
     const pinLabel = document.getElementById("messagePinLabel");
 
@@ -362,9 +375,17 @@
       area.style.opacity = "0";
       document.body.appendChild(area);
       area.select();
-      document.execCommand("copy");
-      area.remove();
+      try {
+        if (!document.execCommand("copy")) throw new Error("Буфер обмена недоступен.");
+      } finally { area.remove(); }
     }
+  }
+
+  function messageLink(article) {
+    const url = new URL(conversation.dataset.chatUrl, window.location.origin);
+    url.searchParams.set("message", article.dataset.messageId);
+    url.hash = "message-" + article.dataset.messageId;
+    return url.href;
   }
 
   function openEditModal(article) {
@@ -406,10 +427,26 @@
   function syncForwardTargets() {
     const requirements = forwardRequirements(forwardArticles);
     const query = forwardSearch?.value.trim().toLowerCase() || "";
-    document.querySelectorAll("[data-forward-target]").forEach((target) => {
+    for (const target of forwardTargets()) {
+      const selected = selectedTargets.has(target.dataset.forwardTarget);
       const matchesSearch = !query || (target.dataset.forwardSearch || "").includes(query);
-      target.hidden = !matchesSearch || !targetSupportsForward(target, requirements);
-    });
+      target.hidden = !matchesSearch || (!selected && !targetSupportsForward(target, requirements));
+      target.classList.toggle("is-selected", selected);
+      target.setAttribute("aria-pressed", String(selected));
+      target.disabled = forwardBusy || forwardStarted;
+    }
+    const total = forwardArticles.length * selectedTargets.size;
+    if (forwardConfirm) {
+      forwardConfirm.disabled = forwardBusy || !total || chatProtected || forwardCompleted.size >= total;
+      forwardConfirm.textContent = forwardStarted ? "Повторить оставшиеся" : "Переслать" + (total ? " (" + total + ")" : "");
+    }
+    if (forwardHideSender) forwardHideSender.disabled = forwardStarted || forwardBusy;
+    if (forwardSilent) forwardSilent.disabled = forwardStarted || forwardBusy;
+    if (forwardStatus && !forwardStarted) {
+      forwardStatus.textContent = selectedTargets.size
+        ? "Выбрано чатов: " + selectedTargets.size + " · сообщений: " + forwardArticles.length
+        : "Выберите один или несколько чатов (до 10).";
+    }
   }
 
   function openForwardModal(articles) {
@@ -417,23 +454,56 @@
       notify("Пересылка запрещена для этой переписки.");
       return;
     }
-    if (!forwardModal || !articles?.length) return;
+    if (!forwardModal || !articles?.length || forwardBusy || forwardStarted) return;
+    forwardArticles = [...new Map(articles.filter(article => article?.isConnected && article.dataset.forwardUrl)
+      .map(article => [article.dataset.messageId, article])).values()]
+      .sort((a,b) => Number(a.dataset.messageId) - Number(b.dataset.messageId));
+    if (!forwardArticles.length) return;
+    if (forwardArticles.length > 50) {
+      notify("За один раз можно переслать до 50 сообщений.");
+      forwardArticles = [];
+      return;
+    }
     forwardSendKeys.clear();
-    forwardArticles = articles.filter(Boolean);
+    selectedTargets = new Set();
+    forwardCompleted = new Set();
+    forwardStarted = false;
+    if (forwardHideSender) forwardHideSender.checked = false;
+    if (forwardSilent) forwardSilent.checked = false;
     forwardModal.hidden = false;
     if (forwardSearch) {
       forwardSearch.value = "";
-      syncForwardTargets();
       window.setTimeout(() => forwardSearch.focus(), 0);
     }
+    syncForwardTargets();
   }
 
-  function closeForwardModal() {
+  function closeForwardModal(force = false) {
+    if (forwardBusy && !force) return;
+    if (forwardStarted && !force && !window.confirm("Закрыть пересылку? Уже доставленные сообщения останутся, а повтор из нового окна может создать копии.")) return;
     if (forwardModal) forwardModal.hidden = true;
     forwardArticles = [];
+    selectedTargets.clear();
+    forwardCompleted.clear();
+    forwardStarted = false;
+    forwardSendKeys.clear();
+  }
+
+  function toggleForwardTarget(target) {
+    if (forwardBusy || forwardStarted || !targetSupportsForward(target, forwardRequirements(forwardArticles))) return;
+    const id = target.dataset.forwardTarget;
+    if (selectedTargets.has(id)) selectedTargets.delete(id);
+    else if (selectedTargets.size < 10) selectedTargets.add(id);
+    else notify("Можно выбрать не более 10 чатов.");
+    syncForwardTargets();
   }
 
   function updateSelectionUi() {
+    // Polling can remove messages selected in another tab/device.
+    for (const article of selectedArticles) {
+      if (!article.isConnected) selectedArticles.delete(article);
+    }
+    if (!selectedArticles.size) selectionMode = false;
     const count = selectedArticles.size;
     if (selectionCount) selectionCount.textContent = String(count);
     if (selectionBar) selectionBar.hidden = !selectionMode;
@@ -478,7 +548,8 @@
     else updateSelectionUi();
   }
 
-  function closeConfirmModals() {
+  function closeConfirmModals(force = false) {
+    if (busyDelete && !force) return;
     [deleteMessageModal, clearHistoryModal, deleteChatModal].forEach((modal) => {
       if (modal) modal.hidden = true;
     });
@@ -563,18 +634,29 @@
 
     try {
       for (const article of articles) {
-        if (!article.dataset.deleteUrl) continue;
-        await postForm(article.dataset.deleteUrl, { scope });
+        if (article.isConnected && article.dataset.deleteUrl) {
+          try { await postForm(article.dataset.deleteUrl, { scope }); }
+          catch (error) {
+            // A lost successful response or remote deletion makes the next
+            // retry return 404. The message is already inaccessible.
+            if (error.status !== 404) throw error;
+          }
+        }
         article.remove();
         selectedArticles.delete(article);
+        deleteArticles = deleteArticles.filter(item => item !== article);
       }
-      closeConfirmModals();
+      closeConfirmModals(true);
       if (selectionMode) setSelectionMode(false);
+      void window.SovietgramChat?.syncNow();
+      void window.SovietgramSidebar?.refresh();
       notify(scope === "everyone" ? "Удалено для всех." : "Удалено у вас.");
     } catch (error) {
-      notify(error.message);
+      notify(error.message + " Осталось: " + deleteArticles.length);
       busyDelete = false;
       if (deleteMessageConfirm) deleteMessageConfirm.disabled = false;
+      if (deleteMessageTitle) deleteMessageTitle.textContent = "Удалить оставшиеся (" + deleteArticles.length + ")?";
+      updateSelectionUi();
     }
   }
 
@@ -664,71 +746,7 @@
     }
   }
 
-  function renderSearchResults(results) {
-    if (!searchResults) return;
-    searchResults.replaceChildren();
-    if (!results.length) {
-      const empty = document.createElement("div");
-      empty.className = "chat-search-empty";
-      empty.textContent = searchInput?.value.trim()
-        ? "Ничего не нашлось."
-        : "Введите текст сообщения или название файла.";
-      searchResults.appendChild(empty);
-      return;
-    }
-
-    results.forEach((result) => {
-      const link = document.createElement("a");
-      link.className = "chat-search-result";
-      link.href = result.url;
-      const name = document.createElement("strong");
-      name.textContent = result.sender_name;
-      const preview = document.createElement("span");
-      preview.textContent = result.preview;
-      const time = document.createElement("small");
-      time.textContent = result.time;
-      link.append(name, preview, time);
-      link.addEventListener("click", (event) => {
-        const article = document.querySelector('[data-message-id="' + result.id + '"]');
-        if (!article) return;
-        event.preventDefault();
-        setSearchPanel(false);
-        article.scrollIntoView({ behavior: "smooth", block: "center" });
-        article.classList.add("is-target");
-        window.setTimeout(() => article.classList.remove("is-target"), 1500);
-      });
-      searchResults.appendChild(link);
-    });
-  }
-
-  function scheduleSearch() {
-    if (!searchInput || !searchPanel?.dataset.searchUrl) return;
-    window.clearTimeout(searchTimer);
-    const query = searchInput.value.trim();
-    if (!query) {
-      renderSearchResults([]);
-      return;
-    }
-    searchTimer = window.setTimeout(async () => {
-      if (searchController) searchController.abort();
-      searchController = new AbortController();
-      try {
-        const url = new URL(searchPanel.dataset.searchUrl, window.location.origin);
-        url.searchParams.set("q", query);
-        const response = await fetch(url, {
-          credentials: "same-origin",
-          signal: searchController.signal,
-          headers: { "X-Requested-With": "XMLHttpRequest" }
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.error || "Поиск временно недоступен.");
-        renderSearchResults(payload.results || []);
-      } catch (error) {
-        if (error.name !== "AbortError") notify(error.message);
-      }
-    }, 180);
-  }
-
+  // chat.js owns the paginated search request, including filters and aborts.
   async function saveEditedMessage() {
     if (!editArticle?.dataset.editUrl || !editText) return;
     if (editSave) editSave.disabled = true;
@@ -755,28 +773,70 @@
     }
   }
 
-  async function forwardSelectedTo(target) {
-    if (!forwardArticles.length || forwardBusy) return;
+  async function forwardSelected() {
+    if (!forwardArticles.length || !selectedTargets.size || forwardBusy || chatProtected) return;
     forwardBusy = true;
-    target.disabled = true;
+    forwardStarted = true;
+    const targets = [...selectedTargets];
+    const hide = Boolean(forwardHideSender?.checked);
+    const silent = Boolean(forwardSilent?.checked);
+    const total = forwardArticles.length * targets.length;
+    syncForwardTargets();
+    const errors = [];
     try {
-      for (const article of forwardArticles) {
-        if (!article.dataset.forwardUrl) continue;
-        const targetId = target.dataset.forwardTarget || "";
-        await postForm(article.dataset.forwardUrl, {
-          target_chat_id: targetId,
-          client_message_id: forwardSendKeys.key(targetId + ":" + article.dataset.messageId, article.dataset.forwardUrl),
-        });
+      for (const targetId of targets) {
+        for (const article of forwardArticles) {
+          const key = targetId + ":" + article.dataset.messageId;
+          if (forwardCompleted.has(key)) continue;
+          if (chatProtected) throw new Error("Пересылка запрещена для этой переписки.");
+          try {
+            const payload = await postForm(article.dataset.forwardUrl, {
+              target_chat_id: targetId, hide_sender: hide ? "1" : "0", silent: silent ? "1" : "0",
+              client_message_id: forwardSendKeys.key(key, [article.dataset.forwardUrl, hide, silent]),
+            });
+            forwardCompleted.add(key);
+            if (String(payload.target_chat_id) === String(conversation.dataset.chatId)) {
+              window.renderSovietgramChatMessage?.(payload.message);
+            }
+          } catch (error) {
+            errors.push(error.message);
+            // Do not reorder messages within a destination on failure.
+            break;
+          }
+          if (forwardStatus) forwardStatus.textContent = "Отправлено: " + forwardCompleted.size + " из " + total;
+        }
       }
-      notify(forwardArticles.length === 1 ? "Сообщение переслано." : "Сообщения пересланы.");
-      closeForwardModal();
-      if (selectionMode) setSelectionMode(false);
+      if (forwardCompleted.size === total) {
+        closeForwardModal(true);
+        if (selectionMode) setSelectionMode(false);
+        notify("Переслано: " + total);
+      } else {
+        if (forwardStatus) forwardStatus.textContent = "Отправлено: " + forwardCompleted.size + " из " + total + ". " + (errors[0] || "Повторите оставшиеся.");
+        notify("Часть сообщений не отправлена. Можно повторить оставшиеся.");
+      }
     } catch (error) {
+      if (forwardStatus) forwardStatus.textContent = error.message;
       notify(error.message);
     } finally {
       forwardBusy = false;
-      target.disabled = false;
+      syncForwardTargets();
+      void window.SovietgramSidebar?.refresh();
     }
+  }
+
+  document.addEventListener("sovietgram:forward-message", event => {
+    if (event.detail?.article) openForwardModal([event.detail.article]);
+  });
+  forwardModal?.addEventListener("click", event => {
+    if (event.target === forwardModal) closeForwardModal();
+  });
+  forwardConfirm?.addEventListener("click", () => { void forwardSelected(); });
+
+  // Remove stale selection entries after remote deletes or window replacement.
+  const messageFlow = document.getElementById("messageFlow");
+  if (messageFlow && typeof MutationObserver !== "undefined") {
+    new MutationObserver(() => { if (selectionMode) updateSelectionUi(); })
+      .observe(messageFlow, {childList:true});
   }
 
   document.addEventListener("click", (event) => {
@@ -909,7 +969,10 @@
           notify("Копирование запрещено для этой переписки.");
           return;
         }
-        copyText(article.dataset.messageText || "").then(() => notify("Текст скопирован."));
+        copyText(article.dataset.messageText || "").then(() => notify("Текст скопирован.")).catch(error => notify(error.message));
+      }
+      if (action === "copy-link" && !chatProtected) {
+        copyText(messageLink(article)).then(() => notify("Ссылка скопирована. Доступ только у участников чата.")).catch(error => notify(error.message));
       }
       if (action === "edit") openEditModal(article);
       if (action === "forward") openForwardModal([article]);
@@ -923,7 +986,7 @@
     if (forwardTarget && forwardArticles.length) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      forwardSelectedTo(forwardTarget);
+      toggleForwardTarget(forwardTarget);
       return;
     }
 
@@ -1018,12 +1081,11 @@
     openMessageMenu(article, event.clientX, event.clientY);
   }, true);
 
-  searchInput?.addEventListener("input", scheduleSearch);
   document.addEventListener("sovietgram:search-hashtag", event => {
     if (!searchInput || !event.detail?.tag) return;
     setSearchPanel(true);
     searchInput.value = event.detail.tag;
-    scheduleSearch();
+    searchInput.dispatchEvent(new Event("input", {bubbles:true}));
   });
 
   forwardSearch?.addEventListener("input", syncForwardTargets);

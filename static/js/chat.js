@@ -697,87 +697,6 @@ editText?.addEventListener("keydown", (event) => {
   }
 });
 
-const forwardModal = document.getElementById("forwardMessageModal");
-const forwardSearch = document.getElementById("forwardTargetSearch");
-const forwardTargets = [...document.querySelectorAll("[data-forward-target]")];
-let forwardArticle = null;
-let forwardRequirements = { text: false, media: false, voice: false };
-
-function getForwardRequirements(articles) {
-  const list = (Array.isArray(articles) ? articles : [articles]).filter(Boolean);
-  return {
-    text: list.some((article) => (
-      !article.querySelector(".message-media")
-      && (
-        Boolean((article.dataset.messageText || "").trim())
-        || Boolean(article.dataset.messageKind)
-      )
-    )),
-    media: list.some((article) => Boolean(article.querySelector(".message-media"))),
-    voice: list.some((article) => Boolean(article.querySelector("[data-voice-player]"))),
-  };
-}
-
-function targetSupportsForward(target, requirements) {
-  if (!target || target.dataset.forwardTarget === "saved") return true;
-  if (requirements.text && target.dataset.forwardCanText === "false") return false;
-  if (requirements.media && target.dataset.forwardCanMedia === "false") return false;
-  if (requirements.voice && target.dataset.forwardCanVoice === "false") return false;
-  return true;
-}
-
-function syncForwardTargets() {
-  const query = forwardSearch?.value.trim().toLowerCase() || "";
-  forwardTargets.forEach((target) => {
-    const matchesSearch = !query || (target.dataset.forwardSearch || "").includes(query);
-    target.hidden = !matchesSearch || !targetSupportsForward(target, forwardRequirements);
-  });
-}
-
-const legacyForwardKeys = window.SovietgramSendRetry.batch();
-function openForwardModal(article) {
-  if (!forwardModal || !article) return;
-  legacyForwardKeys.clear();
-  forwardArticle = article;
-  forwardRequirements = getForwardRequirements(article);
-  forwardModal.hidden = false;
-  if (forwardSearch) {
-    forwardSearch.value = "";
-    syncForwardTargets();
-    window.setTimeout(() => forwardSearch.focus(), 0);
-  }
-}
-
-function closeForwardModal() {
-  if (forwardModal) forwardModal.hidden = true;
-  forwardArticle = null;
-  forwardRequirements = { text: false, media: false, voice: false };
-}
-
-document.querySelectorAll("[data-close-forward]").forEach((button) => button.addEventListener("click", closeForwardModal));
-forwardModal?.addEventListener("click", (event) => { if (event.target === forwardModal) closeForwardModal(); });
-forwardSearch?.addEventListener("input", syncForwardTargets);
-forwardTargets.forEach((target) => {
-  target.addEventListener("click", async () => {
-    if (!forwardArticle?.dataset.forwardUrl) return;
-    target.disabled = true;
-    try {
-      const targetId = target.dataset.forwardTarget || "";
-      const payload = await postForm(forwardArticle.dataset.forwardUrl, {
-        target_chat_id: targetId,
-        client_message_id: legacyForwardKeys.key(targetId, forwardArticle.dataset.messageId),
-      });
-      if (String(payload.target_chat_id) === String(conversation?.dataset.chatId)) renderMessage(payload.message);
-      notify("Сообщение переслано.");
-      closeForwardModal();
-    } catch (error) {
-      notify(error.message);
-    } finally {
-      target.disabled = false;
-    }
-  });
-});
-
 async function toggleMessagePin(article) {
   if (!article?.dataset.pinUrl) return;
   try {
@@ -813,7 +732,7 @@ contextMenu?.addEventListener("click", async (event) => {
     notify("Текст скопирован.");
   }
   if (action === "edit") openEditModal(article);
-  if (action === "forward") openForwardModal(article);
+  if (action === "forward") document.dispatchEvent(new CustomEvent("sovietgram:forward-message", {detail:{article}}));
   if (action === "pin") await toggleMessagePin(article);
   if (action === "delete") await deleteMessage(article);
 });
@@ -1970,7 +1889,7 @@ document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
   if (imageViewer && !imageViewer.hidden) { closeImageViewer(); return; }
   if (editModal && !editModal.hidden) { closeEditModal(); return; }
-  if (forwardModal && !forwardModal.hidden) { closeForwardModal(); return; }
+
   if (mediaComposeBackdrop && !mediaComposeBackdrop.hidden) { closeMediaComposer(); return; }
   if (chatInfoDrawer && !chatInfoDrawer.hidden) { setChatInfo(false); return; }
   if (searchPanel && !searchPanel.hidden) { setSearchPanel(false); return; }

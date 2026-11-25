@@ -2566,6 +2566,9 @@ def edit_message(request, chat_id, message_id):
 @require_POST
 @transaction.atomic
 def delete_message(request, chat_id, message_id):
+    account_id = request.POST.get("account_id")
+    if account_id is not None and account_id != str(request.user.pk):
+        return JsonResponse({"ok": False, "error": "Аккаунт изменился. Обновите страницу."}, status=409)
     chat = _chat_for_user(request.user, chat_id)
     chat = get_object_or_404(Chat.objects.select_for_update(), pk=chat.pk)
     get_object_or_404(ChatParticipant, chat=chat, user=request.user, is_hidden=False)
@@ -2576,6 +2579,8 @@ def delete_message(request, chat_id, message_id):
         is_deleted=False,
     )
     scope = request.POST.get("scope", "me").strip().lower()
+    if scope not in {"me", "everyone"}:
+        return JsonResponse({"ok": False, "error": "Некорректный режим удаления."}, status=400)
 
     if scope == "everyone":
         if not _can_delete_message_for_everyone(chat, membership, message):
@@ -2673,6 +2678,28 @@ def forward_message(request, chat_id, message_id):
         pk=message_id,
         is_deleted=False,
     )
+    # A forward is a new independent message, not a copy of other people's
+    # voting identities or task-assignee metadata from the source chat.
+    special_data = copy.deepcopy(source.special_data or {})
+    if source.special_type == Message.SpecialType.POLL:
+        if special_data.get("quiz") and source.sender_id != request.user.pk:
+            if not serialize_special_content(source, request.user)["selected_indexes"]:
+                return JsonResponse(
+                    {"ok": False, "error": "Сначала ответьте на викторину, чтобы переслать её."},
+                    status=403,
+                )
+        special_data["options"] = [
+            {"text": option.get("text", ""), "voters": []}
+            for option in special_data.get("options", [])
+        ]
+        special_data["closed"] = False
+    elif source.special_type == Message.SpecialType.TODO:
+        special_data["tasks"] = [
+            {"text": task.get("text", ""), "done": bool(task.get("done")), "done_by": None}
+            for task in special_data.get("tasks", [])
+        ]
+    hide_sender = request.POST.get("hide_sender") == "1"
+    silent = request.POST.get("silent") == "1"
     raw_target = request.POST.get("target_chat_id", "").strip()
 
     if raw_target == "saved":
@@ -2738,6 +2765,12 @@ def forward_message(request, chat_id, message_id):
 
     if origin is None or not privacy_allows(origin.sender, request.user, "forwards"):
         origin_username = ""
+    if hide_sender:
+        # Keep an explicit anonymous forwarding marker so further forwards
+        # cannot misattribute the original to the intermediate sender.
+        origin = None
+        origin_name = "Скрытый отправитель"
+        origin_username = ""
 
     with transaction.atomic():
         target_chat = Chat.objects.select_for_update().get(pk=target_chat.pk)
@@ -2757,7 +2790,8 @@ def forward_message(request, chat_id, message_id):
             sender=request.user,
             text=source.text,
             special_type=source.special_type,
-            special_data=copy.deepcopy(source.special_data or {}),
+            special_data=special_data,
+            silent=silent,
             forwarded_from=origin,
             forwarded_from_name=origin_name,
             forwarded_from_username=origin_username,

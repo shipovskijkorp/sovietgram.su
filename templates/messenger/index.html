@@ -824,6 +824,7 @@
   </div>
   <button type="button" data-message-action="reply"><span class="tg-native-icon tg-native-icon--reply" aria-hidden="true"></span>Ответить</button>
   <button type="button" data-message-action="copy"><span class="tg-native-icon tg-native-icon--copy" aria-hidden="true"></span>Копировать текст</button>
+  <button type="button" data-message-action="copy-link"><svg class="message-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a4 4 0 0 0 6 0l4-4a4 4 0 0 0-6-6l-2 2m2 6a4 4 0 0 0-6 0l-4 4a4 4 0 0 0 6 6l2-2"/></svg>Копировать ссылку</button>
   <button type="button" data-message-action="edit"><span class="tg-native-icon tg-native-icon--edit" aria-hidden="true"></span>Изменить</button>
   <button type="button" data-message-action="forward"><span class="tg-native-icon tg-native-icon--forward" aria-hidden="true"></span>Переслать</button>
   <button type="button" data-message-action="select"><span class="message-context-menu__select-icon" aria-hidden="true">✓</span>Выбрать</button>
@@ -897,7 +898,7 @@
     <header><strong id="forwardMessageTitle">Переслать сообщение</strong><button type="button" data-close-forward><span class="tg-native-icon tg-native-icon--close tg-native-icon--compact" aria-hidden="true"></span></button></header>
     <div class="forward-search"><span class="tg-native-icon tg-native-icon--search tg-native-icon--compact" aria-hidden="true"></span><input id="forwardTargetSearch" type="search" placeholder="Поиск чата" autocomplete="off"></div>
     <div class="forward-targets" id="forwardTargets">
-      <button class="forward-target" type="button" data-forward-target="saved" data-forward-search="избранное saved">
+      <button class="forward-target" type="button" data-forward-target="saved" data-forward-search="избранное saved" aria-pressed="false">
         <span class="forward-target__avatar forward-target__avatar--fallback">★</span><span><strong>Избранное</strong><small>Переслать себе</small></span>
       </button>
       {% for target in forward_targets %}
@@ -905,6 +906,7 @@
           <button class="forward-target"
                   type="button"
                   data-forward-target="{{ target.pk }}"
+                  aria-pressed="false"
                   data-forward-search="{{ target.search_text_ui }}"
                   data-forward-can-text="{{ target.can_forward_text_ui|yesno:'true,false' }}"
                   data-forward-can-media="{{ target.can_forward_media_ui|yesno:'true,false' }}"
@@ -921,6 +923,15 @@
         {% endif %}
       {% endfor %}
     </div>
+    <div class="forward-options">
+      <label><input type="checkbox" id="forwardHideSender">Скрыть имя исходного отправителя</label>
+      <label><input type="checkbox" id="forwardSilent">Отправить без звука</label>
+      <small>Опросы пересылаются как новые, без голосов из исходного чата.</small>
+    </div>
+    <footer class="forward-footer">
+      <span id="forwardStatus" role="status">Выберите один или несколько чатов.</span>
+      <button class="chat-modal__primary" type="button" id="forwardConfirm" disabled>Переслать</button>
+    </footer>
   </section>
 </div>
 
