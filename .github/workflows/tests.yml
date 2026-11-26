@@ -90,6 +90,7 @@ jobs:
           rm -rf "$BACKUP_DIR"
       - name: Check JavaScript syntax
         run: |
+          node --check static/js/easter-star.js
           node --check static/js/app.js
           node --check static/js/pwa.js
           node --check static/js/service-worker.js

@@ -131,17 +131,14 @@ function showToast(text) {
   toastTimeout = setTimeout(() => toast.classList.remove("is-visible"), 2200);
 }
 
-if (easterStar) {
-  easterStar.addEventListener("click", () => {
-    const messages = [
-      "Одобрено Госпланом ★",
-      "Производительность интерфейса повышена на 146%",
-      "Дефицита сообщений не обнаружено",
-      "Товарищ, ваш онлайн учтён статистикой",
-      "Пятилетний план по регистрации выполняется досрочно"
-    ];
-    showToast(messages[Math.floor(Math.random() * messages.length)]);
+if (easterStar && window.SovietgramEasterStar) {
+  let storage = null;
+  try { storage = window.localStorage; } catch (_) {}
+  const accountId = document.body.dataset.accountId || "default";
+  const nextMessage = window.SovietgramEasterStar.createDeck({
+    storage, key: "sovietgram.easter-star.v1." + accountId
   });
+  easterStar.addEventListener("click", () => showToast(nextMessage()));
 }
 
 const NAVIGATION_STACK_KEY = "sovietgram.navigation.stack.v1";

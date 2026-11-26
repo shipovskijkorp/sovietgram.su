@@ -253,7 +253,7 @@ a { color: var(--red); }
 .logout-form button, .footer-star { border: 0; background: transparent; cursor: pointer; }
 .logout-form button { padding: 6px; color: #897561; font-size: 11px; }
 .logout-form button:hover { color: var(--red); }
-.footer-star { padding: 6px; color: #c79831; font-size: 14px; }
+.footer-star { color: #d6a63b; }
 .conversation {
   min-width: 0;
   min-height: 0;
@@ -364,14 +364,27 @@ a { color: var(--red); }
 }
 
 .footer-star {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   display: grid;
   place-items: center;
   padding: 0;
-  border-radius: 50%;
+  border-radius: 8px;
   flex: 0 0 auto;
 }
+.sidebar__footer .footer-star svg {
+  display: block;
+  width: 26px;
+  height: 26px;
+  fill: currentColor;
+  stroke: none;
+  flex: 0 0 auto;
+}
+.sidebar__footer .footer-star:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+.sidebar__footer .footer-star:active svg { transform: scale(.88); }
 
 .footer-star:hover {
   background: rgba(199, 152, 49, .08);

@@ -188,6 +188,7 @@
   }
   .app-body .account-mini__name { color: var(--ink); font-size: 12px; font-weight: 600; }
   .app-body .sidebar__footer button { width: 30px; height: 32px; border-radius: 7px; }
+  .app-body .sidebar__footer button.footer-star { width: 40px; height: 40px; }
   .app-body .sidebar__footer button:hover { background: var(--sg-desktop-hover); }
 
   /* Conversation header and history. Pins/selection stay in normal flow,
