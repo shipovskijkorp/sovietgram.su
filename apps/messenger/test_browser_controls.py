@@ -675,6 +675,36 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.page.reload(wait_until="domcontentloaded")
         self.expect(count).to_have_text("1", timeout=15000)
         self.assertEqual(ChannelPostView.objects.filter(post=post).count(), 1)
+        self.manage()
+        self.click('[data-community-settings-open="statistics"]')
+        self.visible("#communityStatsChannel")
+        self.expect(self.page.locator('[data-channel-stat="views"]')).to_have_text("1")
+        self.expect(self.page.locator('[data-channel-stat="reach"]')).to_have_text("1")
+        self.expect(self.page.locator("#communityStatsViews .community-stats-chart-row")).to_have_count(7)
+
+    def test_selected_text_quote_survives_sending_and_reload(self):
+        self.go(self.direct)
+        source = self.page.locator(f'#message-{self.direct_message.pk} .message__text')
+        source.evaluate("""element => {
+            const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+            const node = walker.nextNode();
+            const start = node.textContent.indexOf("direct");
+            const range = document.createRange();
+            range.setStart(node, start);
+            range.setEnd(node, start + 6);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }""")
+        source.dispatch_event("contextmenu", {"clientX": 700, "clientY": 300, "button": 2})
+        self.click('[data-message-action="quote"]')
+        self.expect(self.page.locator("#composerReplyPreview")).to_have_text("direct")
+        self.page.locator("#messageInput").fill("Reply with a quote")
+        self.click("#sendButton")
+        self.expect(self.page.locator(".message-reply-quote")).to_have_text("direct")
+        self.hidden("#composerReply")
+        self.page.reload(wait_until="domcontentloaded")
+        self.expect(self.page.locator(".message-reply-quote")).to_have_text("direct")
 
     def test_foreign_profile_controls(self):
         self.go(query="?profile=peer")
