@@ -146,7 +146,7 @@ function scrollToBottom(force = false) {
 }
 
 function jumpToMessage(messageId) {
-  const node = document.querySelector(`[data-message-id="${messageId}"]`);
+  const node = document.querySelector(`.message[data-message-id="${messageId}"]`);
   if (!node) {
     const base = conversation?.dataset.chatUrl;
     if (base) {
@@ -500,7 +500,7 @@ function buildMessageArticle(message) {
 
 function renderMessage(message) {
   if (!messageFlow || !message || message.is_deleted) return;
-  if (document.querySelector(`[data-message-id="${message.id}"]`)) {
+  if (document.querySelector(`.message[data-message-id="${message.id}"]`)) {
     applyMessageUpdate(message);
     return;
   }
@@ -552,7 +552,7 @@ function syncMessageAttachments(article, message) {
 }
 
 function applyMessageUpdate(message) {
-  const article = document.querySelector(`[data-message-id="${message.id}"]`);
+  const article = document.querySelector(`.message[data-message-id="${message.id}"]`);
   if (message.is_deleted) {
     for (const preview of messageFlow?.querySelectorAll(".message-reply-preview") || []) {
       if (preview.dataset.jumpMessage === String(message.id)) preview.remove();
@@ -656,7 +656,7 @@ document.addEventListener("sovietgram:message-sent", (event) => {
   const message = event.detail?.message;
   if (!message) return;
   renderMessage(message);
-  const article = document.querySelector(`[data-message-id="${message.id}"]`);
+  const article = document.querySelector(`.message[data-message-id="${message.id}"]`);
   if (article) {
     window.SovietgramVoice?.hydrate?.(article);
     requestAnimationFrame(() => scrollToBottom(true));
@@ -815,6 +815,7 @@ contextMenu?.addEventListener("click", async (event) => {
 });
 
 const pinnedBar = document.getElementById("pinnedMessageBar");
+const pinnedStrip = document.getElementById("pinnedMessageStrip");
 const pinnedCount = document.getElementById("pinnedMessageCount");
 const pinnedPreview = document.getElementById("pinnedMessagePreview");
 let currentPins = [];
@@ -827,22 +828,23 @@ function renderPinnedMessages(pins) {
     article.classList.toggle("is-pinned", pinned);
   });
   if (!pinnedBar) return;
+  if (pinnedStrip) pinnedStrip.hidden = !currentPins.length;
   if (!currentPins.length) {
     pinnedBar.hidden = true;
-    pinnedBar.dataset.messageId = "";
+    pinnedBar.dataset.pinMessageId = "";
     messageStage?.classList.remove("has-pins");
     return;
   }
   const pin = currentPins[0];
   pinnedBar.hidden = false;
-  pinnedBar.dataset.messageId = String(pin.message_id);
+  pinnedBar.dataset.pinMessageId = String(pin.message_id);
   if (pinnedCount) pinnedCount.textContent = String(currentPins.length);
   if (pinnedPreview) pinnedPreview.textContent = pin.preview;
   messageStage?.classList.add("has-pins");
 }
 
 pinnedBar?.addEventListener("click", () => {
-  if (pinnedBar.dataset.messageId) jumpToMessage(pinnedBar.dataset.messageId);
+  if (pinnedBar.dataset.pinMessageId) jumpToMessage(pinnedBar.dataset.pinMessageId);
 });
 
 const chatMenuButton = document.getElementById("chatMenuButton");
@@ -928,7 +930,11 @@ function renderSearchResults(results) {
   results.forEach((result) => {
     const link = document.createElement("a");
     link.className = "chat-search-result";
-    link.href = result.url;
+    link.dataset.searchMessageId = String(result.id);
+    const url = new URL(result.url, window.location.origin);
+    const folder = new URL(window.location.href).searchParams.get("folder");
+    if (folder && /^\d+$/.test(folder)) url.searchParams.set("folder", folder);
+    link.href = url.href;
     const name = document.createElement("strong");
     name.textContent = result.sender_name;
     const preview = document.createElement("span");
@@ -937,7 +943,7 @@ function renderSearchResults(results) {
     time.textContent = result.time;
     link.append(name, preview, time);
     link.addEventListener("click", (event) => {
-      if (document.querySelector(`[data-message-id="${result.id}"]`)) {
+      if (document.querySelector(`.message[data-message-id="${result.id}"]`)) {
         event.preventDefault();
         setSearchPanel(false);
         jumpToMessage(result.id);
@@ -1009,6 +1015,20 @@ document.getElementById("chatSearchReset")?.addEventListener("click", () => {
   searchFilters.forEach(field => { field.value = ""; });
   restartChatSearch();
 });
+
+function openPinnedSearch() {
+  if (!searchPanel) return;
+  const kind = document.getElementById("chatSearchKind");
+  if (!kind) return;
+  if (searchInput) searchInput.value = "";
+  searchFilters.forEach(field => { field.value = ""; });
+  kind.value = "pinned";
+  const filters = searchPanel.querySelector(".chat-search-filters");
+  if (filters) filters.open = true;
+  setChatMenu(false);
+  setSearchPanel(true);
+  restartChatSearch();
+}
 
 const jumpDate = document.getElementById("chatJumpDate");
 const jumpDateButton = document.getElementById("chatJumpDateButton");
@@ -1383,6 +1403,7 @@ const historyOlderButton = document.getElementById("historyOlder");
 const historyNewerControls = document.getElementById("historyNewerControls");
 const historyNewerButton = document.getElementById("historyNewer");
 const historyLatestButton = document.getElementById("historyLatest");
+const historyJumpLatest = document.getElementById("historyJumpLatest");
 const dialogStart = messageFlow?.querySelector(".dialog-start");
 const historyStorageKey = "sovietgram.scroll." + (messageStage?.dataset.accountId || "") + "." + (conversation?.dataset.chatId || "");
 const historyNodes = () => Array.from(messageFlow?.querySelectorAll(".message[data-message-id]") || []);
@@ -1410,6 +1431,13 @@ function knownMessageBatch() {
 }
 let scrollTimer = 0;
 
+function updateLatestJump() {
+  if (!historyJumpLatest || !messageStage) return;
+  const distance = Math.max(0, messageStage.scrollHeight - messageStage.scrollTop - messageStage.clientHeight);
+  historyJumpLatest.hidden = !historyInitialized || (!historyHasNewer && distance < 240);
+  historyJumpLatest.disabled = historyBusy;
+}
+
 function updateHistoryControls() {
   if (historyOlderButton) {
     historyOlderButton.hidden = !historyHasOlder;
@@ -1419,6 +1447,7 @@ function updateHistoryControls() {
   if (historyNewerControls) historyNewerControls.hidden = !historyHasNewer;
   if (historyNewerButton) historyNewerButton.disabled = historyBusy;
   if (historyLatestButton) historyLatestButton.disabled = historyBusy;
+  updateLatestJump();
 }
 
 function visibleAnchor() {
@@ -1568,6 +1597,7 @@ async function loadLatestHistory() {
 }
 
 function onHistoryScroll() {
+  updateLatestJump();
   if (!historyInitialized || historyBusy) return;
   scheduleReadCheck();
   clearTimeout(scrollTimer);
@@ -1605,6 +1635,7 @@ async function initializeHistory() {
     scrollToBottom(true);
   }
   historyInitialized = true;
+  updateLatestJump();
   scheduleReadCheck();
   void pollMessages();
   if (textOutbox) {
@@ -1697,6 +1728,7 @@ async function pollMessages() {
   } finally {
     pollRendering = false;
     pollBusy = false;
+    updateLatestJump();
     // Read acknowledgement must not depend on a successful poll/render.
     scheduleReadCheck();
   }
@@ -1732,6 +1764,21 @@ if (messageStage) {
   historyOlderButton?.addEventListener("click", () => loadHistoryPage("before"));
   historyNewerButton?.addEventListener("click", () => loadHistoryPage("after"));
   historyLatestButton?.addEventListener("click", loadLatestHistory);
+  historyJumpLatest?.addEventListener("click", () => {
+    if (historyBusy) return;
+    if (historyHasNewer) void loadLatestHistory();
+    else {
+      scrollToBottom(true);
+      storeScrollPosition();
+      updateLatestJump();
+      scheduleReadCheck();
+    }
+  });
+  if (typeof ResizeObserver !== "undefined") {
+    const observer = new ResizeObserver(updateLatestJump);
+    observer.observe(messageStage);
+    if (messageFlow) observer.observe(messageFlow);
+  }
   messageStage.addEventListener("scroll", onHistoryScroll, { passive: true });
   window.addEventListener("pagehide", storeScrollPosition);
   window.addEventListener("focus", () => { scheduleReadCheck(); void pollMessages(); });
@@ -1764,6 +1811,8 @@ document.addEventListener("keydown", (event) => {
 window.renderSovietgramChatMessage = renderMessage;
 window.updateSovietgramChatMessage = applyMessageUpdate;
 window.SovietgramChat = {
+  openPinnedSearch,
+  renderPinnedMessages,
   setReply,
   currentQuote,
   clearReplyState,
@@ -1775,7 +1824,7 @@ window.SovietgramChat = {
     // A message may have been inserted by polling a fraction earlier than the
     // upload response. In that case renderMessage() routes through the update
     // path, which must also synchronize attachments such as voice players.
-    const article = document.querySelector(`[data-message-id="${message.id}"]`);
+    const article = document.querySelector(`.message[data-message-id="${message.id}"]`);
     if (!article) {
       // Do not advance the high-water mark when the DOM insert failed. The
       // next poll then remains able to recover the just-sent message.

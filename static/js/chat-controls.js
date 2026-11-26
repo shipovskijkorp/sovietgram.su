@@ -747,16 +747,7 @@
       article.dataset.messagePinned = String(pinned);
       article.classList.toggle("is-pinned", pinned);
 
-      const pins = payload.pins || [];
-      const pinnedBar = document.getElementById("pinnedMessageBar");
-      const pinnedCount = document.getElementById("pinnedMessageCount");
-      const pinnedPreview = document.getElementById("pinnedMessagePreview");
-      if (pinnedBar) {
-        pinnedBar.hidden = pins.length === 0;
-        pinnedBar.dataset.messageId = pins.length ? String(pins[0].message_id) : "";
-      }
-      if (pinnedCount) pinnedCount.textContent = pins.length ? String(pins.length) : "";
-      if (pinnedPreview) pinnedPreview.textContent = pins.length ? pins[0].preview : "";
+      window.SovietgramChat?.renderPinnedMessages?.(payload.pins || []);
       notify(pinned ? "Сообщение закреплено." : "Сообщение откреплено.");
     } catch (error) {
       notify(error.message);
@@ -1071,6 +1062,14 @@
 
     if (target.closest("[data-chat-export]")) {
       setChatMenu(false);
+      return;
+    }
+
+    if (target.closest("[data-open-pinned-search]")) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setChatMenu(false);
+      window.SovietgramChat?.openPinnedSearch?.();
       return;
     }
 

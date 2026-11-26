@@ -423,6 +423,29 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.assertAlmostEqual(rect["y"] + rect["height"], 844, delta=2)
         self.click("#stickerDialogClose")
 
+    def test_draft_and_pinned_chat_filters_survive_sidebar_refresh(self):
+        ChatParticipant.objects.filter(chat=self.direct, user=self.owner).update(draft_text="Draft filter")
+        ChatParticipant.objects.filter(chat=self.group, user=self.owner).update(is_pinned=True)
+        self.go()
+        direct = f'#chatList [data-chat-id="{self.direct.pk}"]'
+        group = f'#chatList [data-chat-id="{self.group.pk}"]'
+        self.click('[data-chat-filter="draft"]')
+        self.visible(direct)
+        self.hidden(group)
+        self.page.reload(wait_until="domcontentloaded")
+        self.visible(direct)
+        self.hidden(group)
+        self.expect(self.page.locator('[data-chat-filter="draft"]')).to_have_attribute("aria-pressed", "true")
+        ChatParticipant.objects.filter(chat=self.direct, user=self.owner).update(draft_text="")
+        self.page.evaluate("() => window.SovietgramSidebar.refresh()")
+        self.hidden(direct)
+        self.expect(self.page.locator("#chatFilterEmpty")).to_have_text("Нет чатов с черновиками.")
+        self.click('[data-chat-filter="pinned"]')
+        self.visible(group)
+        self.hidden(direct)
+        self.click('[data-chat-filter="all"]')
+        self.visible(direct)
+
     def test_chat_date_navigation_and_pinned_link_filters(self):
         from datetime import datetime, UTC
         from .models import PinnedMessage
@@ -451,6 +474,23 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.expect(self.page.locator("#messageStage")).to_have_attribute("data-focus-message", str(old.pk))
         self.visible(f"#message-{old.pk}")
         self.hidden("#chatSearchPanel")
+
+        # The list shortcut opens the real paginated search, not the
+        # eight-message summary used for the top pin banner.
+        self.click("#pinnedMessageListButton")
+        self.visible("#chatSearchPanel")
+        self.expect(self.page.locator("#chatSearchKind")).to_have_value("pinned")
+        self.expect(self.page.locator("#chatSearchResults")).to_contain_text("Browser direct test")
+        self.click("#chatSearchClose")
+        self.visible("#historyJumpLatest")
+        self.click("#historyJumpLatest")
+        self.visible(f"#message-{link.pk}")
+        self.hidden("#historyJumpLatest")
+        self.assertEqual(self.page.locator(f"#message-{old.pk}").count(), 0)
+        # The old pin must navigate back to the actual message.
+        self.click("#pinnedMessageBar")
+        self.expect(self.page.locator("#messageStage")).to_have_attribute("data-focus-message", str(old.pk))
+        self.visible(f"#message-{old.pk}")
 
     def test_chat_search_stickers_attachments_scheduling_and_folders(self):
         self.go(self.direct)

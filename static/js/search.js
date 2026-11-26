@@ -265,7 +265,7 @@
 
   const chatTools = document.getElementById("sidebarChatTools");
   const filterControls = Array.from(document.querySelectorAll("[data-chat-filter]"));
-  const filterOptions = new Set(["all", "unread", "group", "channel"]);
+  const filterOptions = new Set(["all", "unread", "group", "channel", "draft", "pinned"]);
   const filterStorage = "sovietgram.chat-filter." + (chatTools?.dataset.accountId || "") +
     "." + (chatTools?.dataset.archived || "false") + "." + (chatTools?.dataset.folderId || "");
   let activeChatFilter = "all";
@@ -279,6 +279,8 @@
   function matchesChatFilter(row) {
     if (activeChatFilter === "all") return true;
     if (activeChatFilter === "unread") return row.dataset.chatUnread === "true";
+    if (activeChatFilter === "draft") return row.dataset.chatDraft === "true";
+    if (activeChatFilter === "pinned") return row.dataset.chatPinned === "true";
     return row.dataset.chatType === activeChatFilter;
   }
 
@@ -297,7 +299,9 @@
       empty.textContent = activeChatFilter === "unread"
         ? "Нет непрочитанных чатов."
         : activeChatFilter === "group" ? "Нет групп."
-          : activeChatFilter === "channel" ? "Нет каналов." : "Ничего не найдено.";
+          : activeChatFilter === "channel" ? "Нет каналов."
+            : activeChatFilter === "draft" ? "Нет чатов с черновиками."
+              : activeChatFilter === "pinned" ? "Нет закреплённых чатов." : "Ничего не найдено.";
       empty.hidden = Boolean(query) || visible !== 0 || rows.length === 0;
     }
     filterControls.forEach(control =>

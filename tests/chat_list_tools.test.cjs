@@ -12,8 +12,8 @@ test("filters combine category and unread state with local text search", () => {
   const end = source.indexOf("  filterControls.forEach(control => {", start);
   assert.ok(start >= 0 && end > start);
   const rows = [
-    { dataset: { chatType: "private", chatUnread: "true", search: "alice" } },
-    { dataset: { chatType: "group", chatUnread: "false", search: "group" } },
+    { dataset: { chatType: "private", chatUnread: "true", chatDraft: "true", chatPinned: "false", search: "alice" } },
+    { dataset: { chatType: "group", chatUnread: "false", chatDraft: "false", chatPinned: "true", search: "group" } },
     { dataset: { chatType: "channel", chatUnread: "true", search: "news" } },
   ];
   const empty = {};
@@ -27,6 +27,10 @@ test("filters combine category and unread state with local text search", () => {
   vm.runInContext(source.slice(start, end) + "\napplyLocalChatFilter();", context);
   assert.deepEqual(rows.map(row => row.hidden), [false, true, false]);
   vm.runInContext('activeChatFilter = "group"; applyLocalChatFilter();', context);
+  assert.deepEqual(rows.map(row => row.hidden), [true, false, true]);
+  vm.runInContext('activeChatFilter = "draft"; applyLocalChatFilter();', context);
+  assert.deepEqual(rows.map(row => row.hidden), [false, true, true]);
+  vm.runInContext('activeChatFilter = "pinned"; applyLocalChatFilter();', context);
   assert.deepEqual(rows.map(row => row.hidden), [true, false, true]);
   context.sidebarInput.value = "news";
   vm.runInContext('activeChatFilter = "all"; applyLocalChatFilter();', context);

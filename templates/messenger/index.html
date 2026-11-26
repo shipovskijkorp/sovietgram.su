@@ -62,6 +62,8 @@
         <button type="button" data-chat-filter="unread" aria-pressed="false">Непрочитанные</button>
         <button type="button" data-chat-filter="group" aria-pressed="false">Группы</button>
         <button type="button" data-chat-filter="channel" aria-pressed="false">Каналы</button>
+        <button type="button" data-chat-filter="draft" aria-pressed="false">Черновики</button>
+        <button type="button" data-chat-filter="pinned" aria-pressed="false">Закреплённые</button>
       </div>
       <button type="button" class="sidebar-mark-read sidebar-select-chats" id="sidebarSelectChats" aria-pressed="false" aria-label="Выбрать чаты" title="Выбрать чаты">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="m8 12 3 3 5-6"/></svg>
@@ -214,6 +216,7 @@
                   <span class="chat-menu__label">Отметить непрочитанным</span>
                 </button>
               </form>
+              <button type="button" data-open-pinned-search><span class="tg-native-icon tg-native-icon--pin" aria-hidden="true"></span><span class="chat-menu__label">Закреплённые сообщения</span></button>
               <button type="button" data-open-scheduled>
                 <span class="chat-read-menu-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4m8-4v4M4 10h16m-8 2v4l3 1"/></svg></span>
                 <span class="chat-menu__label">Отложенные сообщения</span>
@@ -313,14 +316,18 @@
         </span>
       </div>
 
-      <button class="pinned-message-bar" id="pinnedMessageBar" type="button" {% if not pinned_records %}hidden{% endif %}>
+      <div class="pinned-message-strip" id="pinnedMessageStrip"{% if not pinned_records %} hidden{% endif %}>
+      <button class="pinned-message-bar" id="pinnedMessageBar" type="button" data-pin-message-id="{% if pinned_records %}{{ pinned_records.0.message_id }}{% endif %}" {% if not pinned_records %}hidden{% endif %}>
         <span class="pinned-message-bar__line"></span>
         <span class="pinned-message-bar__copy">
           <strong>Закреплено <small id="pinnedMessageCount">{% if pinned_records %}{{ pinned_records|length }}{% endif %}</small></strong>
           <span id="pinnedMessagePreview">{% if pinned_records %}{{ pinned_records.0.message.preview|truncatechars:90 }}{% endif %}</span>
         </span>
-        <span class="pinned-message-bar__arrow">›</span>
       </button>
+      <button type="button" class="pinned-message-list-button" id="pinnedMessageListButton" data-open-pinned-search aria-label="Все закреплённые сообщения" title="Все закреплённые сообщения">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16M8 3v4M16 10v4M8 17v4"/></svg>
+      </button>
+      </div>
 
       <section class="chat-search-panel" id="chatSearchPanel" data-search-url="{{ search_url }}" data-history-target-url="{% url 'messenger:history_target' selected_chat.pk %}" hidden>
         <div class="chat-search-box">
@@ -626,6 +633,11 @@
           <section class="pending-text-messages" id="pendingTextMessages" aria-label="Очередь отправки" aria-live="polite" hidden></section>
         </div>
       </section>
+      <div class="history-floating-controls">
+        <button type="button" id="historyJumpLatest" class="history-jump-latest" aria-label="К последним сообщениям" title="К последним сообщениям" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 10 6 6 6-6"/></svg>
+        </button>
+      </div>
 
       {% if can_post %}
       <form class="composer" id="messageForm" method="post" action="{% url 'messenger:send_message' selected_chat.pk %}" enctype="multipart/form-data">
