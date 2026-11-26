@@ -57,6 +57,27 @@ class AccountExportTests(TestCase):
             self.assertIn("Personal label", bundle.read("contacts.jsonl").decode())
             self.assertEqual(bundle.read(f"media/attachment-{attachment.pk}.bin"), b"test file")
 
+    def test_two_factor_is_required_and_export_limit_is_explicit(self):
+        import pyotp
+        from unittest.mock import patch
+        from .two_factor import encrypt_secret
+
+        secret = pyotp.random_base32()
+        User.objects.filter(pk=self.alice.pk).update(two_factor_secret=encrypt_secret(secret))
+        self.alice.refresh_from_db()
+        self.client.force_login(self.alice)
+        fields = {"account_id": self.alice.pk, "password": "Password-1945!"}
+        self.assertFalse(self.client.post(self.url, fields).streaming)
+        now = timezone.now()
+        code = pyotp.TOTP(secret).at(int(now.timestamp()))
+        with patch("apps.accounts.two_factor.timezone.now", return_value=now), \
+             patch("apps.accounts.data_export.MAX_BYTES", 1):
+            response = self.client.post(self.url, {**fields, "otp": code})
+        self.assertFalse(response.streaming)
+        self.assertContains(response, "Экспорт превышает")
+        self.alice.refresh_from_db()
+        self.assertGreaterEqual(self.alice.two_factor_last_step, 0)
+
     def test_credentials_account_guard_and_auth_required(self):
         for data in (
             {"account_id":self.alice.pk, "password":"bad"},

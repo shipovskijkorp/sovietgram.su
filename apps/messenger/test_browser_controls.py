@@ -806,6 +806,37 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.click("#settingsSectionBack")
         self.visible('[data-settings-screen="main"]')
 
+    def test_account_storage_preference_and_safe_cache_cleanup(self):
+        self.go(query="?settings=main")
+        self.click('#telegramSettings a[href="' + reverse("accounts:storage") + '"]')
+        self.visible(".storage-page")
+        self.page.locator("#id_media_preload").uncheck()
+        self.click(".storage-page button[type=submit]")
+        self.expect(self.page.locator("#id_media_preload")).not_to_be_checked()
+        self.owner.refresh_from_db()
+        self.assertFalse(self.owner.media_preload)
+        self.page.evaluate("""async () => {
+            const cache = await caches.open("sovietgram-public-shell-test");
+            await cache.put("/offline/", new Response("public"));
+            const unrelated = await caches.open("unrelated-test");
+            await unrelated.put("/unrelated", new Response("keep"));
+            localStorage.setItem("sovietgram.storage.test", "keep");
+        }""")
+        # Reload once so the inventory observes the seeded cache.
+        self.page.reload(wait_until="domcontentloaded")
+        self.visible("#storageClearCache")
+        # The service worker may remove old versioned public caches on
+        # activation; its current shell is also safe to delete.
+        self.expect(self.page.locator("#storageClearCache")).to_be_enabled()
+        self.click("#storageClearCache")
+        self.expect(self.page.locator("#storageCacheStatus")).to_contain_text("Публичный кэш очищен")
+        self.assertTrue(self.page.evaluate("""async () =>
+            (await caches.has("unrelated-test")) &&
+            localStorage.getItem("sovietgram.storage.test") === "keep"
+        """))
+        self.go(self.direct)
+        self.expect(self.page.locator("body")).to_have_attribute("data-media-preload", "false")
+
     def test_settings_sections_and_return_navigation(self):
         self.go(query="?settings=main")
         self.visible("#telegramSettings")
