@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import account_security, two_factor_views
+from . import account_security, data_export, two_factor_views
 
 from .views import (
     SovietgramLoginView,
@@ -41,6 +41,7 @@ urlpatterns = [
     path("profile/", profile, name="profile"),
     path("presence/heartbeat/", presence_heartbeat, name="presence_heartbeat"),
     path("settings/", settings_view, name="settings"),
+    path("settings/export/", data_export.account_export, name="account_export"),
     path("profile/avatar/remove/", remove_avatar, name="remove_avatar"),
     path(
         "profile/password/",
