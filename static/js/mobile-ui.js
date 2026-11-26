@@ -17,7 +17,7 @@
   if (utilityAnchor) utility.before(utilityAnchor);
   if (form && tools && toolsToggle) {
     for (const control of form.querySelectorAll(
-      '[data-compose-panel="format"][data-compose-target="messageInput"], [data-open-stickers][data-sticker-send], #sendOptionsToggle'
+      '[data-compose-panel="format"][data-compose-target="messageInput"], #sendOptionsToggle'
     )) {
       const anchor = document.createComment("desktop composer tool");
       control.before(anchor);

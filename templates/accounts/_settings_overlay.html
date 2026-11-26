@@ -89,6 +89,10 @@
             <span class="archive-menu-svg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3v12m-5-5 5 5 5-5M4 15v6h16v-6"/></svg></span>
             <span class="tg-settings-row__label">Экспорт данных аккаунта</span>
           </a>
+          <a class="tg-settings-row" href="{% url 'messenger:home' %}?manage_stickers=1" data-open-stickers data-settings-close-on-follow>
+            <span class="archive-menu-svg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v10l-6 6H4zM14 20v-6h6M8 8h.01M15 8h.01M8 12c1.5 2 3 2 4 1"/></svg></span>
+            <span class="tg-settings-row__label">Стикеры</span>
+          </a>
           <a class="tg-settings-row" href="{% url 'messenger:home' %}?manage_folders=1" data-manage-folders>
             <span class="archive-menu-svg"><svg viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v12H3z"/></svg></span><span class="tg-settings-row__label">Папки чатов</span>
           </a>

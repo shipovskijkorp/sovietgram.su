@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="{% static 'css/voice-messages.css' %}?v={{ static_version }}">
 <link rel="stylesheet" href="{% static 'css/community-profile.css' %}?v={{ static_version }}">
 <link rel="stylesheet" href="{% static 'css/settings.css' %}?v={{ static_version }}">
+<link rel="stylesheet" href="{% static 'css/stickers.css' %}?v={{ static_version }}">
 {% endblock %}
 
 {% block content %}
@@ -531,9 +532,10 @@
                   <div class="message-media{% if attachment_count > 1 %} message-media--album{% endif %}" data-count="{{ attachment_count }}">
                     {% for attachment in message.attachments.all %}
                       {% if attachment.kind == 'sticker' %}
-                        <div class="message-sticker">
-                          <img src="{% url 'messenger:view_attachment' attachment.pk %}" alt="Стикер" loading="lazy">
-                          {% if not selected_chat.protect_content %}<button type="button" data-save-sticker="{{ attachment.pk }}" title="Сохранить стикер в набор" aria-label="Сохранить стикер"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>{% endif %}
+                        <div class="message-sticker" data-sticker-attachment="{{ attachment.pk }}">
+                          <button type="button" class="message-sticker__preview" data-open-sticker-preview title="Открыть стикер" aria-label="Открыть стикер"{% if selected_chat.protect_content %} disabled{% endif %}>
+                            <img src="{% url 'messenger:view_attachment' attachment.pk %}" alt="Стикер" loading="lazy">
+                          </button>
                         </div>
                       {% elif attachment.kind == 'image' %}
                         <a class="message-media__item" href="{% url 'messenger:view_attachment' attachment.pk %}" target="_blank" rel="noopener" data-lightbox-image="{% url 'messenger:view_attachment' attachment.pk %}" data-media-name="{{ attachment.original_name }}" data-media-download="{% if not selected_chat.protect_content %}{% url 'messenger:download_attachment' attachment.pk %}{% endif %}">
@@ -686,7 +688,7 @@
         <input id="attachmentModeInput" type="hidden" name="attachment_mode" value="media">
         <div class="composer__field">
           <textarea id="messageInput" name="text" rows="1" maxlength="4096" placeholder="{% if not can_send_text and can_send_media %}Можно отправлять только медиа{% else %}Сообщение{% endif %}" autocomplete="off"{% if not can_send_text %} readonly{% endif %}>{{ composer_draft_text }}</textarea>
-          {% if can_send_media %}<button type="button" class="composer-tool-button" data-open-stickers data-sticker-send="true" title="Стикеры" aria-label="Стикеры"><svg viewBox="0 0 24 24" fill="none"><path d="M4 4h16v10l-6 6H4zM14 20v-6h6M8 8h.01M15 8h.01M8 12c1.5 2 3 2 4 1"/></svg></button>{% endif %}
+          {% if can_send_media %}<button type="button" class="composer-tool-button" data-open-stickers data-sticker-send="true" aria-expanded="false" aria-controls="stickerDialog" title="Стикеры" aria-label="Стикеры"><svg viewBox="0 0 24 24" fill="none"><path d="M4 4h16v10l-6 6H4zM14 20v-6h6M8 8h.01M15 8h.01M8 12c1.5 2 3 2 4 1"/></svg></button>{% endif %}
           {% if can_send_text %}{% include 'messenger/_composer_tools.html' with editor_id="messageInput" %}
           <button class="composer-tool-button" id="sendOptionsToggle" type="button" aria-expanded="false" aria-controls="sendOptionsMenu" aria-label="Параметры отправки" title="Параметры отправки">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/></svg>
@@ -892,6 +894,7 @@
   <button type="button" data-message-action="copy-link"><svg class="message-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a4 4 0 0 0 6 0l4-4a4 4 0 0 0-6-6l-2 2m2 6a4 4 0 0 0-6 0l-4 4a4 4 0 0 0 6 6l2-2"/></svg>Копировать ссылку</button>
   <button type="button" data-message-action="reactors" hidden><svg class="message-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 14c2 3 6 3 8 0M9 9h.01M15 9h.01" stroke-linecap="round"/></svg>Кто отреагировал</button>
   <button type="button" data-message-action="readers" hidden><svg class="message-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 12 4 4L17 6m-6 10L21 6"/></svg>Кто прочитал</button>
+  <button type="button" data-message-action="save-sticker" hidden><svg class="message-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v10l-6 6H4zM14 20v-6h6M8 8h.01M15 8h.01M8 12c1.5 2 3 2 4 1"/></svg>Сохранить стикер</button>
   <button type="button" data-message-action="edit"><span class="tg-native-icon tg-native-icon--edit" aria-hidden="true"></span>Изменить</button>
   <button type="button" data-message-action="forward"><span class="tg-native-icon tg-native-icon--forward" aria-hidden="true"></span>Переслать</button>
   <button type="button" data-message-action="select"><span class="message-context-menu__select-icon" aria-hidden="true">✓</span>Выбрать</button>

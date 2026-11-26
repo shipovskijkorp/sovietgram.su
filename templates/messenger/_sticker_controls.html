@@ -1,32 +1,59 @@
 <dialog id="stickerDialog" class="sticker-dialog" data-url="{% url 'messenger:sticker_packs' %}" data-account-id="{{ request.user.pk }}"{% if selected_chat and can_send_media %} data-send-url="{% url 'messenger:send_message' selected_chat.pk %}" data-chat-id="{{ selected_chat.pk }}"{% endif %} aria-labelledby="stickerDialogTitle">
-  <header><h2 id="stickerDialogTitle">Стикеры</h2><button type="button" id="stickerDialogClose" aria-label="Закрыть">×</button></header>
-  <p class="sticker-hint" id="stickerHint">Ваши личные наборы стикеров.</p>
+  <header class="sticker-header">
+    <button type="button" class="sticker-icon-button" id="stickerBack" aria-label="Назад" hidden><svg viewBox="0 0 24 24"><path d="m12 5-7 7 7 7M5 12h14"/></svg></button>
+    <div class="sticker-heading"><h2 id="stickerDialogTitle">Стикеры</h2><small id="stickerSubtitle"></small></div>
+    <button type="button" class="sticker-icon-button" id="stickerManage" aria-label="Управление наборами" title="Управление наборами"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="m9 3-.8 2.4-2.4.9L3.5 6l-1.5 2.6 1.8 1.8v2.9L2 15.2l1.5 2.6 2.4-.4 2.4 1L9 21h3l.8-2.6 2.4-1 2.4.4 1.5-2.6-1.8-1.8v-2.9l1.8-1.8L17.6 6l-2.4.4-2.4-1L12 3z" transform="translate(1 0)"/></svg></button>
+    <button type="button" class="sticker-icon-button" id="stickerPackMenuToggle" aria-label="Действия с набором" aria-expanded="false" aria-controls="stickerPackActions" hidden><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="12" cy="19" r="1.3"/></svg></button>
+    <button type="button" class="sticker-icon-button" id="stickerDialogClose" aria-label="Закрыть"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+  </header>
+  <div id="stickerSearchRow" class="sticker-search" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>
+    <input id="stickerSearch" type="search" autocomplete="off" placeholder="Поиск по эмодзи и наборам" aria-label="Поиск стикеров">
+  </div>
   <p class="sticker-error" id="stickerError" role="status" hidden></p>
-  <div id="stickerPackTabs" class="sticker-pack-tabs"></div>
-  <div class="sticker-pack-actions" id="stickerPackActions" hidden>
-    <button type="button" id="stickerRename">Переименовать</button>
-    <button type="button" id="stickerDeletePack">Удалить набор</button>
-    <button type="button" id="stickerEditMode" aria-pressed="false">Удалить стикеры</button>
-    <button type="button" id="stickerShare">Поделиться набором</button>
-    <button type="button" id="stickerUnshare" hidden>Отозвать ссылку</button>
+  <div id="stickerBody" class="sticker-body">
+    <div id="stickerIncomingPreview" class="sticker-incoming-preview" hidden><img id="stickerIncomingImage" alt="Стикер"><p>Добавить этот стикер в один из своих наборов</p></div>
+    <div id="stickerLibraryList" class="sticker-library-list" hidden></div>
+    <div id="stickerGridSection" hidden>
+      <div class="sticker-section-heading"><strong id="stickerGridTitle"></strong><button type="button" id="stickerClearRecent" class="sticker-text-button" hidden>Очистить</button></div>
+      <div id="stickerGrid" class="sticker-grid"></div>
+      <p id="stickerHint" class="sticker-hint" hidden></p>
+    </div>
+    <div id="stickerPackActions" class="sticker-pack-menu" hidden>
+      <button type="button" id="stickerRename">Переименовать</button>
+      <button type="button" id="stickerShare">Поделиться набором</button>
+      <button type="button" id="stickerUnshare" hidden>Отозвать ссылку</button>
+      <button type="button" id="stickerEditMode" aria-pressed="false">Удалить стикеры</button>
+      <button type="button" id="stickerDeletePack" class="sticker-danger">Удалить набор</button>
+    </div>
+    <div id="stickerSharePanel" class="sticker-share-panel" hidden>
+      <label for="stickerShareLink">Ссылка на набор</label>
+      <div><input type="text" id="stickerShareLink" readonly><button type="button" id="stickerCopyLink" class="sticker-text-button">Копировать</button></div>
+      <small>Любой авторизованный пользователь со ссылкой может установить копию.</small>
+    </div>
+    <form id="stickerUploadForm" class="sticker-edit-form" hidden>
+      <label for="stickerFile">Изображение или анимация</label>
+      <input type="file" id="stickerFile" accept="image/png,image/webp,image/jpeg,image/gif" required>
+      <label for="stickerEmoji">Эмодзи или подпись</label>
+      <input id="stickerEmoji" maxlength="24" placeholder="😀" autocomplete="off">
+      <small>PNG, WebP, GIF, JPEG до 2 МБ. Анимация до 5 секунд и 60 кадров.</small>
+      <button type="submit" class="sticker-primary">Добавить стикер</button>
+    </form>
+    <form id="stickerPromptForm" class="sticker-edit-form" hidden>
+      <p id="stickerPromptDescription" class="sticker-hint"></p>
+      <label for="stickerPromptInput" id="stickerPromptLabel"></label>
+      <input type="text" id="stickerPromptInput" autocomplete="off">
+      <button type="submit" id="stickerPromptSubmit" class="sticker-primary">Сохранить</button>
+    </form>
   </div>
-  <div id="stickerSharePanel" class="sticker-share-panel" hidden>
-    <label for="stickerShareLink">Ссылка на набор</label>
-    <div><input type="text" id="stickerShareLink" readonly><button type="button" id="stickerCopyLink">Копировать</button></div>
-    <small>Любой авторизованный пользователь со ссылкой может установить копию. Отзыв ссылки не удаляет уже установленные копии.</small>
+  <div id="stickerManagerActions" class="sticker-manager-actions" hidden>
+    <button type="button" id="stickerCreatePack" class="sticker-list-action"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Создать набор</button>
+    <button type="button" id="stickerInstallLink" class="sticker-list-action"><svg viewBox="0 0 24 24"><path d="M10 13a4 4 0 0 0 6 0l4-4a4 4 0 0 0-6-6l-2 2m2 6a4 4 0 0 0-6 0l-4 4a4 4 0 0 0 6 6l2-2"/></svg>Установить по ссылке</button>
   </div>
-  <div class="sticker-pack-actions"><button type="button" id="stickerClearRecent" hidden>Очистить недавние</button></div>
-  <div id="stickerGrid" class="sticker-grid"></div>
-  <label class="sticker-silent" id="stickerSilentRow" hidden><input type="checkbox" id="stickerSilent"> Отправить без звука</label>
-  <form id="stickerUploadForm" hidden>
-    <label>Добавить изображение <input type="file" id="stickerFile" accept="image/png,image/webp,image/jpeg,image/gif" required></label>
-    <label>Эмодзи или подпись (необязательно)<input id="stickerEmoji" maxlength="24" placeholder="😀"></label>
-    <button type="submit">Добавить стикер</button>
-    <small>PNG, WebP, GIF, JPEG до 2 МБ. Анимация: до 5 секунд и 60 кадров; результат — WebP до 256 КБ и 512 пикселей.</small>
-  </form>
-  <div class="sticker-pack-actions">
-    <button type="button" id="stickerCreatePack">Создать набор</button>
-    <button type="button" id="stickerInstallLink">Установить по ссылке</button>
-    <button type="button" id="stickerSaveIncoming" class="sticker-primary" hidden>Сохранить в набор</button>
-  </div>
+  <footer id="stickerPackFooter" class="sticker-pack-footer" hidden>
+    <button type="button" id="stickerUploadToggle" class="sticker-primary">Добавить стикер</button>
+  </footer>
+  <footer id="stickerSaveFooter" class="sticker-pack-footer" hidden><button type="button" id="stickerSaveIncoming" class="sticker-primary">Добавить в набор</button></footer>
+  <nav id="stickerPackTabs" class="sticker-pack-tabs" aria-label="Наборы стикеров" hidden></nav>
+  <div id="stickerItemMenu" class="sticker-item-menu" role="group" aria-label="Действия со стикером" hidden></div>
 </dialog>

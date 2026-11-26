@@ -294,6 +294,8 @@
     chatProtected = Boolean(enabled);
     conversation.dataset.chatProtected = String(chatProtected);
     conversation.classList.toggle("is-content-protected", chatProtected);
+    for (const preview of conversation.querySelectorAll("[data-open-sticker-preview]")) preview.disabled = chatProtected;
+    if (chatProtected) window.SovietgramStickers?.closeIncoming?.();
 
     if (chatProtectionLabel) {
       chatProtectionLabel.textContent = chatProtected
@@ -480,6 +482,8 @@
     if (quoteButton) quoteButton.hidden = !contextQuote;
     article.classList.add("is-context-target");
 
+    const saveStickerButton = contextMenu.querySelector('[data-message-action="save-sticker"]');
+    if (saveStickerButton) saveStickerButton.hidden = chatProtected || !article.querySelector("[data-sticker-attachment]");
     const editButton = contextMenu.querySelector('[data-message-action="edit"]');
     const copyButton = contextMenu.querySelector('[data-message-action="copy"]');
     const forwardButton = contextMenu.querySelector('[data-message-action="forward"]');
@@ -1155,6 +1159,9 @@
       }
       if (action === "report" && !isOwn(article) && /^\d+$/.test(article.dataset.messageId || "")) {
         window.location.assign(actionButton.dataset.reportTemplate.replace(/\/0\/$/, "/" + article.dataset.messageId + "/"));
+      }
+      if (action === "save-sticker" && !chatProtected) {
+        window.SovietgramStickers?.openIncoming?.(article.querySelector("[data-sticker-attachment]"));
       }
       if (action === "reactors") openReactors(article);
       if (action === "readers") openReaders(article);

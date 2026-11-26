@@ -293,20 +293,20 @@ function makeMedia(attachment, isOwn = false) {
   if (attachment.kind === "sticker") {
     const node = document.createElement("div");
     node.className = "message-sticker";
+    node.dataset.stickerAttachment = String(attachment.id);
+    const preview = document.createElement("button");
+    preview.type = "button";
+    preview.className = "message-sticker__preview";
+    preview.dataset.openStickerPreview = "";
+    preview.title = "Открыть стикер";
+    preview.setAttribute("aria-label", "Открыть стикер");
+    preview.disabled = conversation?.dataset.chatProtected === "true";
     const image = document.createElement("img");
     image.src = attachment.url;
     image.alt = "Стикер";
     image.loading = "lazy";
-    node.appendChild(image);
-    if (!conversation?.classList.contains("is-content-protected")) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.dataset.saveSticker = String(attachment.id);
-      button.textContent = "+";
-      button.title = "Сохранить стикер в набор";
-      button.setAttribute("aria-label", "Сохранить стикер");
-      node.appendChild(button);
-    }
+    preview.appendChild(image);
+    node.appendChild(preview);
     return node;
   }
   if (attachment.kind === "voice") {

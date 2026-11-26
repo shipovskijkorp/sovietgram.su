@@ -2,12 +2,12 @@
 {% load static %}
 {% block title %}{{ pack.name }} — Стикеры Sovietgram{% endblock %}
 {% block body_class %}auth-body{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/settings.css' %}?v={{ static_version }}">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/stickers.css' %}?v={{ static_version }}">{% endblock %}
 {% block content %}
 <main class="auth-shell">
   <section class="auth-card auth-card--wide shared-sticker-page">
     <a class="auth-brand" href="{% url 'messenger:home' %}"><span class="brand__mark">★</span><span>SOVIETGRAM</span></a>
-    <div class="auth-heading"><p class="eyebrow">Набор стикеров</p><h1>{{ pack.name }}</h1>
+    <div class="auth-heading shared-sticker-heading"><p class="eyebrow">Набор стикеров</p><h1>{{ pack.name }}</h1>
       <p>{{ stickers|length }} шт. · Установка создаёт личную копию набора.</p></div>
     <div class="shared-sticker-preview">
       {% for item in stickers %}
