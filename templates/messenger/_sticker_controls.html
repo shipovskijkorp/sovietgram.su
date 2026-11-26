@@ -14,6 +14,11 @@
   <div id="stickerBody" class="sticker-body">
     <div id="stickerIncomingPreview" class="sticker-incoming-preview" hidden><img id="stickerIncomingImage" alt="Стикер"><p>Добавить этот стикер в один из своих наборов</p></div>
     <div id="stickerLibraryList" class="sticker-library-list" hidden></div>
+    <div id="stickerSharePanel" class="sticker-share-panel" hidden>
+      <label for="stickerShareLink">Ссылка на набор</label>
+      <div><input type="text" id="stickerShareLink" readonly><button type="button" id="stickerCopyLink" class="sticker-text-button">Копировать</button></div>
+      <small>Любой авторизованный пользователь со ссылкой может установить копию.</small>
+    </div>
     <div id="stickerGridSection" hidden>
       <div class="sticker-section-heading"><strong id="stickerGridTitle"></strong><button type="button" id="stickerClearRecent" class="sticker-text-button" hidden>Очистить</button></div>
       <div id="stickerGrid" class="sticker-grid"></div>
@@ -25,11 +30,6 @@
       <button type="button" id="stickerUnshare" hidden>Отозвать ссылку</button>
       <button type="button" id="stickerEditMode" aria-pressed="false">Удалить стикеры</button>
       <button type="button" id="stickerDeletePack" class="sticker-danger">Удалить набор</button>
-    </div>
-    <div id="stickerSharePanel" class="sticker-share-panel" hidden>
-      <label for="stickerShareLink">Ссылка на набор</label>
-      <div><input type="text" id="stickerShareLink" readonly><button type="button" id="stickerCopyLink" class="sticker-text-button">Копировать</button></div>
-      <small>Любой авторизованный пользователь со ссылкой может установить копию.</small>
     </div>
     <form id="stickerUploadForm" class="sticker-edit-form" hidden>
       <label for="stickerFile">Изображение или анимация</label>

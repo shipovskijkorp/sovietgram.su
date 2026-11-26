@@ -317,6 +317,8 @@
         || !(contextArticle?.dataset.messageText || "").trim();
     }
     if (forwardButton) forwardButton.hidden = chatProtected;
+    const stickerSave = contextMenu?.querySelector('[data-message-action="save-sticker"]');
+    if (stickerSave) stickerSave.hidden = chatProtected || !contextArticle?.querySelector("[data-sticker-attachment]");
   }
 
   applyChatProtection(chatProtected);

@@ -325,6 +325,52 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.hidden("#stickerSharePanel")
         self.assertEqual(self.page.request.get(link).status, 404)
 
+    def test_sticker_manager_create_rename_upload_and_delete(self):
+        from io import BytesIO
+        from PIL import Image
+        from .models import StickerPack
+
+        self.go(query="?settings=main")
+        self.click('#telegramSettings [data-open-stickers]')
+        self.visible("#stickerDialog")
+        self.expect(self.page.locator("#stickerDialogTitle")).to_have_text("Мои наборы")
+        self.click("#stickerCreatePack")
+        self.page.locator("#stickerPromptInput").fill("New pack")
+        self.click("#stickerPromptSubmit")
+        self.expect(self.page.locator("#stickerDialogTitle")).to_have_text("New pack")
+        self.click("#stickerUploadToggle")
+        buffer = BytesIO()
+        Image.new("RGBA", (16, 16), "blue").save(buffer, format="PNG")
+        self.page.locator("#stickerFile").set_input_files({
+            "name": "sticker.png", "mimeType": "image/png", "buffer": buffer.getvalue(),
+        })
+        self.page.locator("#stickerEmoji").fill("😀")
+        self.click('#stickerUploadForm button[type="submit"]')
+        self.visible(".sticker-tile")
+        self.click("#stickerPackMenuToggle")
+        self.click("#stickerRename")
+        self.page.locator("#stickerPromptInput").fill("Renamed")
+        self.click("#stickerPromptSubmit")
+        self.expect(self.page.locator("#stickerDialogTitle")).to_have_text("Renamed")
+        self.click("#stickerPackMenuToggle")
+        self.click("#stickerEditMode")
+        self.expect(self.page.locator("#stickerUploadToggle")).to_have_text("Готово")
+        self.click(".sticker-tile")
+        self.click("#stickerPromptSubmit")
+        self.expect(self.page.locator("#stickerDialogTitle")).to_have_text("Renamed")
+        self.expect(self.page.locator(".sticker-tile")).to_have_count(0)
+        self.click("#stickerPackMenuToggle")
+        self.click("#stickerDeletePack")
+        self.click("#stickerPromptSubmit")
+        self.expect(self.page.locator("#stickerDialogTitle")).to_have_text("Мои наборы")
+        self.assertFalse(StickerPack.objects.filter(owner=self.owner).exists())
+        self.click("#stickerInstallLink")
+        self.page.locator("#stickerPromptInput").fill("https://example.invalid/addstickers/invalid")
+        self.click("#stickerPromptSubmit")
+        self.expect(self.page.locator("#stickerError")).to_contain_text("ссылку на набор")
+        self.click("#stickerBack")
+        self.click("#stickerDialogClose")
+
     def test_sticker_picker_context_actions_and_incoming_preview(self):
         from io import BytesIO
         from PIL import Image

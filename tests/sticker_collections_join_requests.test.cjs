@@ -9,8 +9,15 @@ test("favorites and recent lists use explicit scoped actions",()=>{
   assert.match(js,/result.recent/);
   assert.match(js,/mutate\("favorite",\{sticker_id:item.id,favorite:item.favorite\?"0":"1"\}/);
   assert.match(js,/mutate\("forget_recent"/);
-  assert.match(js,/mutate\("clear_recent"\)/);
-  assert.match(read("templates/messenger/_sticker_controls.html"),/id="stickerClearRecent"/);
+  assert.match(js,/mutate\("clear_recent",\{\},"picker"\)/);
+  const controls=read("templates/messenger/_sticker_controls.html");
+  assert.match(controls,/id="stickerClearRecent"/);
+  assert.match(controls,/id="stickerItemMenu"/);
+  assert.match(controls,/id="stickerLibraryList"/);
+  assert.match(controls,/id="stickerSearch"/);
+  assert.doesNotMatch(read("templates/messenger/index.html"),/data-save-sticker=/);
+  assert.doesNotMatch(read("static/js/chat.js"),/dataset\.saveSticker/);
+  assert.match(read("templates/messenger/index.html"),/data-message-action="save-sticker"/);
 });
 test("moderated invitation UI includes approval flag and stale request protection",()=>{
   const js=read("static/js/community-settings.js");

@@ -110,3 +110,9 @@
   .app-body .composer__field [data-open-stickers][data-sticker-send] { order:-1; }
   .shared-sticker-preview { grid-template-columns:repeat(4,minmax(0,1fr)); }
 }
+
+/* Keep controls reachable with the mobile on-screen keyboard and short windows. */
+@media (max-width:820px),(max-height:540px) and (max-width:1100px) {
+  .sticker-dialog, .sticker-dialog.is-picker { max-height:var(--sg-mobile-height,100dvh); }
+  .sticker-dialog .sticker-tile:active { background:var(--sticker-selected); }
+}

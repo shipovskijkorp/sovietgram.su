@@ -260,7 +260,9 @@
         const label=document.createElement("small");label.className="sticker-tile-emoji";label.textContent=item.emoji;tile.append(label);
       }
       tile.addEventListener("contextmenu",event=>{
-        event.preventDefault();event.stopPropagation();stopHold();if(!busy&&!removing)openItemMenu(item,tile);
+        event.preventDefault();event.stopPropagation();
+        if(hold)suppressedClick={id:item.id,until:Date.now()+1200};
+        stopHold();if(!busy&&!removing)openItemMenu(item,tile);
       });
       tile.addEventListener("keydown",event=>{
         if(event.key==="ContextMenu"||(event.shiftKey&&event.key==="F10")){
@@ -298,9 +300,9 @@
     $("stickerCreatePack").disabled=busy||packs.length>=10;
     $("stickerInstallLink").hidden=!library;$("stickerInstallLink").disabled=busy||packs.length>=10;
     $("stickerSaveFooter").hidden=!incoming;save.disabled=busy||!current||current.stickers.length>=40;
-    $("stickerPackFooter").hidden=!detail||removing;
-    $("stickerUploadToggle").disabled=busy||!current||current.stickers.length>=40;
-    $("stickerUploadToggle").textContent=uploadOpen?"Закрыть добавление":"Добавить стикер";
+    $("stickerPackFooter").hidden=!detail;
+    $("stickerUploadToggle").disabled=busy||!current||(!removing&&!uploadOpen&&current.stickers.length>=40);
+    $("stickerUploadToggle").textContent=removing?"Готово":uploadOpen?"Закрыть добавление":"Добавить стикер";
     upload.hidden=!detail||!uploadOpen;
     actions.hidden=!detail||!packMenuOpen;
     $("stickerEditMode").textContent=removing?"Завершить удаление":"Удалить стикеры";
@@ -406,7 +408,7 @@
   }
   function incomingAllowed(){
     const conversation=document.querySelector(".conversation--chat");
-    return conversation?.dataset.chatProtected!=="true"&&!conversation?.classList.contains("is-message-selection");
+    return Boolean(conversation&&conversation.dataset.chatProtected!=="true"&&!conversation.classList.contains("is-message-selection"));
   }
   async function open(nextMode,id=null,source=null,trigger=null){
     if(busy)return;
@@ -422,9 +424,15 @@
     if(!dialog.open)dialog.showModal();
     if(mode==="send")anchor?.setAttribute("aria-expanded","true");
     positionPicker();body.scrollTop=0;error();setBusy(true);
-    try{await load();if(screen==="picker"&&pickerSelection==null)selected=recent.length?"recent":packs[0]?.id??"favorites";}
+    try{
+      await load();
+      if(screen==="picker")selected=pickerSelection??(recent.length?"recent":packs[0]?.id??"favorites");
+    }
     catch(e){error(e.message);}
-    finally{setBusy(false);positionPicker();}
+    finally{
+      setBusy(false);positionPicker();
+      if(mode==="save"&&!incomingAllowed()&&dialog.open)dialog.close();
+    }
   }
   function openIncoming(node){
     if(!node||!incomingAllowed())return;
@@ -476,7 +484,7 @@
     anchor?.setAttribute("aria-expanded","false");
     anchor=null;stopHold();closeItemMenu();positionPicker();
     $("stickerIncomingImage").removeAttribute("src");
-    if(mode==="send")document.getElementById("messageInput")?.focus({preventScroll:true});
+    if(mode==="send"&&!mobile.matches)document.getElementById("messageInput")?.focus({preventScroll:true});
   });
   search.addEventListener("input",()=>{if(!busy){closeItemMenu();body.scrollTop=0;drawTabs();drawGrid();}});
   search.addEventListener("keydown",event=>{if(event.key==="Enter")event.preventDefault();});
@@ -537,6 +545,7 @@
     confirmAction("Очистить недавние?","Избранное и наборы останутся.","Очистить",()=>mutate("clear_recent",{},"picker"));
   });
   $("stickerUploadToggle").addEventListener("click",()=>{
+    if(removing){removing=false;draw();return;}
     uploadOpen=!uploadOpen;draw();if(uploadOpen)upload.scrollIntoView({block:"nearest"});
   });
   upload.addEventListener("submit",async event=>{
