@@ -586,3 +586,56 @@ inactive accounts; accounts are checked again under the deletion lock.
 Expired accounts remain unable to sign in or resume a session. If the timer
 is not installed, the default 0 keeps the previous request-triggered cleanup.
 No schema changes are required. The scheduled-message timer is unchanged.
+
+
+### Automatic private backups
+
+The backup command creates a database snapshot, the exact set of local media
+files referenced by that snapshot (user avatars, chat avatars and message
+attachments), the existing .env when present, and a SHA-256 manifest. SQLite
+uses its online backup API plus quick_check; PostgreSQL uses pg_dump and
+an exported consistent snapshot for media references. Install the PostgreSQL
+client tools (pg_dump and pg_restore, matching or newer than the server's
+major version) when using PostgreSQL. Local filesystem storage is supported.
+
+The archive is verified before it is published; missing or changing files
+cause failure and leave the previous archives untouched. A live backup does
+not stop the website: files removed concurrently with the snapshot can cause
+a failed run. For a guaranteed quiescent manual snapshot, stop the web and
+scheduled/maintenance writers first, create and verify a backup, then resume
+them. Archive verification alone is not a database restore test.
+
+```bash
+sudo install -m 644 deploy/systemd/sovietgram-backup.service /etc/systemd/system/
+sudo install -m 644 deploy/systemd/sovietgram-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl start sovietgram-backup.service
+sudo systemctl enable --now sovietgram-backup.timer
+sudo journalctl -u sovietgram-backup.service -n 20 --no-pager
+sudo ls -lh /var/lib/sovietgram-backup/
+```
+
+Daily backups run around 03:30 server time and keep the seven newest
+successful archives. Directory and file permissions are 0700 and 0600.
+A manual backup can use a different private directory outside the
+repository/media tree; use `--keep` to adjust rotation. Verify any archive:
+
+```bash
+sudo -u sovietgram -H .venv/bin/python manage.py backup_sovietgram --verify /var/lib/sovietgram-backup/ARCHIVE.tar.gz
+```
+
+**These backups contain private messages, attachments and potentially all
+.env credentials; they are not encrypted.** Never publish or commit them.
+Copy encrypted backups to a separate host or storage and limit access.
+Local copies alone do not survive VPS loss or compromise. Keep the original
+Django secret and any fallback keys; they are required to decrypt TOTP secrets.
+If configuration is supplied outside .env, preserve it separately.
+
+To rehearse a restore, verify the archive, extract it only into an empty
+private staging directory, restore database.sqlite3 (SQLite) or load
+database.dump with pg_restore --exit-on-error --no-owner --no-privileges
+into a new isolated PostgreSQL database, and point MEDIA_ROOT/var/media at
+the extracted media directory. Use the compatible application revision and
+configuration, check migrations and run application smoke tests. Never
+restore into the running production database or overwrite live files.
+The command intentionally does not implement an automatic destructive restore.

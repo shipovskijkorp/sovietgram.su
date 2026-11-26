@@ -1,0 +1,19 @@
+[Unit]
+Description=Create and verify a private Sovietgram backup
+After=network.target
+
+[Service]
+Type=oneshot
+User=sovietgram
+Group=www-data
+WorkingDirectory=/opt/sovietgram
+EnvironmentFile=/opt/sovietgram/.env
+StateDirectory=sovietgram-backup
+StateDirectoryMode=0700
+UMask=0077
+ExecStart=/opt/sovietgram/.venv/bin/python manage.py backup_sovietgram --directory /var/lib/sovietgram-backup --keep 7
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=true
+TimeoutStartSec=3600

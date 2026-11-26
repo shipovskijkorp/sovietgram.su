@@ -15,6 +15,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: sovietgram_ci
+          POSTGRES_USER: sovietgram
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sovietgram -d sovietgram_ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
       redis:
         image: redis:7-alpine
         ports:
@@ -44,6 +57,33 @@ jobs:
         run: |
           python manage.py shell -c 'from django.core.cache import cache; cache.set("ci:shared-cache", 41, 60)'
           python manage.py shell -c 'from django.core.cache import cache; assert cache.incr("ci:shared-cache") == 42; cache.delete("ci:shared-cache")'
+      - name: PostgreSQL backup and isolated restore smoke test
+        env:
+          DB_ENGINE: postgresql
+          POSTGRES_DB: sovietgram_ci
+          POSTGRES_USER: sovietgram
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_HOST: 127.0.0.1
+          POSTGRES_PORT: "5432"
+          PGHOST: 127.0.0.1
+          PGUSER: sovietgram
+          PGPASSWORD: ci-only-password
+          PGPORT: "5432"
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+          python manage.py migrate --noinput
+          python manage.py shell -c 'from apps.accounts.models import User; User.objects.create_user("backup_ci", "backup@example.net", "Backup-ci-test-1945!")'
+          BACKUP_DIR=$(mktemp -d)
+          python manage.py backup_sovietgram --directory "$BACKUP_DIR"
+          ARCHIVE=$(find "$BACKUP_DIR" -maxdepth 1 -name '*.tar.gz' -print -quit)
+          python manage.py backup_sovietgram --verify "$ARCHIVE"
+          tar -xzf "$ARCHIVE" -C "$BACKUP_DIR" database.dump
+          createdb sovietgram_restore
+          pg_restore --exit-on-error --no-owner --no-privileges --dbname=sovietgram_restore "$BACKUP_DIR/database.dump"
+          test "$(psql -d sovietgram_restore -Atc "SELECT count(*) FROM accounts_user WHERE username='backup_ci'")" = 1
+          dropdb sovietgram_restore
+          rm -rf "$BACKUP_DIR"
       - name: Check JavaScript syntax
         run: |
           node --check static/js/app.js
