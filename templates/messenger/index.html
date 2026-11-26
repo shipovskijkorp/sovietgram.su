@@ -433,10 +433,12 @@
               {% endif %}
 
               {% if message.reply_to %}
-                <button class="message-reply-preview" type="button" data-jump-message="{{ message.reply_to_id }}">
+                {% with quote=message.reply_quote_text %}
+                <button class="message-reply-preview{% if quote %} message-reply-preview--quote{% endif %}" type="button" data-jump-message="{{ message.reply_to_id }}">
                   <strong>{{ message.reply_to.sender.display_name }}</strong>
-                  <span>{{ message.reply_to.preview|truncatechars:120 }}</span>
+                  {% if quote %}<span class="message-reply-quote">{{ quote }}</span>{% else %}<span>{{ message.reply_to.preview|truncatechars:120 }}</span>{% endif %}
                 </button>
+                {% endwith %}
               {% endif %}
 
               {% if message.special_type == 'poll' and message.special_ui %}
@@ -615,6 +617,7 @@
           <button id="composerReplyClose" type="button" aria-label="Отменить ответ"><span class="tg-native-icon tg-native-icon--close tg-native-icon--compact" aria-hidden="true"></span></button>
         </div>
         <input id="replyToInput" type="hidden" name="reply_to" value="">
+        <input id="replyQuoteInput" type="hidden" name="reply_quote" value="">
         <div class="voice-retry-row" id="voiceRetryRow" hidden>
           <span>Голосовое сообщение не подтверждено сервером.</span>
           <button type="button" id="voiceRetrySend">Повторить</button>
@@ -884,6 +887,7 @@
     {% for emoji, label in reaction_choices %}<button type="button" data-pick-reaction="{{ emoji }}" aria-pressed="false" title="{{ label }}" aria-label="{{ label }}">{{ emoji }}</button>{% endfor %}
   </div>
   <button type="button" data-message-action="reply"><span class="tg-native-icon tg-native-icon--reply" aria-hidden="true"></span>Ответить</button>
+  <button type="button" data-message-action="quote" hidden><span class="tg-native-icon tg-native-icon--reply" aria-hidden="true"></span>Цитировать выделенное</button>
   <button type="button" data-message-action="copy"><span class="tg-native-icon tg-native-icon--copy" aria-hidden="true"></span>Копировать текст</button>
   <button type="button" data-message-action="copy-link"><svg class="message-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a4 4 0 0 0 6 0l4-4a4 4 0 0 0-6-6l-2 2m2 6a4 4 0 0 0-6 0l-4 4a4 4 0 0 0 6 6l2-2"/></svg>Копировать ссылку</button>
   <button type="button" data-message-action="reactors" hidden><svg class="message-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 14c2 3 6 3 8 0M9 9h.01M15 9h.01" stroke-linecap="round"/></svg>Кто отреагировал</button>

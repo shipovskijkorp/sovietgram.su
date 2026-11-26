@@ -1765,3 +1765,8 @@ body[data-theme="dark"] .channel-discussion { background:#211d1a; }
 
 .channel-post-views { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
 .channel-post-views svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Quoted reply fragments preserve line breaks and use a bounded preview. */
+.message-reply-preview--quote .message-reply-quote { display: block; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 6em; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.message-reply-preview--quote strong::before { content: "❝ "; }
+.message-context-menu [data-message-action="quote"][hidden] { display: none !important; }

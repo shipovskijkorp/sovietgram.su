@@ -846,6 +846,8 @@
     data.append("voice_waveform", JSON.stringify(waveform));
     const replyTo = replyInput?.value || "";
     if (replyTo) data.append("reply_to", replyTo);
+    const quote = replyTo ? window.SovietgramChat?.currentQuote?.() || "" : "";
+    if (quote) data.append("reply_quote", quote);
     data.append(
       "attachments",
       blob,
@@ -884,9 +886,9 @@
     try {
       const message = await uploadVoice(data);
       pendingVoiceData = null;
-      if (replyInput && replyInput.value === (data.get("reply_to") || "")) {
-        replyInput.value = "";
-        if (composerReply) composerReply.hidden = true;
+      if (replyInput && replyInput.value === (data.get("reply_to") || "") &&
+          (window.SovietgramChat?.currentQuote?.() || "") === (data.get("reply_quote") || "")) {
+        window.SovietgramChat?.clearReplyState?.();
       }
       const inserted = publishSentVoice(message);
       if (!inserted) window.setTimeout(() => window.SovietgramChat?.syncNow?.(), 50);

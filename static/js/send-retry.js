@@ -70,13 +70,14 @@
     const valid = item => item && typeof item.id === "string" &&
       /^[a-f0-9-]{36}$/i.test(item.id) && typeof item.text === "string" &&
       item.text.trim() && item.text.length <= 4096 &&
-      typeof item.reply === "string" && /^\d*$/.test(item.reply);
+      typeof item.reply === "string" && /^\d*$/.test(item.reply) &&
+      (item.quote === undefined || (typeof item.quote === "string" && Array.from(item.quote).length <= 1024 && (!item.quote || item.reply)));
     let items = [], busy = false, saved = true;
     try {
       const stored = JSON.parse(storage.getItem(key) || "[]");
       if (Array.isArray(stored)) {
         items = stored.filter(valid).slice(0, 20).map(item => ({
-          id: item.id, text: item.text, reply: item.reply, silent: !!item.silent,
+          id: item.id, text: item.text, reply: item.reply, ...(item.quote ? {quote:item.quote} : {}), silent: !!item.silent,
           createdAt: Number(item.createdAt) || now(), attempts: Math.max(0, Number(item.attempts) || 0),
           state: item.state === "failed" ? "failed" : "waiting",
           error: typeof item.error === "string" ? item.error : "",
@@ -93,9 +94,9 @@
       } catch (_) { saved = false; }
       changed(snapshot(), saved);
     }
-    function enqueue(text, reply = "", silent = false) {
+    function enqueue(text, reply = "", silent = false, quote = "") {
       if (items.length >= 20) return false;
-      const item = {id: uuid(), text, reply: String(reply || ""), silent: !!silent,
+      const item = {id: uuid(), text, reply: String(reply || ""), ...(quote ? {quote} : {}), silent: !!silent,
                     createdAt: now(), attempts: 0, state: "waiting", error: "", nextAttempt: 0};
       if (!valid(item)) return false;
       items.push(item); persist(); return true;

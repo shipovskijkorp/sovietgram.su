@@ -263,6 +263,7 @@
   let forwardStarted = false;
 
   let contextArticle = null;
+  let contextQuote = "";
   let editArticle = null;
   let forwardArticles = [];
   const forwardSendKeys = window.SovietgramSendRetry.batch();
@@ -447,14 +448,36 @@
   function closeMessageMenu() {
     if (contextMenu) contextMenu.hidden = true;
     contextArticle = null;
+    contextQuote = "";
     document.querySelectorAll(".message.is-context-target").forEach((node) => {
       node.classList.remove("is-context-target");
     });
   }
 
+  function selectedQuote(article) {
+    if (!article || chatProtected || article.dataset.messageKind || conversation.dataset.canSendText === "false") return "";
+    const body = article.querySelector(".message__text");
+    const selection = window.getSelection();
+    if (!body || !selection || selection.rangeCount !== 1 || selection.isCollapsed) return "";
+    const range = selection.getRangeAt(0);
+    if (!body.contains(range.startContainer) || !body.contains(range.endContainer)) return "";
+    const text = selection.toString().trim();
+    if (!text || Array.from(text).length > 1024 || !(article.dataset.messageText || "").includes(text)) return "";
+    return text;
+  }
+
+  // Keep the text selection alive when opening the action button.
+  document.addEventListener("pointerdown", event => {
+    const trigger = event.target.closest?.(".message-action-trigger");
+    if (trigger && selectedQuote(trigger.closest(".message"))) event.preventDefault();
+  }, true);
+
   function openMessageMenu(article, x, y) {
     if (!contextMenu || !article) return;
     contextArticle = article;
+    contextQuote = selectedQuote(article);
+    const quoteButton = contextMenu.querySelector('[data-message-action="quote"]');
+    if (quoteButton) quoteButton.hidden = !contextQuote;
     article.classList.add("is-context-target");
 
     const editButton = contextMenu.querySelector('[data-message-action="edit"]');
@@ -487,17 +510,8 @@
     contextMenu.style.top = Math.max(6, Math.min(y, window.innerHeight - rect.height - 6)) + "px";
   }
 
-  function setReply(article) {
-    const replyInput = document.getElementById("replyToInput");
-    const reply = document.getElementById("composerReply");
-    if (!replyInput || !reply || !article) return;
-    replyInput.value = article.dataset.messageId || "";
-    const name = document.getElementById("composerReplyName");
-    const preview = document.getElementById("composerReplyPreview");
-    if (name) name.textContent = article.dataset.messageSender || "Ответ";
-    if (preview) preview.textContent = messagePreview(article);
-    reply.hidden = false;
-    document.getElementById("messageInput")?.focus();
+  function setReply(article, quote = "") {
+    window.SovietgramChat?.setReply?.(article, quote);
   }
 
   async function copyText(value) {
@@ -1097,10 +1111,15 @@
       event.stopImmediatePropagation();
       const article = contextArticle;
       const action = actionButton.dataset.messageAction;
+      const quote = contextQuote;
       closeMessageMenu();
       if (!article) return;
 
       if (action === "reply") setReply(article);
+      if (action === "quote" && quote && !chatProtected) {
+        setReply(article, quote);
+        window.getSelection()?.removeAllRanges();
+      }
       if (action === "copy") {
         if (chatProtected) {
           notify("Копирование запрещено для этой переписки.");

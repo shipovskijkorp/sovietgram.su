@@ -493,6 +493,9 @@ def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=No
             "preview": reply.preview[:180],
             "is_deleted": reply.is_deleted,
         }
+        quote = message.reply_quote_text
+        if quote:
+            reply_data["quote"] = quote
 
     attachments = []
     if not message.is_deleted:

@@ -320,8 +320,13 @@
     data.append("csrfmiddlewaretoken", csrfToken);
     data.append("special_type", activeType);
     data.append("payload", JSON.stringify(payload));
-    if (replyInput?.value) data.append("reply_to", replyInput.value);
-    data.append("client_message_id", specialSendKeys.key("special", [activeType, payload, replyInput?.value || ""]));
+    const originalReply = replyInput?.value || "";
+    const quote = originalReply ? window.SovietgramChat?.currentQuote?.() || "" : "";
+    if (originalReply) data.append("reply_to", originalReply);
+    if (quote) data.append("reply_quote", quote);
+    const signature = [activeType, payload, originalReply];
+    if (quote) signature.push(quote);
+    data.append("client_message_id", specialSendKeys.key("special", signature));
 
     try {
       const response = await window.SovietgramSendRetry.fetchSend(url, {
@@ -342,9 +347,10 @@
         return;
       }
 
-      if (replyInput) replyInput.value = "";
-      const reply = document.getElementById("composerReply");
-      if (reply) reply.hidden = true;
+      if ((replyInput?.value || "") === originalReply &&
+          (window.SovietgramChat?.currentQuote?.() || "") === quote) {
+        window.SovietgramChat?.clearReplyState?.();
+      }
       setBusy(false);
       closeSpecial();
     } catch (fetchError) {

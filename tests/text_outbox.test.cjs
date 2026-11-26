@@ -59,3 +59,13 @@ test("concurrent flush does not send same queued item twice",async()=>{
   assert.equal(box.discard(box.snapshot()[0].id),false);
   resolve({ok:true});assert.equal(await first,true);assert.equal(calls,1);
 });
+
+test("quoted text survives a stored outbox retry",async()=>{
+  const storage=storageFor();let box=createOutbox({storage,key:"quote",send:async()=>({ok:true})});
+  assert.equal(box.enqueue("reply","42",false,"selected fragment"),true);
+  const id=box.snapshot()[0].id;
+  box=createOutbox({storage,key:"quote",send:async item=>{
+    assert.equal(item.quote,"selected fragment");assert.equal(item.id,id);return {ok:true};
+  }});
+  assert.equal(await box.flush(),true);
+});

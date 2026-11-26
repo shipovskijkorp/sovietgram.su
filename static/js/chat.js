@@ -9,6 +9,7 @@ const messageFlow = document.getElementById("messageFlow");
 const messageStage = document.getElementById("messageStage");
 const sendButton = document.getElementById("sendButton");
 const replyToInput = document.getElementById("replyToInput");
+const replyQuoteInput = document.getElementById("replyQuoteInput");
 const composerReply = document.getElementById("composerReply");
 const composerReplyName = document.getElementById("composerReplyName");
 const composerReplyPreview = document.getElementById("composerReplyPreview");
@@ -174,17 +175,23 @@ function messagePreview(article) {
   return "Сообщение";
 }
 
-function setReply(article) {
+function currentQuote() {
+  return replyToInput?.value ? replyQuoteInput?.value || "" : "";
+}
+
+function setReply(article, quote = "") {
   if (!article || !replyToInput || !composerReply) return;
   replyToInput.value = article.dataset.messageId || "";
-  if (composerReplyName) composerReplyName.textContent = article.dataset.messageSender || "Ответ";
-  if (composerReplyPreview) composerReplyPreview.textContent = messagePreview(article);
+  if (replyQuoteInput) replyQuoteInput.value = quote;
+  if (composerReplyName) composerReplyName.textContent = (quote ? "Цитата · " : "") + (article.dataset.messageSender || "Ответ");
+  if (composerReplyPreview) composerReplyPreview.textContent = quote || messagePreview(article);
   composerReply.hidden = false;
   messageInput?.focus();
 }
 
 function clearReplyState() {
   if (replyToInput) replyToInput.value = "";
+  if (replyQuoteInput) replyQuoteInput.value = "";
   if (composerReply) composerReply.hidden = true;
 }
 
@@ -378,7 +385,11 @@ function makeReplyPreview(reply) {
   const name = document.createElement("strong");
   name.textContent = reply.sender_name;
   const preview = document.createElement("span");
-  preview.textContent = reply.preview;
+  if (reply.quote) {
+    button.classList.add("message-reply-preview--quote");
+    preview.className = "message-reply-quote";
+  }
+  preview.textContent = reply.quote || reply.preview;
   button.append(name, preview);
   return button;
 }
@@ -536,6 +547,9 @@ function syncMessageAttachments(article, message) {
 function applyMessageUpdate(message) {
   const article = document.querySelector(`[data-message-id="${message.id}"]`);
   if (message.is_deleted) {
+    for (const preview of messageFlow?.querySelectorAll(".message-reply-preview") || []) {
+      if (preview.dataset.jumpMessage === String(message.id)) preview.remove();
+    }
     article?.remove();
     if (replyToInput?.value === String(message.id)) clearReplyState();
     return;
@@ -552,6 +566,29 @@ function applyMessageUpdate(message) {
   }
   if (revision) article.dataset.messageRevision = String(revision);
 
+  const previousText = article.dataset.messageText || "";
+  if (previousText !== (message.text || "")) {
+    for (const preview of messageFlow?.querySelectorAll(".message-reply-preview--quote") || []) {
+      if (preview.dataset.jumpMessage === String(message.id)) {
+        preview.classList.remove("message-reply-preview--quote");
+        const snippet = preview.querySelector(".message-reply-quote");
+        if (snippet) { snippet.className = ""; snippet.textContent = "Исходное сообщение изменено"; }
+      }
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(message, "reply")) {
+    const existing = article.querySelector(".message-reply-preview");
+    if (!message.reply) existing?.remove();
+    else {
+      const replacement = makeReplyPreview(message.reply);
+      if (existing) existing.replaceWith(replacement);
+      else {
+        const forwarded = article.querySelector(".message-forwarded");
+        if (forwarded) forwarded.after(replacement);
+        else article.prepend(replacement);
+      }
+    }
+  }
   article.dataset.messageText = message.text || "";
   article.dataset.messageKind = message.special?.type || "";
   article.dataset.messagePinned = String(Boolean(message.is_pinned));
@@ -1099,6 +1136,7 @@ async function transmitQueuedText(item) {
   data.set("client_message_id", item.id);
   data.set("text", item.text);
   data.set("reply_to", item.reply);
+  if (item.reply && item.quote) data.set("reply_quote", item.quote);
   data.set("attachment_mode", "media");
   data.set("preserve_draft", "1");
   if (item.silent) data.set("silent", "1");
@@ -1143,17 +1181,17 @@ async function flushTextOutbox() {
 
 async function sendTextMessage(silent = false) {
   if (!form || !messageInput?.value.trim() || messageInput.readOnly || enqueueBusy) return;
-  const text = messageInput.value, reply = replyToInput?.value || "";
+  const text = messageInput.value, reply = replyToInput?.value || "", quote = currentQuote();
   enqueueBusy = true;
   try {
     await outboxReady;
     if (!textOutbox || messageInput.readOnly) return;
-    if (!await textOutbox.enqueue(text, reply, silent)) {
+    if (!await textOutbox.enqueue(text, reply, silent, quote)) {
       notify("Очередь заполнена (20 сообщений). Повторите или удалите ожидающие сообщения.");
       return;
     }
     // Do not erase new input typed while IndexedDB commits.
-    if (messageInput.value === text && (replyToInput?.value || "") === reply) {
+    if (messageInput.value === text && (replyToInput?.value || "") === reply && currentQuote() === quote) {
       messageInput.value = "";
       messageInput.dispatchEvent(new Event("input", {bubbles:true}));
       autoSizeInput();
@@ -1654,6 +1692,9 @@ document.addEventListener("keydown", (event) => {
 window.renderSovietgramChatMessage = renderMessage;
 window.updateSovietgramChatMessage = applyMessageUpdate;
 window.SovietgramChat = {
+  setReply,
+  currentQuote,
+  clearReplyState,
   acceptSentMessage(message) {
     if (!message) return false;
 
@@ -1686,9 +1727,9 @@ window.SovietgramChat = {
   },
   syncNow: pollMessages,
   sendSilently: () => sendTextMessage(true),
-  clearScheduledDraft(originalText, originalReply) {
+  clearScheduledDraft(originalText, originalReply, originalQuote = "") {
     if (!messageInput || messageInput.value !== originalText ||
-        (replyToInput?.value || "") !== originalReply) return;
+        (replyToInput?.value || "") !== originalReply || currentQuote() !== originalQuote) return;
     messageInput.value = "";
     messageInput.dispatchEvent(new Event("input", { bubbles: true }));
     autoSizeInput();

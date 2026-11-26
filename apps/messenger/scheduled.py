@@ -17,6 +17,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 from . import views
 from .models import Chat, ChatParticipant, Message, ScheduledMessage
 from .ratelimit import rate_limit
+from .quotes import make_quote, resolve_quote
 from .services import apply_archive_rules_on_new_message, touch_chat
 
 logger = logging.getLogger(__name__)
@@ -81,8 +82,10 @@ def _identity(request):
         raise OutboxError("Аккаунт изменился. Обновите страницу.", 409)
 
 
-def _digest(chat_id, text, when, silent, reply_id):
+def _digest(chat_id, text, when, silent, reply_id, quote=""):
     payload = [chat_id, text, when.isoformat(), silent, reply_id]
+    if quote:
+        payload.append(quote)
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
 
 
@@ -129,6 +132,7 @@ def _serialize(item):
         "text": item.text,
         "silent": item.silent,
         "reply_to": item.reply_message_id,
+        "has_quote": bool(item.reply_quote),
         "scheduled_for": item.scheduled_for.isoformat(),
         "next_attempt_at": item.next_attempt_at.isoformat(),
         "status": item.status,
@@ -147,6 +151,8 @@ def _deliver(item, sender, chat):
         reply = _validate(
             chat, sender, item.text, item.reply_message_id, check_slow_mode=True,
         )
+        if item.reply_quote and (chat.protect_content or not resolve_quote(reply, item.reply_quote)):
+            raise OutboxError("Цитата больше недоступна. Уберите ответ и повторите отправку.", 409)
     except OutboxError as error:
         item.error = str(error)[:300]
         item.revision += 1
@@ -160,7 +166,7 @@ def _deliver(item, sender, chat):
 
     message = Message.objects.create(
         chat=chat, sender=sender, text=item.text, reply_to=reply,
-        silent=item.silent,
+        reply_quote=item.reply_quote, silent=item.silent,
         signature_name=sender.display_name if chat.type == Chat.Type.CHANNEL and chat.signatures_enabled else "",
     )
     touch_chat(chat)
@@ -170,10 +176,11 @@ def _deliver(item, sender, chat):
     item.status = ScheduledMessage.Status.SENT
     item.text = ""
     item.reply_message_id = None
+    item.reply_quote = ""
     item.error = ""
     item.revision += 1
     item.save(update_fields=[
-        "delivered_message", "status", "text", "reply_message_id", "error", "revision", "updated_at",
+        "delivered_message", "status", "text", "reply_message_id", "reply_quote", "error", "revision", "updated_at",
     ])
     return item
 
@@ -199,7 +206,10 @@ def scheduled_messages(request, chat_id):
             client_id = UUID(request.POST.get("client_message_id", ""))
         except (TypeError, ValueError, AttributeError):
             raise OutboxError("Некорректный идентификатор отправки.") from None
-        digest = _digest(chat.pk, text, when, silent, reply_id)
+        raw_quote = request.POST.get("reply_quote", "")
+        if len(raw_quote) > 1024:
+            raise OutboxError("Выберите фрагмент текста до 1024 символов.")
+        digest = _digest(chat.pk, text, when, silent, reply_id, raw_quote)
         with transaction.atomic():
             sender, fresh_chat = _lock_sender_chat(request.user.pk, chat.pk)
             _member(fresh_chat, sender)
@@ -209,12 +219,18 @@ def scheduled_messages(request, chat_id):
                     raise OutboxError("Идентификатор уже использован для другой отправки.", 409)
                 return _response({"item": _serialize(previous), "replayed": True})
             _future(when, timezone.now())
-            _validate(fresh_chat, sender, text, reply_id, check_slow_mode=False)
+            reply = _validate(fresh_chat, sender, text, reply_id, check_slow_mode=False)
+            try:
+                if raw_quote and fresh_chat.protect_content:
+                    raise ValueError("Цитирование отключено в защищённом чате.")
+                quote_ref = make_quote(reply, raw_quote)
+            except ValueError as error:
+                raise OutboxError(str(error)) from error
             if ScheduledMessage.objects.filter(sender=sender, status__in=ACTIVE).count() >= MAX_PENDING:
                 raise OutboxError("Достигнут предел в 100 запланированных сообщений.", 409)
             item = ScheduledMessage.objects.create(
                 chat=fresh_chat, sender=sender, client_id=client_id, request_digest=digest,
-                text=text, reply_message_id=reply_id, silent=silent,
+                text=text, reply_message_id=reply_id, reply_quote=quote_ref, silent=silent,
                 scheduled_for=when, next_attempt_at=when,
             )
         return _response({"item": _serialize(item)})
@@ -250,21 +266,26 @@ def scheduled_action(request, chat_id, scheduled_id):
                 item.status = ScheduledMessage.Status.CANCELED
                 item.text = ""
                 item.reply_message_id = None
+                item.reply_quote = ""
                 item.error = ""
                 item.revision += 1
-                item.save(update_fields=["status", "text", "reply_message_id", "error", "revision", "updated_at"])
+                item.save(update_fields=["status", "text", "reply_message_id", "reply_quote", "error", "revision", "updated_at"])
             elif action == "edit":
                 text, when, silent, _ = _fields(request.POST, include_reply=False)
                 _future(when, timezone.now())
                 reply_id = None if request.POST.get("remove_reply") == "1" else item.reply_message_id
-                _validate(chat, sender, text, reply_id, check_slow_mode=False)
+                reply = _validate(chat, sender, text, reply_id, check_slow_mode=False)
+                if reply_id is None:
+                    item.reply_quote = ""
+                elif item.reply_quote and (chat.protect_content or not resolve_quote(reply, item.reply_quote)):
+                    raise OutboxError("Цитата больше недоступна. Уберите ответ.", 409)
                 item.text, item.silent, item.reply_message_id = text, silent, reply_id
                 item.scheduled_for = item.next_attempt_at = when
                 item.status = ScheduledMessage.Status.PENDING
                 item.error = ""
                 item.revision += 1
                 item.save(update_fields=[
-                    "text", "silent", "reply_message_id", "scheduled_for", "next_attempt_at",
+                    "text", "silent", "reply_message_id", "reply_quote", "scheduled_for", "next_attempt_at",
                     "status", "error", "revision", "updated_at",
                 ])
             else:

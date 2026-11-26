@@ -333,7 +333,7 @@
     openComposer(next, mode, preserveCaption);
   }
 
-  function upload(files, text, mode, replyTo, onProgress, clientId, silent = false, attempt = 0, compress = false) {
+  function upload(files, text, mode, replyTo, onProgress, clientId, silent = false, attempt = 0, compress = false, quote = "") {
     return new Promise((resolve, reject) => {
       const data = new FormData();
       data.append("csrfmiddlewaretoken", csrfToken);
@@ -345,6 +345,7 @@
       if (compress) data.append("compress_images", "1");
       if (silent) data.append("silent", "1");
       if (replyTo) data.append("reply_to", replyTo);
+      if (replyTo && quote) data.append("reply_quote", quote);
       files.forEach((file) => data.append("attachments", file, file.name));
 
       if (cancelled) { reject(new Error("Загрузка отменена.")); return; }
@@ -366,18 +367,18 @@
           return;
         }
         if (!attempt && [502, 503, 504].includes(xhr.status)) {
-          upload(files, text, mode, replyTo, onProgress, clientId, silent, 1, compress).then(resolve, reject);
+          upload(files, text, mode, replyTo, onProgress, clientId, silent, 1, compress, quote).then(resolve, reject);
           return;
         }
         const firstError = Object.values(payload.errors || {}).flat()?.[0]?.message;
         reject(new Error(payload.error || firstError || "Не удалось отправить файлы."));
       });
       xhr.addEventListener("error", () => {
-        if (!attempt) upload(files, text, mode, replyTo, onProgress, clientId, silent, 1, compress).then(resolve, reject);
+        if (!attempt) upload(files, text, mode, replyTo, onProgress, clientId, silent, 1, compress, quote).then(resolve, reject);
         else reject(new Error("Не удалось загрузить файлы. Повторите отправку."));
       });
       xhr.addEventListener("timeout", () => {
-        if (!attempt && !cancelled) upload(files, text, mode, replyTo, onProgress, clientId, silent, 1, compress).then(resolve, reject);
+        if (!attempt && !cancelled) upload(files, text, mode, replyTo, onProgress, clientId, silent, 1, compress, quote).then(resolve, reject);
         else reject(new Error("Сервер не ответил вовремя. Можно повторить загрузку."));
       });
       xhr.addEventListener("abort", () => reject(new Error("Загрузка отменена. Сервер мог уже принять файл.")));
@@ -401,16 +402,18 @@
     const files = [...selectedFiles];
     const caption = captionNode?.value || "";
     const replyTo = replyInput?.value || "";
+    const quote = replyTo ? window.SovietgramChat?.currentQuote?.() || "" : "";
     const silent = Boolean(silentToggle?.checked);
     const compress = selectedMode === "media" && Boolean(compressToggle?.checked);
     const separate = selectedMode === "media" && files.length > 1 && groupToggle && !groupToggle.checked;
     const signature = [files.map(window.SovietgramSendRetry.fileIdentity), caption, selectedMode, replyTo, silent, compress, Boolean(separate)];
+    if (quote) signature.push(quote);
     const batches = separate ? files.map((file, index) => ({
       files: [file], caption: index === files.length - 1 ? caption : "", reply: index === 0 ? replyTo : "",
-      id: sendKeys.key(index, signature),
-    })) : [{files, caption, reply:replyTo, id:sendKeys.key("album", signature)}];
+      quote: index === 0 ? quote : "", id: sendKeys.key(index, signature),
+    })) : [{files, caption, reply:replyTo, quote, id:sendKeys.key("album", signature)}];
     return {batches, mode:selectedMode, silent, compress, completed:0,
-            originalDraft:messageInput?.value || "", originalReply:replyTo};
+            originalDraft:messageInput?.value || "", originalReply:replyTo, originalQuote:quote};
   }
 
   async function sendSelected() {
@@ -431,7 +434,7 @@
         const payload = await upload(
           batch.files, batch.caption, plan.mode, batch.reply,
           (loaded, total) => setProgress(true, (sentBytes + bytes(batch) * (total ? loaded / total : 0)) / totalBytes * 100),
-          batch.id, plan.silent, 0, plan.compress,
+          batch.id, plan.silent, 0, plan.compress, batch.quote,
         );
         plan.completed++;
         sentBytes += bytes(batch);
@@ -441,9 +444,9 @@
         messageInput.value = "";
         messageInput.dispatchEvent(new Event("input", { bubbles: true }));
       }
-      if (replyInput && replyInput.value === plan.originalReply) {
-        replyInput.value = "";
-        if (composerReply) composerReply.hidden = true;
+      if (replyInput && replyInput.value === plan.originalReply &&
+          (window.SovietgramChat?.currentQuote?.() || "") === plan.originalQuote) {
+        window.SovietgramChat?.clearReplyState?.();
       }
       retryPlan = null;
       setProgress(false, 100);

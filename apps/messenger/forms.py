@@ -155,7 +155,8 @@ class MessageForm(forms.Form):
     silent = forms.BooleanField(required=False)
     compress_images = forms.BooleanField(required=False)
     sticker_id = forms.IntegerField(required=False, min_value=1, max_value=9223372036854775807)
-    reply_to = forms.IntegerField(required=False, min_value=1)
+    reply_to = forms.IntegerField(required=False, min_value=1, max_value=9223372036854775807)
+    reply_quote = forms.CharField(required=False, max_length=1024, strip=False)
     attachment_mode = forms.ChoiceField(
         required=False,
         choices=(

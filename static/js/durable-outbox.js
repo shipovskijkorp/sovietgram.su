@@ -5,10 +5,11 @@
   const valid = item => item && typeof item.id === "string" &&
     /^[a-f0-9-]{36}$/i.test(item.id) && typeof item.text === "string" &&
     item.text.trim() && item.text.length <= 4096 &&
-    typeof item.reply === "string" && /^\d*$/.test(item.reply);
+    typeof item.reply === "string" && /^\d*$/.test(item.reply) &&
+      (item.quote === undefined || (typeof item.quote === "string" && Array.from(item.quote).length <= 1024 && (!item.quote || item.reply)));
   function clean(items) {
     return Array.isArray(items) ? items.filter(valid).slice(0, MAX).map(item => ({
-      id:item.id, text:item.text, reply:item.reply, silent:!!item.silent,
+      id:item.id, text:item.text, reply:item.reply, ...(item.quote ? {quote:item.quote} : {}), silent:!!item.silent,
       createdAt:Number(item.createdAt)||Date.now(), attempts:Math.max(0,Number(item.attempts)||0),
       state:item.state==="failed"?"failed":item.state==="sending"?"sending":"waiting",
       error:typeof item.error==="string"?item.error.slice(0,500):"",
@@ -103,8 +104,8 @@
     } catch (error) { db.close(); throw error; }
     try { if (legacy.length) storage?.removeItem(key); } catch (_) {}
     function available(item) { return item.state!=="sending" || item.leaseUntil<=now(); }
-    async function enqueue(text, reply="", silent=false) {
-      const item = {id:window.SovietgramSendRetry.uuid(),text,reply:String(reply||""),silent:!!silent,
+    async function enqueue(text, reply="", silent=false, quote="") {
+      const item = {id:window.SovietgramSendRetry.uuid(),text,reply:String(reply||""),...(quote?{quote}:{}),silent:!!silent,
         createdAt:now(),attempts:0,state:"waiting",error:"",nextAttempt:0,claim:"",leaseUntil:0};
       if (!valid(item)) return false;
       return mutate(current => {

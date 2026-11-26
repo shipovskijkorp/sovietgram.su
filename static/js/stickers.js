@@ -26,7 +26,7 @@
     const scope = "sovietgram.pending-sticker." + accountId + "." + chatId;
     let sending = false;
 
-    return async function sendSticker(stickerId, reply = "", silent = false) {
+    return async function sendSticker(stickerId, reply = "", silent = false, quote = "") {
       if (sending) throw new Error("Предыдущий стикер ещё отправляется.");
       if (!/^\d+$/.test(String(stickerId))) throw new Error("Стикер недоступен.");
       if (!csrf) throw new Error("Не найден токен защиты сессии. Обновите страницу.");
@@ -38,12 +38,13 @@
         data.set("sticker_id", String(stickerId));
         data.set("attachment_mode", "media");
         if (reply) data.set("reply_to", String(reply));
+        if (reply && quote) data.set("reply_quote", quote);
         if (silent) data.set("silent", "1");
         // Preserve the existing key format and exact request body for retries
         // of sends initiated by an older version of the client.
-        data.set("client_message_id", await retry.textKey(
-          scope, [stickerId, String(reply || ""), Boolean(silent)], stickerSendKeys,
-        ));
+        const signature = [stickerId, String(reply || ""), Boolean(silent)];
+        if (reply && quote) signature.push(quote);
+        data.set("client_message_id", await retry.textKey(scope, signature, stickerSendKeys));
         let response;
         try {
           response = await retry.fetchSend(url, {
@@ -87,12 +88,15 @@
     return stickerSender;
   }
 
-  function showSentSticker(message, sentReply) {
+  function showSentSticker(message, sentReply, quote = "") {
     const reply = $("replyToInput");
-    if (reply && reply.value === sentReply) {
-      reply.value = "";
-      const preview = $("composerReply");
-      if (preview) preview.hidden = true;
+    if (reply && reply.value === sentReply && (window.SovietgramChat?.currentQuote?.() || "") === quote) {
+      if (window.SovietgramChat?.clearReplyState) window.SovietgramChat.clearReplyState();
+      else {
+        reply.value = "";
+        const preview = $("composerReply");
+        if (preview) preview.hidden = true;
+      }
     }
     try {
       // Do not call acceptSentMessage: that also clears the text draft.
@@ -206,16 +210,17 @@
     }
     if(mode!=="send")return;
     const sentReply = $("replyToInput")?.value || "";
+    const quote = sentReply ? window.SovietgramChat?.currentQuote?.() || "" : "";
     const silent = Boolean($("stickerSilent")?.checked);
     let message;
     error();setBusy(true);
     try{
-      message = await currentSender()(item.id, sentReply, silent);
+      message = await currentSender()(item.id, sentReply, silent, quote);
     }catch(e){error(e.message || "Не удалось отправить стикер.");}
     finally{setBusy(false);}
     if (message) {
       dialog.close();
-      showSentSticker(message, sentReply);
+      showSentSticker(message, sentReply, quote);
     }
   }
   async function open(nextMode,id=null){

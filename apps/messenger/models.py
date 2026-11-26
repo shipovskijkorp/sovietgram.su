@@ -174,6 +174,8 @@ class Message(models.Model):
         blank=True,
         related_name="replies",
     )
+    # Source offset, length and SHA-256; not a duplicated copy of private text.
+    reply_quote = models.CharField(max_length=88, blank=True, default="")
     forwarded_from = models.ForeignKey(
         "self",
         on_delete=models.SET_NULL,
@@ -211,6 +213,14 @@ class Message(models.Model):
 
     class Meta:
         ordering = ("id",)
+
+    @property
+    def reply_quote_text(self):
+        from .quotes import resolve_quote
+
+        if not self.reply_to_id or not self.reply_quote:
+            return ""
+        return resolve_quote(self.reply_to, self.reply_quote)
 
     @property
     def sync_revision(self):
@@ -506,6 +516,7 @@ class ScheduledMessage(models.Model):
     text = models.TextField(blank=True, max_length=4096)
     # Keep the original ID even if the referenced message is removed.
     reply_message_id = models.PositiveBigIntegerField(null=True, blank=True)
+    reply_quote = models.CharField(max_length=88, blank=True, default="")
     silent = models.BooleanField(default=False)
     scheduled_for = models.DateTimeField()
     next_attempt_at = models.DateTimeField()

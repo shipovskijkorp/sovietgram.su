@@ -157,7 +157,7 @@
   function openEditor(item = null) {
     if (busy) return;
     ++listVersion; editing=item;
-    original=item ? null : {text:input?.value || "",reply:reply?.value || ""};
+    original=item ? null : {text:input?.value || "",reply:reply?.value || "",quote:window.SovietgramChat?.currentQuote?.() || ""};
     text.value=item ? item.text : original.text;
     const minimum = localDateValue(Date.now()+60000);
     date.min=minimum; date.max=localDateValue(Date.now()+365*86400000-60000);
@@ -199,12 +199,14 @@
         toast("Отложенное сообщение изменено.");
       } else {
         fields.reply_to=removeReply.checked?"":original?.reply||"";
-        fields.client_message_id=await window.SovietgramSendRetry.textKey(keyScope,
-          [fields.text,when,fields.silent,fields.reply_to],keys);
+        if (fields.reply_to && original?.quote) fields.reply_quote=original.quote;
+        const signature=[fields.text,when,fields.silent,fields.reply_to];
+        if (fields.reply_quote) signature.push(fields.reply_quote);
+        fields.client_message_id=await window.SovietgramSendRetry.textKey(keyScope,signature,keys);
         const result=await request(url,fields,true);
         window.SovietgramSendRetry.clearText(keyScope,keys);
         if (result.item.status==="canceled") throw new Error("Эта отправка уже отменена.");
-        if (original) window.SovietgramChat?.clearScheduledDraft(original.text,original.reply);
+        if (original) window.SovietgramChat?.clearScheduledDraft(original.text,original.reply,original.quote);
         toast(result.item.status==="sent"?"Сообщение уже отправлено.":"Сообщение запланировано.");
       }
       setBusy(false);showList();

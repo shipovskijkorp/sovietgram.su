@@ -88,6 +88,7 @@ from .models import (
 )
 from .models import ChannelPostView, MessageReaction, MessageSendReceipt
 from .contact_names import contact_aliases, contact_display_name, normalize_alias
+from .quotes import make_quote
 from .ratelimit import rate_limit
 from .services import (
     apply_archive_rules_on_new_message,
@@ -536,12 +537,14 @@ def _posting_restriction(
 
 
 def _hide_inaccessible_reply_previews(chat, user, messages):
-    membership = ChatParticipant.objects.get(chat=chat, user=user)
     reply_ids = {
         message.reply_to_id
         for message in messages
         if message.reply_to_id is not None
     }
+    if not reply_ids:
+        return
+    membership = ChatParticipant.objects.get(chat=chat, user=user)
     hidden_reply_ids = set(
         MessageHiddenForUser.objects.filter(
             user=user,
@@ -553,7 +556,9 @@ def _hide_inaccessible_reply_previews(chat, user, messages):
         if reply is None:
             continue
         if (
-            reply.pk <= membership.cleared_before_message_id
+            reply.chat_id != chat.pk
+            or (reply.expires_at is not None and reply.expires_at <= timezone.now())
+            or reply.pk <= membership.cleared_before_message_id
             or reply.pk in hidden_reply_ids
             or (
                 chat.type != Chat.Type.PRIVATE
@@ -1079,6 +1084,7 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
 
 
 def _serialized_message(message, user, chat):
+    _hide_inaccessible_reply_previews(chat, user, [message])
     pinned_ids = set(
         _visible_pins_queryset(chat, user).values_list("message_id", flat=True)
     )
@@ -2118,12 +2124,29 @@ def send_message(request, chat_id):
                 return response
             messages.error(request, restriction[0])
             return redirect("messenger:chat", chat_id=chat.pk)
+        try:
+            raw_quote = form.cleaned_data.get("reply_quote", "")
+            if reply_id:
+                reply_to = _visible_message_queryset(chat, request.user).filter(
+                    pk=reply_id, is_deleted=False,
+                ).first()
+                if reply_to is None:
+                    raise ValueError("Сообщение для ответа больше недоступно.")
+            if raw_quote and chat.protect_content:
+                raise ValueError("Цитирование отключено в защищённом чате.")
+            quote_ref = make_quote(reply_to, raw_quote)
+        except ValueError as error:
+            if wants_json:
+                return JsonResponse({"ok": False, "error": str(error)}, status=400)
+            messages.error(request, str(error))
+            return redirect("messenger:chat", chat_id=chat.pk)
         message = Message.objects.create(
             chat=chat,
             sender=request.user,
             text=form.cleaned_data["text"],
             silent=form.cleaned_data["silent"],
             reply_to=reply_to,
+            reply_quote=quote_ref,
             signature_name=(
                 request.user.display_name
                 if chat.type == Chat.Type.CHANNEL and chat.signatures_enabled
@@ -2268,11 +2291,25 @@ def send_special_message(request, chat_id):
             if restriction[1]:
                 response["Retry-After"] = str(restriction[1])
             return response
+        try:
+            raw_quote = request.POST.get("reply_quote", "")
+            if raw_reply:
+                reply_to = _visible_message_queryset(chat, request.user).filter(
+                    pk=reply_to.pk if reply_to is not None else 0, is_deleted=False,
+                ).first()
+                if reply_to is None:
+                    raise ValueError("Сообщение для ответа больше недоступно.")
+            if raw_quote and chat.protect_content:
+                raise ValueError("Цитирование отключено в защищённом чате.")
+            quote_ref = make_quote(reply_to, raw_quote)
+        except ValueError as error:
+            return JsonResponse({"ok": False, "error": str(error)}, status=400)
         message = Message.objects.create(
             chat=chat,
             sender=request.user,
             text=search_text,
             reply_to=reply_to,
+            reply_quote=quote_ref,
             special_type=special_type,
             special_data=special_data,
             signature_name=(
