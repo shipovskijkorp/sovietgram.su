@@ -164,7 +164,7 @@ def build_export(user, include_files=False):
             profile = {field: getattr(user, field) for field in (
                 "id", "username", "email", "email_verified_at", "first_name", "last_name",
                 "bio", "birthday", "date_joined", "last_seen_at", "personal_channel_id",
-                "theme", "enter_to_send", "keep_archived_chats", "keep_folder_chats_archived",
+                "theme", "enter_to_send", "media_preload", "keep_archived_chats", "keep_folder_chats_archived",
                 "archive_unknown_chats", "archive_in_main_menu", "privacy_settings",
                 "default_auto_delete_seconds", "delete_after_inactive_days", "two_factor_enabled",
             )}

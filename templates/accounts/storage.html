@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Данные и хранилище — Sovietgram{% endblock %}
+{% block body_class %}auth-body{% endblock %}
+
+{% block content %}
+<main class="auth-shell">
+  <section class="auth-card auth-card--wide storage-page">
+    <a class="auth-brand" href="{% url 'messenger:home' %}?settings=main"><span class="brand__mark">★</span><span>SOVIETGRAM</span></a>
+    <div class="auth-heading">
+      <p class="eyebrow">Настройки аккаунта</p>
+      <h1>Данные и хранилище</h1>
+      <p>Управляйте предзагрузкой медиа и локальным кэшем приложения.</p>
+    </div>
+
+    <section class="storage-section">
+      <h2>Ваши файлы на сервере</h2>
+      <strong class="storage-total">{{ storage.total_known|filesizeformat }}</strong>
+      <p class="micro-copy">Размер сохранившихся вложений, отправленных вашим аккаунтом, личных стикеров и аватара. Не включает полученные файлы, базу данных целиком и резервные копии.</p>
+      <dl class="storage-breakdown">
+        {% for category in storage.categories %}
+        <div><dt>{{ category.label }} <small>({{ category.count }})</small></dt><dd>{{ category.size|filesizeformat }}</dd></div>
+        {% endfor %}
+        <div><dt>Личные стикеры <small>({{ storage.sticker_count }})</small></dt><dd>{{ storage.sticker_bytes|filesizeformat }}</dd></div>
+        <div><dt>Аватар</dt><dd>{% if storage.avatar_bytes == None %}Нет данных{% else %}{{ storage.avatar_bytes|filesizeformat }}{% endif %}</dd></div>
+      </dl>
+      <p class="micro-copy">Это оценка по метаданным файлов, а не полный расход диска VPS. Удаление сообщений осуществляется в соответствующем чате, а не очисткой браузера.</p>
+    </section>
+
+    <section class="storage-section">
+      <h2>Экономия трафика</h2>
+      <form method="post" class="auth-form">
+        {% csrf_token %}
+        {{ form.account_id }}
+        {% if form.non_field_errors %}<div class="form-alert">{{ form.non_field_errors|striptags }}</div>{% endif %}
+        <label class="storage-toggle">{{ form.media_preload }} <span>{{ form.media_preload.label }}</span></label>
+        <p class="micro-copy">Если выключить, аудио, голосовые и видео в переписке запрашиваются при воспроизведении, а не заранее (браузер может использовать ранее загруженные данные). Фотографии по-прежнему загружаются по мере прокрутки.</p>
+        <button class="primary-button" type="submit">Сохранить настройку</button>
+      </form>
+    </section>
+
+    <section class="storage-section" id="storageLocal">
+      <h2>Данные на устройстве</h2>
+      <dl class="storage-breakdown">
+        <div><dt>Публичный кэш приложения</dt><dd id="storagePublicCache">—</dd></div>
+        <div><dt>Все данные сайта (оценка браузера)</dt><dd id="storageEstimate">—</dd></div>
+      </dl>
+      <p class="micro-copy">Очистка удаляет только публичную офлайн-страницу и иконки Sovietgram. Сообщения, черновики, аккаунты, настройки и неотправленная очередь не удаляются. Офлайн-экран восстановится после следующей успешной загрузки сайта. HTTP-кэш браузера здесь не очищается.</p>
+      <button type="button" class="storage-secondary" id="storageClearCache" hidden>Очистить кэш приложения</button>
+      <p class="micro-copy" id="storageCacheStatus" role="status"></p>
+    </section>
+
+    <p class="auth-switch"><a href="{% url 'accounts:account_export' %}">Экспортировать данные аккаунта</a></p>
+    <p class="auth-switch"><a href="{% url 'messenger:home' %}?settings=main">Вернуться к настройкам</a></p>
+  </section>
+</main>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{% static 'js/storage-settings.js' %}?v={{ static_version }}"></script>
+{% endblock %}

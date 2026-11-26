@@ -987,3 +987,19 @@ a.tg-settings-danger-action {
   justify-content: center;
   text-decoration: none;
 }
+
+/* Account storage settings: responsive, theme-aware inventory and controls. */
+.storage-page { max-width: 620px; width: min(620px, 100%); }
+.storage-section { margin: 18px 0; padding-top: 16px; border-top: 1px solid var(--line); }
+.storage-section h2 { font-size: 16px; margin: 0 0 10px; color: var(--ink); }
+.storage-total { display: block; font-size: 30px; line-height: 1.2; color: var(--ink); }
+.storage-breakdown { margin: 12px 0; padding: 0; }
+.storage-breakdown > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.storage-breakdown dt { color: var(--ink); min-width: 0; overflow-wrap: anywhere; }
+.storage-breakdown dt small { color: var(--muted); }
+.storage-breakdown dd { margin: 0; font-weight: 600; white-space: nowrap; color: var(--ink); }
+.storage-toggle { display: flex; align-items: center; gap: 10px; cursor: pointer; color: var(--ink); min-height: 40px; }
+.storage-toggle input { accent-color: var(--red); width: 20px; height: 20px; flex: 0 0 auto; }
+.storage-secondary { width: 100%; min-height: 42px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 9px; color: var(--ink); background: var(--panel-strong); font: inherit; cursor: pointer; }
+.storage-secondary:disabled { opacity: .5; cursor: default; }
+.storage-secondary[hidden] { display: none; }

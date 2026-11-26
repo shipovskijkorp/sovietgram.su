@@ -122,6 +122,7 @@ jobs:
           node --check static/js/link-previews.js
           node --check static/js/profile.js
           node --check static/js/settings.js
+          node --check static/js/storage-settings.js
           node --check static/js/community-profile.js
           node --check static/js/community-settings.js
 

@@ -56,6 +56,7 @@
       {% if request.user.is_authenticated %}
       data-account-id="{{ request.user.pk }}"
       data-enter-to-send="{{ request.user.enter_to_send|yesno:'true,false' }}"
+      data-media-preload="{{ request.user.media_preload|yesno:'true,false' }}"
       data-self-profile-url="{% url 'accounts:public_profile' request.user.username %}"
       {% endif %}>
   <script>

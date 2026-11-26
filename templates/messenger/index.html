@@ -540,7 +540,7 @@
                           <img class="message-media__image" src="{% url 'messenger:view_attachment' attachment.pk %}" alt="{{ attachment.original_name }}" loading="lazy">
                         </a>
                       {% elif attachment.kind == 'video' %}
-                        <div class="message-video-wrap"><video class="message-media__video" controls preload="metadata" src="{% url 'messenger:view_attachment' attachment.pk %}"></video><button type="button" class="message-video-expand" data-lightbox-video="{% url 'messenger:view_attachment' attachment.pk %}" data-media-name="{{ attachment.original_name }}" data-media-download="{% if not selected_chat.protect_content %}{% url 'messenger:download_attachment' attachment.pk %}{% endif %}" aria-label="Открыть видео" title="Открыть видео"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3h7v7M10 21H3v-7M21 3l-7 7M3 21l7-7"/></svg></button></div>
+                        <div class="message-video-wrap"><video class="message-media__video" controls preload="{% if request.user.media_preload %}metadata{% else %}none{% endif %}" src="{% url 'messenger:view_attachment' attachment.pk %}"></video><button type="button" class="message-video-expand" data-lightbox-video="{% url 'messenger:view_attachment' attachment.pk %}" data-media-name="{{ attachment.original_name }}" data-media-download="{% if not selected_chat.protect_content %}{% url 'messenger:download_attachment' attachment.pk %}{% endif %}" aria-label="Открыть видео" title="Открыть видео"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3h7v7M10 21H3v-7M21 3l-7 7M3 21l7-7"/></svg></button></div>
                       {% elif attachment.kind == 'voice' %}
                         <div class="voice-message"
                              data-voice-player
@@ -562,13 +562,13 @@
                             </div>
                           </div>
                           <button class="voice-message__speed" type="button" data-voice-settings aria-label="Настройки воспроизведения">1×</button>
-                          <audio data-voice-audio preload="metadata" src="{% url 'messenger:view_attachment' attachment.pk %}"></audio>
+                          <audio data-voice-audio preload="{% if request.user.media_preload %}metadata{% else %}none{% endif %}" src="{% url 'messenger:view_attachment' attachment.pk %}"></audio>
                         </div>
                       {% elif attachment.kind == 'audio' %}
                         <div class="message-audio">
                           <span class="message-audio__icon">♪</span>
                           <span class="message-audio__copy"><strong>{{ attachment.original_name }}</strong><small>{{ attachment.size|filesizeformat }}</small></span>
-                          <audio controls preload="metadata" src="{% url 'messenger:view_attachment' attachment.pk %}"></audio>
+                          <audio controls preload="{% if request.user.media_preload %}metadata{% else %}none{% endif %}" src="{% url 'messenger:view_attachment' attachment.pk %}"></audio>
                         </div>
                       {% else %}
                         <a class="message-file-card" href="{% url 'messenger:download_attachment' attachment.pk %}">

@@ -282,7 +282,7 @@ function makeVoiceMessage(attachment, isOwn = false) {
 
   const audio = document.createElement("audio");
   audio.dataset.voiceAudio = "";
-  audio.preload = "metadata";
+  audio.preload = document.body.dataset.mediaPreload === "false" ? "none" : "metadata";
   audio.src = attachment.url || "";
 
   root.append(play, body, speed, audio);
@@ -336,7 +336,7 @@ function makeMedia(attachment, isOwn = false) {
     const video = document.createElement("video");
     video.className = "message-media__video";
     video.controls = true;
-    video.preload = "metadata";
+    video.preload = document.body.dataset.mediaPreload === "false" ? "none" : "metadata";
     video.src = attachment.url;
     const wrap = document.createElement("div");
     wrap.className = "message-video-wrap";
@@ -368,7 +368,7 @@ function makeMedia(attachment, isOwn = false) {
     copy.append(name, size);
     const player = document.createElement("audio");
     player.controls = true;
-    player.preload = "metadata";
+    player.preload = document.body.dataset.mediaPreload === "false" ? "none" : "metadata";
     player.src = attachment.url;
     audio.append(icon, copy, player);
     return audio;

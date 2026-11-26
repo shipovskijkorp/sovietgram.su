@@ -425,7 +425,7 @@
 
     const audio = document.createElement("audio");
     audio.dataset.voiceAudio = "";
-    audio.preload = "metadata";
+    audio.preload = document.body.dataset.mediaPreload === "false" ? "none" : "metadata";
     audio.src = attachment.url || "";
 
     root.append(play, body, speed, audio);
