@@ -1038,6 +1038,9 @@ window.addEventListener("beforeunload", () => {
 const pendingTextList = document.getElementById("pendingTextMessages");
 const queueScope = "sovietgram.outbox.v1." + (messageStage?.dataset.accountId || "") + "." + (conversation?.dataset.chatId || "");
 let textOutbox = null;
+let outboxReady = null;
+let enqueueBusy = false;
+let durableOutbox = false;
 
 function renderPendingText(items, saved = true) {
   if (!pendingTextList) return;
@@ -1047,7 +1050,8 @@ function renderPendingText(items, saved = true) {
   if (!items.length) return;
   const caption = document.createElement("small");
   caption.className = "pending-text-caption";
-  caption.textContent = saved ? "Исходящие · очередь этой вкладки" : "Исходящие · хранение недоступно, не закрывайте вкладку";
+  caption.textContent = saved ? (durableOutbox ? "Исходящие · сохранены на этом устройстве" : "Исходящие · очередь этой вкладки") : "Исходящие · хранение недоступно, не закрывайте вкладку";
+  caption.title = durableOutbox ? "Неотправленный текст хранится локально без шифрования. Удалите очередь перед использованием общего устройства." : "";
   pendingTextList.appendChild(caption);
   for (const item of items) {
     const card = document.createElement("article");
@@ -1068,12 +1072,16 @@ function renderPendingText(items, saved = true) {
     if (item.state !== "sending") {
       const again = document.createElement("button");
       again.type = "button"; again.textContent = "Повторить";
-      again.addEventListener("click", () => { textOutbox.retryItem(item.id); void flushTextOutbox(); });
+      again.addEventListener("click", async () => {
+        try { await textOutbox.retryItem(item.id); void flushTextOutbox(); }
+        catch (_) { notify("Не удалось изменить локальную очередь."); }
+      });
       const cancel = document.createElement("button");
       cancel.type = "button"; cancel.textContent = "Убрать";
-      cancel.addEventListener("click", () => {
+      cancel.addEventListener("click", async () => {
         if (item.attempts && !window.confirm("Прекратить повторные попытки? Уже принятое сервером сообщение не удалится.")) return;
-        textOutbox.discard(item.id); void flushTextOutbox();
+        try { await textOutbox.discard(item.id); void flushTextOutbox(); }
+        catch (_) { notify("Не удалось изменить локальную очередь."); }
       });
       footer.append(again, cancel);
     }
@@ -1120,26 +1128,42 @@ async function transmitQueuedText(item) {
 }
 
 async function flushTextOutbox() {
-  if (!textOutbox || !form || messageInput?.readOnly || document.hidden || !navigator.onLine) return;
-  // Continue in order until the first blocked item or temporary failure.
-  while (await textOutbox.flush()) {
-    if (document.hidden || !navigator.onLine) break;
+  if (!textOutbox || !form || document.hidden) return;
+  try {
+    if (messageInput?.readOnly || !navigator.onLine) { await textOutbox.refresh?.(); return; }
+    while (await textOutbox.flush()) {
+      if (document.hidden || !navigator.onLine) break;
+    }
+  } catch (_) {
+    // Keep the durable record (including its lease) on storage failure.
+    // The next successful transaction can recover it with the same UUID.
   }
 }
 
 async function sendTextMessage(silent = false) {
-  if (!form || !messageInput?.value.trim() || messageInput.readOnly || !textOutbox) return;
-  if (!textOutbox.enqueue(messageInput.value, replyToInput?.value || "", silent)) {
-    notify("Очередь заполнена (20 сообщений). Повторите или удалите ожидающие сообщения.");
-    return;
-  }
-  messageInput.value = "";
-  messageInput.dispatchEvent(new Event("input", {bubbles:true}));
-  autoSizeInput();
-  clearReplyState();
-  clearDraftState();
-  focusMessageInput();
-  void flushTextOutbox();
+  if (!form || !messageInput?.value.trim() || messageInput.readOnly || enqueueBusy) return;
+  const text = messageInput.value, reply = replyToInput?.value || "";
+  enqueueBusy = true;
+  try {
+    await outboxReady;
+    if (!textOutbox || messageInput.readOnly) return;
+    if (!await textOutbox.enqueue(text, reply, silent)) {
+      notify("Очередь заполнена (20 сообщений). Повторите или удалите ожидающие сообщения.");
+      return;
+    }
+    // Do not erase new input typed while IndexedDB commits.
+    if (messageInput.value === text && (replyToInput?.value || "") === reply) {
+      messageInput.value = "";
+      messageInput.dispatchEvent(new Event("input", {bubbles:true}));
+      autoSizeInput();
+      clearReplyState();
+      clearDraftState();
+    }
+    focusMessageInput();
+    void flushTextOutbox();
+  } catch (_) {
+    notify("Не удалось сохранить сообщение в локальной очереди. Текст оставлен в поле ввода.");
+  } finally { enqueueBusy = false; }
 }
 
 form?.addEventListener("submit", (event) => { event.preventDefault(); sendTextMessage(); });
@@ -1571,13 +1595,24 @@ if (messageStage) {
   if (pendingTextList && messageStage.dataset.accountId && conversation?.dataset.chatId) {
     let storage;
     try { storage = window.sessionStorage; } catch (_) { storage = null; }
-    textOutbox = window.SovietgramSendRetry.createOutbox({
+    const options = {
       storage, key: queueScope, send: transmitQueuedText, changed: renderPendingText,
       delivered(payload) {
         renderMessage(payload.message);
         void window.SovietgramSidebar?.refresh();
       },
-    });
+    };
+    outboxReady = (async () => {
+      try {
+        durableOutbox = true;
+        textOutbox = await window.SovietgramDurableOutbox.create(options);
+      } catch (_) {
+        durableOutbox = false;
+        textOutbox = window.SovietgramSendRetry.createOutbox(options);
+      }
+      renderPendingText(textOutbox.snapshot(), textOutbox.saved);
+      void flushTextOutbox();
+    })();
     window.setInterval(flushTextOutbox, 2000);
     window.addEventListener("online", () => { void flushTextOutbox(); });
     window.addEventListener("focus", () => { void flushTextOutbox(); });

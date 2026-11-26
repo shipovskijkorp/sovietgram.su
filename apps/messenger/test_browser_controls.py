@@ -419,6 +419,34 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.expect(self.page.locator(".platform-table-wrap")).to_contain_text("Browser moderation")
         self.assertFalse(Message.objects.filter(pk=reported.pk,is_deleted=False).exists())
 
+    def test_durable_text_outbox_survives_tab_close_and_concurrent_tabs(self):
+        from .models import MessageSendReceipt
+
+        self.go(self.direct)
+        send_url = self.live_server_url + reverse("messenger:send_message", args=[self.direct.pk])
+        self.context.route(send_url, lambda route: route.abort())
+        self.page.locator("#messageInput").fill("Durable queue test")
+        self.click("#sendButton")
+        self.expect(self.page.locator("#pendingTextMessages")).to_contain_text("Durable queue test")
+        self.expect(self.page.locator("#pendingTextMessages")).to_contain_text("сохранены на этом устройстве")
+        self.expect(self.page.locator("#pendingTextMessages")).to_contain_text("Ожидает повторной отправки")
+        self.page.close()
+        self.page = self.context.new_page()
+        self.go(self.direct)
+        self.expect(self.page.locator("#pendingTextMessages")).to_contain_text("Durable queue test")
+        second = self.context.new_page()
+        second.goto(self.live_server_url + reverse("messenger:chat", args=[self.direct.pk]))
+        self.expect(second.locator("#pendingTextMessages")).to_contain_text("Durable queue test")
+        self.context.unroute(send_url)
+        self.page.bring_to_front()
+        self.expect(self.page.locator(".message__text").last).to_have_text("Durable queue test", timeout=30000)
+        self.expect(self.page.locator("#pendingTextMessages")).to_be_hidden()
+        second.bring_to_front()
+        self.expect(second.locator("#pendingTextMessages")).to_be_hidden(timeout=15000)
+        self.assertEqual(Message.objects.filter(chat=self.direct, text="Durable queue test").count(), 1)
+        self.assertEqual(MessageSendReceipt.objects.filter(sender=self.owner).count(), 1)
+        second.close()
+
     def test_desktop_workspace_and_resizable_chat_list(self):
         self.go()
         self.visible("#desktopSidebarResizer")

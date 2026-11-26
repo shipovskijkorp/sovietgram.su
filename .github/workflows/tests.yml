@@ -94,6 +94,7 @@ jobs:
           node --check static/js/attachment-menu.js
           node --check static/js/attachment-files.js
           node --check static/js/send-retry.js
+          node --check static/js/durable-outbox.js
           node --check static/js/scheduled-messages.js
           node --check static/js/sound-notifications.js
           node --check static/js/message-status.js
