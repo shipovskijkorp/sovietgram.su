@@ -87,6 +87,10 @@ jobs:
       - name: Check JavaScript syntax
         run: |
           node --check static/js/app.js
+          node --check static/js/pwa.js
+          node --check static/js/service-worker.js
+          node --check static/js/mobile-ui.js
+          node --check static/js/desktop-ui.js
           node --check static/js/attachment-menu.js
           node --check static/js/attachment-files.js
           node --check static/js/send-retry.js

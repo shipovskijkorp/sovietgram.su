@@ -639,3 +639,16 @@ the extracted media directory. Use the compatible application revision and
 configuration, check migrations and run application smoke tests. Never
 restore into the running production database or overwrite live files.
 The command intentionally does not implement an automatic destructive restore.
+
+
+### Устанавливаемое веб-приложение (PWA)
+
+На HTTPS и localhost Sovietgram предоставляет manifest, иконки 192/512 и
+service worker. В главном меню появляется «Установить приложение».
+Chromium может показать системный диалог установки; на iOS используется
+Safari → Поделиться → На экран Домой. Возможность установки зависит от
+браузера. При недоступности сети показывается нейтральная офлайн-страница.
+Service worker хранит только публичную офлайн-страницу и две иконки, не
+кэширует личную переписку, страницы авторизованных пользователей, API,
+аватары или вложения. Web Push и офлайн-просмотр истории не реализованы.
+Требуется только обновление кода, collectstatic и перезапуск.

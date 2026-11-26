@@ -27,6 +27,9 @@ class UserActivityMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        # Public PWA resources must not update presence, sessions, or run cleanup.
+        if request.path_info in {"/manifest.webmanifest", "/sw.js", "/offline/", "/app-icon/192.png", "/app-icon/512.png"}:
+            return self.get_response(request)
         now = timezone.now()
         current_user_id = None
 

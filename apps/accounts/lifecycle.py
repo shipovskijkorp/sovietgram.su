@@ -1,3 +1,4 @@
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Case, F, IntegerField, Value, When
 from django.utils import timezone
@@ -46,7 +47,7 @@ def delete_user_account(user, *, inactive_at=None):
 
     # Lock the account row when it still exists. A concurrent cleanup then
     # cannot race ownership transfer and cascade deletion.
-    UserModel = type(user)
+    UserModel = get_user_model()
     locked_user = UserModel.objects.select_for_update().filter(pk=user.pk).first()
     if locked_user is None or locked_user.platform_role or locked_user.is_staff or locked_user.is_superuser or locked_user.platform_suspended_at:
         return

@@ -1127,6 +1127,7 @@
     <a href="{% url 'messenger:saved_messages' %}"><span class="tg-native-icon tg-native-icon--saved" aria-hidden="true"></span><strong>Избранное</strong></a>
     {% if request.user.platform_role %}<a href="{% url 'administration:dashboard' %}" id="platformAdminEntry"><span class="tg-native-icon tg-native-icon--settings" aria-hidden="true"></span><strong>Администрирование</strong></a>{% endif %}
     <a href="{% url 'administration:my_reports' %}"><span class="archive-menu-svg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 21V4l7 3 7-3v12l-7 3-7-3"/></svg></span><strong>Мои жалобы</strong></a>
+    <a href="{% url 'pwa_manifest' %}" data-pwa-install hidden><span class="archive-menu-svg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M12 6v8m-3-3 3 3 3-3M10 18h4"/></svg></span><strong>Установить приложение</strong></a>
     <a href="{% url 'messenger:home' %}?settings=main" data-open-settings="main"><span class="tg-native-icon tg-native-icon--settings" aria-hidden="true"></span><strong>Настройки</strong></a>
   </nav>
 
