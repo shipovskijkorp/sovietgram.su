@@ -149,7 +149,14 @@ function jumpToMessage(messageId) {
   const node = document.querySelector(`[data-message-id="${messageId}"]`);
   if (!node) {
     const base = conversation?.dataset.chatUrl;
-    if (base) window.location.href = `${base}?message=${encodeURIComponent(messageId)}#message-${messageId}`;
+    if (base) {
+      const target = new URL(base, window.location.origin);
+      const folder = new URL(window.location.href).searchParams.get("folder");
+      if (folder && /^\d+$/.test(folder)) target.searchParams.set("folder", folder);
+      target.searchParams.set("message", String(messageId));
+      target.hash = "message-" + messageId;
+      window.location.assign(target.href);
+    }
     return;
   }
   node.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -961,7 +968,8 @@ async function runChatSearch(generation, append = false) {
   try {
     const url = new URL(searchPanel.dataset.searchUrl, window.location.origin);
     for (const [key, value] of params) url.searchParams.set(key, value);
-    const response = await fetch(url, { credentials: "same-origin", signal: controller.signal });
+    if (messageStage?.dataset.accountId) url.searchParams.set("account_id", messageStage.dataset.accountId);
+    const response = await fetch(url, { credentials: "same-origin", cache: "no-store", signal: controller.signal });
     const payload = await response.json().catch(() => ({}));
     if (generation !== searchGeneration || controller.signal.aborted) return;
     if (!response.ok || !payload.ok) throw new Error(payload.error || "Поиск временно недоступен.");
@@ -1000,6 +1008,70 @@ for (const field of searchFilters) {
 document.getElementById("chatSearchReset")?.addEventListener("click", () => {
   searchFilters.forEach(field => { field.value = ""; });
   restartChatSearch();
+});
+
+const jumpDate = document.getElementById("chatJumpDate");
+const jumpDateButton = document.getElementById("chatJumpDateButton");
+const jumpMentionButton = document.getElementById("chatJumpMentionButton");
+const jumpMentionLabel = document.getElementById("chatJumpMentionLabel");
+const targetStatus = document.getElementById("chatHistoryTargetStatus");
+let targetBusy = false, mentionAfter = null;
+
+function historyTargetStatus(message) {
+  if (!targetStatus) return;
+  targetStatus.textContent = message;
+  targetStatus.hidden = !message;
+}
+function setMentionCursor(cursor) {
+  mentionAfter = cursor;
+  if (jumpMentionLabel) jumpMentionLabel.textContent = cursor
+    ? "Продолжить поиск упоминаний" : "К непрочитанному упоминанию";
+}
+async function jumpHistoryTarget(mode) {
+  if (targetBusy || !searchPanel?.dataset.historyTargetUrl || !messageStage?.dataset.accountId) return;
+  if (mode === "date" && (!jumpDate?.value || !jumpDate.checkValidity())) {
+    historyTargetStatus("Выберите дату."); jumpDate?.focus(); return;
+  }
+  targetBusy = true;
+  jumpDateButton.disabled = true; jumpMentionButton.disabled = true; jumpDate.disabled = true;
+  historyTargetStatus("Поиск…");
+  try {
+    const url = new URL(searchPanel.dataset.historyTargetUrl, window.location.origin);
+    url.searchParams.set("account_id", messageStage.dataset.accountId);
+    url.searchParams.set("mode", mode);
+    if (mode === "date") url.searchParams.set("date", jumpDate.value);
+    else if (mentionAfter) url.searchParams.set("after", String(mentionAfter));
+    const response = await fetch(url, {credentials:"same-origin", cache:"no-store"});
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data.ok || String(data.account_id) !== messageStage.dataset.accountId) {
+      throw new Error(data.error || "Не удалось найти сообщение.");
+    }
+    if (searchPanel.hidden) return;
+    if (data.message_id && Number.isSafeInteger(data.message_id)) {
+      if (mode === "mention") setMentionCursor(null);
+      historyTargetStatus("");
+      setSearchPanel(false);
+      jumpToMessage(data.message_id);
+    } else if (mode === "mention") {
+      setMentionCursor(Number.isSafeInteger(data.next_after) && data.next_after > 0 ? data.next_after : null);
+      historyTargetStatus(mentionAfter
+        ? "В проверенной части истории упоминаний нет. Продолжите поиск."
+        : "Непрочитанных упоминаний не найдено.");
+    } else {
+      historyTargetStatus("За выбранную дату сообщений нет.");
+    }
+  } catch (error) {
+    historyTargetStatus(error.message || "Не удалось найти сообщение.");
+  } finally {
+    targetBusy = false;
+    jumpDateButton.disabled = false; jumpMentionButton.disabled = false; jumpDate.disabled = false;
+  }
+}
+jumpDateButton?.addEventListener("click", () => void jumpHistoryTarget("date"));
+jumpMentionButton?.addEventListener("click", () => void jumpHistoryTarget("mention"));
+jumpDate?.addEventListener("change", () => historyTargetStatus(""));
+jumpDate?.addEventListener("keydown", event => {
+  if (event.key === "Enter") { event.preventDefault(); void jumpHistoryTarget("date"); }
 });
 
 const chatInfoBackdrop = document.getElementById("chatInfoBackdrop");

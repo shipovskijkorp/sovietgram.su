@@ -423,6 +423,35 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.assertAlmostEqual(rect["y"] + rect["height"], 844, delta=2)
         self.click("#stickerDialogClose")
 
+    def test_chat_date_navigation_and_pinned_link_filters(self):
+        from datetime import datetime, UTC
+        from .models import PinnedMessage
+
+        old = self.direct_message
+        Message.objects.filter(pk=old.pk).update(created_at=datetime(2025, 6, 1, 12, tzinfo=UTC))
+        PinnedMessage.objects.create(chat=self.direct, message=old, pinned_by=self.owner)
+        Message.objects.bulk_create([Message(chat=self.direct, sender=self.owner, text=f"New {i}") for i in range(105)])
+        link = Message.objects.create(chat=self.direct, sender=self.owner, text="https://example.net/feature")
+        self.go(self.direct)
+        self.click("#chatSearchToggle")
+        self.visible("#chatSearchPanel")
+        self.click(".chat-search-filters summary")
+        self.page.locator("#chatSearchKind").select_option("link")
+        self.expect(self.page.locator("#chatSearchResults")).to_contain_text("https://example.net/feature")
+        self.page.locator("#chatSearchKind").select_option("pinned")
+        self.expect(self.page.locator("#chatSearchResults")).to_contain_text("Browser direct test")
+        self.click(".chat-search-filters summary")
+        self.click("#chatJumpMentionButton")
+        self.expect(self.page.locator("#chatHistoryTargetStatus")).to_have_text("Непрочитанных упоминаний не найдено.")
+        self.page.locator("#chatJumpDate").fill("2025-06-02")
+        self.click("#chatJumpDateButton")
+        self.expect(self.page.locator("#chatHistoryTargetStatus")).to_have_text("За выбранную дату сообщений нет.")
+        self.page.locator("#chatJumpDate").fill("2025-06-01")
+        self.click("#chatJumpDateButton")
+        self.expect(self.page.locator("#messageStage")).to_have_attribute("data-focus-message", str(old.pk))
+        self.visible(f"#message-{old.pk}")
+        self.hidden("#chatSearchPanel")
+
     def test_chat_search_stickers_attachments_scheduling_and_folders(self):
         self.go(self.direct)
         self.click("#chatSearchToggle")

@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import User
-from .models import Chat, ChatParticipant, Message, MessageAttachment, MessageHiddenForUser
+from .models import Chat, ChatParticipant, Message, MessageAttachment, MessageHiddenForUser, PinnedMessage
 from .services import get_or_create_direct_chat
 
 
@@ -79,3 +79,74 @@ class SearchPaginationTests(TestCase):
         self.assertEqual(self.client.get(self.chat_url, {"kind": "unknown"}).status_code, 400)
         for url in (self.global_url, self.chat_url):
             self.assertEqual(self.client.get(url, {"q": "report", "before": "-1"}).status_code, 400)
+
+    def test_date_target_uses_first_visible_message_and_requires_account(self):
+        from datetime import datetime, UTC
+        day = datetime(2025, 6, 1, 12, tzinfo=UTC)
+        rows = [Message.objects.create(chat=self.chat, sender=self.bob, text=f"dated {n}") for n in range(5)]
+        Message.objects.filter(pk__in=[row.pk for row in rows]).update(created_at=day)
+        MessageHiddenForUser.objects.create(user=self.alice, message=rows[0])
+        Message.objects.filter(pk=rows[1].pk).update(is_deleted=True)
+        Message.objects.filter(pk=rows[2].pk).update(expires_at=timezone.now()-timedelta(seconds=1))
+        url = reverse("messenger:history_target", args=[self.chat.pk])
+        args = {"mode":"date", "date":"2025-06-01", "account_id":self.alice.pk}
+        response = self.client.get(url, args)
+        self.assertEqual(response.json()["message_id"], rows[3].pk)
+        self.assertIn("no-store", response["Cache-Control"])
+        self.assertIsNone(self.client.get(url, {**args, "date":"2025-06-02"}).json()["message_id"])
+        self.assertEqual(self.client.get(url, {**args, "date":"2025-02-30"}).status_code, 400)
+        self.assertEqual(self.client.get(url, {**args, "account_id":self.bob.pk}).status_code, 409)
+        outsider = get_or_create_direct_chat(self.bob, self.other)
+        self.assertEqual(self.client.get(reverse("messenger:history_target", args=[outsider.pk]), args).status_code, 404)
+        self.assertEqual(ChatParticipant.objects.get(chat=self.chat, user=self.alice).read_through_id, 0)
+
+    def test_unread_mention_target_uses_markdown_tokens_and_visibility(self):
+        def message(text, sender=None):
+            return Message.objects.create(chat=self.chat, sender=sender or self.bob, text=text)
+
+        already_read = message("@alice")
+        ChatParticipant.objects.filter(chat=self.chat, user=self.alice).update(read_through_id=already_read.pk)
+        message("@alice", self.alice)
+        message("@alice_other")
+        message("mail@alice.net")
+        message("`@alice`")
+        message("[@alice](https://example.net)")
+        hidden = message("@alice")
+        MessageHiddenForUser.objects.create(user=self.alice, message=hidden)
+        expired = message("@alice")
+        Message.objects.filter(pk=expired.pk).update(expires_at=timezone.now()-timedelta(seconds=1))
+        first = message("Привет, @ALICE!")
+        second = message("Ещё раз @alice")
+        url = reverse("messenger:history_target", args=[self.chat.pk])
+        args = {"mode":"mention", "account_id":self.alice.pk}
+        self.assertEqual(self.client.get(url, args).json()["message_id"], first.pk)
+        self.assertEqual(self.client.get(url, {**args, "after":first.pk}).json()["message_id"], second.pk)
+        self.assertIsNone(self.client.get(url, {**args, "after":second.pk}).json()["message_id"])
+        self.assertEqual(self.client.get(url, {**args, "after":-1}).status_code, 400)
+        self.assertEqual(ChatParticipant.objects.get(chat=self.chat, user=self.alice).read_through_id, already_read.pk)
+
+    def test_mention_scan_can_continue_past_bounded_batch(self):
+        Message.objects.bulk_create([Message(chat=self.chat, sender=self.bob, text="`@alice`") for _ in range(251)])
+        target = Message.objects.create(chat=self.chat, sender=self.bob, text="@alice")
+        url = reverse("messenger:history_target", args=[self.chat.pk])
+        args = {"mode":"mention", "account_id":self.alice.pk}
+        result = self.client.get(url, args).json()
+        self.assertIsNone(result["message_id"])
+        self.assertTrue(result["next_after"])
+        result = self.client.get(url, {**args, "after":result["next_after"]}).json()
+        self.assertEqual(result["message_id"], target.pk)
+
+    def test_link_and_pinned_search_filters(self):
+        plain = Message.objects.create(chat=self.chat, sender=self.bob, text="plain")
+        link = Message.objects.create(chat=self.chat, sender=self.bob, text="See https://example.net/page")
+        second = Message.objects.create(chat=self.chat, sender=self.alice, text="www.example.net")
+        hidden = Message.objects.create(chat=self.chat, sender=self.bob, text="https://hidden.example.net")
+        MessageHiddenForUser.objects.create(user=self.alice, message=hidden)
+        for item in (plain, link, hidden):
+            PinnedMessage.objects.create(chat=self.chat, message=item, pinned_by=self.alice)
+        ids = lambda params: [row["id"] for row in self.client.get(self.chat_url, params).json()["results"]]
+        self.assertEqual(ids({"kind":"link"}), [second.pk, link.pk])
+        self.assertEqual(ids({"kind":"link", "sender":"bob"}), [link.pk])
+        self.assertEqual(ids({"kind":"pinned"}), [link.pk, plain.pk])
+        self.assertEqual(ids({"kind":"pinned", "q":"plain"}), [plain.pk])
+        self.assertEqual(self.client.get(self.chat_url, {"kind":"pinned", "account_id":self.bob.pk}).status_code, 409)

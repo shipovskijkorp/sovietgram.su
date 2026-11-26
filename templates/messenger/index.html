@@ -322,7 +322,7 @@
         <span class="pinned-message-bar__arrow">›</span>
       </button>
 
-      <section class="chat-search-panel" id="chatSearchPanel" data-search-url="{{ search_url }}" hidden>
+      <section class="chat-search-panel" id="chatSearchPanel" data-search-url="{{ search_url }}" data-history-target-url="{% url 'messenger:history_target' selected_chat.pk %}" hidden>
         <div class="chat-search-box">
           <span class="tg-native-icon tg-native-icon--search tg-native-icon--compact" aria-hidden="true"></span>
           <input id="chatSearchInput" type="search" maxlength="120" placeholder="Поиск сообщений" autocomplete="off">
@@ -346,6 +346,8 @@
                 <option value="todo">Списки задач</option>
                 <option value="article">Статьи</option>
                 <option value="location">Геопозиции</option>
+                <option value="link">Ссылки (URL)</option>
+                <option value="pinned">Закреплённые сообщения</option>
               </select>
             </label>
             <label>С даты<input id="chatSearchFrom" name="date_from" type="date"></label>
@@ -353,6 +355,19 @@
             <button type="button" class="chat-search-more" id="chatSearchReset">Сбросить фильтры</button>
           </div>
         </details>
+        <div class="chat-history-tools">
+          <div class="chat-history-date">
+            <label class="chat-history-date-label" for="chatJumpDate">Перейти к дате</label>
+            <input id="chatJumpDate" type="date" aria-label="Дата для перехода">
+            <button type="button" id="chatJumpDateButton" title="Перейти к первому сообщению за этот день" aria-label="Перейти к дате">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18m-12 5 2 2 4-4"/></svg>
+            </button>
+          </div>
+          <button type="button" id="chatJumpMentionButton" class="chat-history-mention">
+            <span aria-hidden="true">@</span><span id="chatJumpMentionLabel">К непрочитанному упоминанию</span>
+          </button>
+          <p id="chatHistoryTargetStatus" role="status" hidden></p>
+        </div>
         <div class="chat-search-results" id="chatSearchResults" aria-live="polite">
           <div class="chat-search-empty">Введите текст, название файла или выберите фильтры.</div>
         </div>

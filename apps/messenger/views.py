@@ -51,6 +51,7 @@ from django.utils.dateparse import parse_date, parse_datetime
 from django.utils.http import parse_etags, url_has_allowed_host_and_scheme
 from django.utils.cache import patch_vary_headers
 from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.cache import never_cache
 
 from apps.accounts.multiaccount import account_slots
 from apps.accounts.privacy import (
@@ -72,7 +73,7 @@ from .community_permissions import (
     can_pin_messages, has_admin_right, is_banned, member_denials, member_reaction_emojis,
 )
 from .folder_rules import decorate_folder_categories, matching_chats, requested_folder
-from .markdown import render_message_markdown
+from .markdown import mentioned_usernames, render_message_markdown
 from .models import (
     Chat,
     ChatFolder,
@@ -3192,9 +3193,72 @@ def _search_page(queryset, before, size):
 
 @login_required
 @require_GET
+@never_cache
+@rate_limit("history_target")
+def history_target(request, chat_id):
+    """Locate a visible message without loading history or marking it read."""
+    if request.GET.get("account_id") != str(request.user.pk):
+        return JsonResponse({"ok": False, "error": "Аккаунт изменился. Обновите страницу."}, status=409)
+    chat = _chat_for_user(request.user, chat_id)
+    if chat.type != Chat.Type.PRIVATE and is_banned(chat, request.user.pk):
+        raise Http404
+    mode = request.GET.get("mode", "")
+    base = _visible_message_queryset(chat, request.user).filter(is_deleted=False)
+    target, next_after = None, None
+
+    if mode == "date":
+        raw = request.GET.get("date", "")
+        try:
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw):
+                raise ValueError
+            day = parse_date(raw)
+            if day is None:
+                raise ValueError
+        except (TypeError, ValueError, OverflowError):
+            return JsonResponse({"ok": False, "error": "Укажите корректную дату."}, status=400)
+        # The date transform uses the same active timezone as message dates
+        # and search filters. Return the first message on that day, not a
+        # different day that happens to have messages.
+        target = base.filter(created_at__date=day).order_by("created_at", "pk").values_list("pk", flat=True).first()
+    elif mode == "mention":
+        try:
+            after = int(request.GET.get("after", "0"))
+            if not 0 <= after <= 9223372036854775807:
+                raise ValueError
+        except (TypeError, ValueError, OverflowError):
+            return JsonResponse({"ok": False, "error": "Некорректный курсор упоминаний."}, status=400)
+        membership = _membership(chat, request.user)
+        cursor = max(after, membership.read_through_id, membership.last_read_message_id or 0)
+        # Use @ as a portable prefilter; SQLite's case-insensitive matching
+        # is ASCII-only, whereas the Markdown mention parser uses Unicode.
+        # Read at most 251 candidates, never scan an unbounded backlog.
+        candidates = list(
+            base.filter(pk__gt=cursor, special_type="", text__contains="@")
+            .exclude(sender=request.user).order_by("pk").values_list("pk", "text")[:251]
+        )
+        username = request.user.username.casefold()
+        for message_id, text in candidates[:250]:
+            if username in text.casefold() and username in mentioned_usernames(text):
+                target = message_id
+                break
+        if target is None and len(candidates) > 250:
+            next_after = candidates[249][0]
+    else:
+        return JsonResponse({"ok": False, "error": "Неизвестный режим перехода."}, status=400)
+    return JsonResponse({"ok": True, "account_id": request.user.pk,
+                         "message_id": target, "next_after": next_after})
+
+
+@login_required
+@require_GET
+@never_cache
 @rate_limit("search_messages")
 def search_messages(request, chat_id):
+    if request.GET.get("account_id", str(request.user.pk)) != str(request.user.pk):
+        return JsonResponse({"ok": False, "error": "Аккаунт изменился. Обновите страницу."}, status=409)
     chat = _chat_for_user(request.user, chat_id)
+    if chat.type != Chat.Type.PRIVATE and is_banned(chat, request.user.pk):
+        raise Http404
     query = request.GET.get("q", "").strip()[:120]
     sender = request.GET.get("sender", "").strip().lstrip("@")
     kind = request.GET.get("kind", "").strip()
@@ -3208,7 +3272,7 @@ def search_messages(request, chat_id):
             raise ValueError("Укажите корректную дату.")
         if date_from and date_to and date_from > date_to:
             raise ValueError("Начальная дата позже конечной.")
-        if len(sender) > 150 or kind not in ("", "text", *MessageAttachment.Kind.values, *Message.SpecialType.values):
+        if len(sender) > 150 or kind not in ("", "text", "link", "pinned", *MessageAttachment.Kind.values, *Message.SpecialType.values):
             raise ValueError("Некорректные фильтры поиска.")
     except (TypeError, ValueError, OverflowError) as error:
         return JsonResponse({"ok": False, "error": str(error)}, status=400)
@@ -3226,6 +3290,12 @@ def search_messages(request, chat_id):
         base = base.filter(created_at__date__lte=date_to)
     if kind == "text":
         base = base.filter(special_type="", attachments__isnull=True).exclude(text="")
+    elif kind == "link":
+        # Search explicit URL strings without fetching external resources.
+        # This regex is compatible with both SQLite and PostgreSQL.
+        base = base.filter(text__iregex=r"(https?://|www\.)\S+")
+    elif kind == "pinned":
+        base = base.filter(pk__in=_visible_pins_queryset(chat, request.user).values("message_id"))
     elif kind in MessageAttachment.Kind.values:
         base = base.filter(attachments__kind=kind)
     elif kind:

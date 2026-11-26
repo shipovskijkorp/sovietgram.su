@@ -8,6 +8,7 @@ from django.http import JsonResponse
 DEFAULT_RATE_LIMITS = {
     "send_message": {"limit": 30, "window": 60},
     "search_messages": {"limit": 60, "window": 60},
+    "history_target": {"limit": 30, "window": 60},
     "global_search": {"limit": 90, "window": 60},
     "typing": {"limit": 120, "window": 60},
     "message_reaction": {"limit": 120, "window": 60},
