@@ -14,7 +14,7 @@
 
 {% block content %}
 <div class="app-shell{% if selected_chat %} chat-open{% endif %}">
-  <aside class="sidebar">
+  <aside class="sidebar" id="desktopChatSidebar">
     <header class="sidebar-searchbar{% if show_archived %} sidebar-searchbar--archive{% endif %}">
       {% if show_archived %}
         <a class="sidebar-searchbar__menu sidebar-searchbar__back" href="{% url 'messenger:home' %}" aria-label="Назад к чатам" title="Назад">
@@ -30,6 +30,11 @@
         <span class="tg-native-icon tg-native-icon--search sidebar-searchbar__icon" aria-hidden="true"></span>
         <input id="chatFilter" type="search" maxlength="120" data-global-search-url="{% url 'messenger:global_search' %}{% if show_archived %}?archived=1{% elif active_folder %}?folder={{ active_folder.pk }}{% endif %}" placeholder="{% if show_archived %}Поиск в архиве{% else %}Поиск{% endif %}" autocomplete="off">
       </label>
+      {% if not show_archived %}
+      <a class="desktop-new-chat" id="desktopNewChat" href="{% url 'messenger:contacts' %}?focus=search" title="Новый чат" aria-label="Новый чат">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h9m-4 12 2.8-.6L21 7l-4-4-8 8.2-.6 2.8L10 16Zm5.5-11.5 4 4"/></svg>
+      </a>
+      {% endif %}
       <button type="button" class="mobile-search-toggle" id="mobileSearchToggle" aria-label="Поиск" aria-expanded="false" aria-controls="chatFilter sidebarGlobalSearch">
         <svg class="mobile-search-open" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>
         <svg class="mobile-search-close" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
@@ -119,6 +124,10 @@
       </button>
       <button id="easterStar" class="footer-star" type="button" title="Одобрено Госпланом">★</button>
     </footer>
+    <div class="desktop-sidebar-resizer" id="desktopSidebarResizer" role="separator"
+         aria-label="Ширина списка чатов" aria-controls="desktopChatSidebar"
+         aria-orientation="vertical" aria-valuemin="280" aria-valuemax="520" aria-valuenow="360"
+         tabindex="0" title="Перетащите для изменения ширины. Двойное нажатие — сброс."></div>
   </aside>
 
   {% if selected_chat %}
@@ -713,7 +722,12 @@
     <main class="conversation conversation--empty">
       <div class="wallpaper" aria-hidden="true"></div>
       <div class="conversation-empty-hint">
-        {% if show_archived %}Выберите чат из архива{% else %}Выберите, кому хотели бы написать{% endif %}
+        <span class="desktop-empty-icon" aria-hidden="true">
+          <svg viewBox="0 0 48 48"><path d="M24 7C13.5 7 5 14.2 5 23c0 4.2 1.9 8.1 5 11l-2 7 8-3.2c2.5 1 5.2 1.5 8 1.5 10.5 0 19-7.2 19-16.3S34.5 7 24 7Z"/><path d="M15 24h.1m8.9 0h.1m8.9 0h.1" stroke-width="4"/></svg>
+        </span>
+        <strong>{% if show_archived %}Выберите чат из архива{% else %}Выберите чат{% endif %}</strong>
+        <small>{% if show_archived %}Откройте переписку в списке слева.{% else %}Откройте переписку или найдите человека через поиск.{% endif %}</small>
+        {% if not show_archived %}<a href="{% url 'messenger:contacts' %}?focus=search">Начать переписку</a>{% endif %}
       </div>
     </main>
   {% endif %}

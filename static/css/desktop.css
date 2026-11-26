@@ -1,0 +1,384 @@
+/* Sovietgram desktop workspace — Telegram-like proportions and hierarchy.
+   This is the exact complement of the existing mobile breakpoint. */
+.desktop-new-chat, .desktop-sidebar-resizer { display: none; }
+
+@media (min-width: 821px) and (min-height: 541px), (min-width: 1101px) {
+  body {
+    --sg-desktop-list: #fffaf1;
+    --sg-desktop-surface: #f8f2e9;
+    --sg-desktop-field: #eee5d9;
+    --sg-desktop-hover: #f0e7db;
+    --sg-desktop-active: #f1d7d4;
+    --sg-desktop-stage: #e7ded2;
+    --sg-desktop-incoming: #fffaf3;
+    --sg-desktop-outgoing: #f3d8d5;
+    --sg-desktop-accent: #b22b35;
+    --sg-desktop-secondary: #786a5c;
+    --sg-desktop-header-height: 60px;
+  }
+  body[data-theme="dark"] {
+    --sg-desktop-list: #1b1815;
+    --sg-desktop-surface: #211d1a;
+    --sg-desktop-field: #2c2622;
+    --sg-desktop-hover: #2a2420;
+    --sg-desktop-active: #482a29;
+    --sg-desktop-stage: #171412;
+    --sg-desktop-incoming: #2a2420;
+    --sg-desktop-outgoing: #4a2728;
+    --sg-desktop-accent: #f0787e;
+    --sg-desktop-secondary: #b0a08f;
+  }
+
+  /* Workspace and adjustable sidebar. */
+  .app-body .app-shell {
+    grid-template-columns: clamp(280px, var(--sg-desktop-sidebar, clamp(300px,28vw,400px)), min(520px,40vw)) minmax(0,1fr);
+    grid-template-rows: minmax(0,1fr);
+    gap: 0; min-width: 0; background: var(--sg-desktop-list);
+  }
+  .app-body .sidebar {
+    position: relative; width: 100%; min-height: 0;
+    display: flex; flex-direction: column; background: var(--sg-desktop-list);
+    border-right: 1px solid var(--line);
+  }
+  .desktop-sidebar-resizer {
+    display: block; position: absolute; z-index: 64;
+    inset: 0 0 0 auto; width: 7px; outline: 0;
+    cursor: col-resize; touch-action: none; user-select: none;
+  }
+  .desktop-sidebar-resizer::after {
+    content: ""; position: absolute; inset: 0 0 0 auto;
+    width: 2px; background: var(--sg-desktop-accent); opacity: 0;
+    transition: opacity .12s ease;
+  }
+  .desktop-sidebar-resizer:hover::after,
+  .desktop-sidebar-resizer:focus-visible::after,
+  body.is-resizing-sidebar .desktop-sidebar-resizer::after { opacity: .9; }
+  body.is-resizing-sidebar, body.is-resizing-sidebar * {
+    cursor: col-resize !important; user-select: none !important;
+  }
+
+  /* Search, new conversation and folder rails. */
+  body.app-body .sidebar .sidebar-searchbar {
+    min-height: var(--sg-desktop-header-height); height: var(--sg-desktop-header-height);
+    display: flex; flex: 0 0 auto; align-items: center; gap: 8px;
+    padding: 8px 10px; border-bottom: 1px solid var(--line);
+    background: var(--sg-desktop-surface);
+  }
+  body.app-body .sidebar .sidebar-searchbar__menu,
+  .desktop-new-chat {
+    flex: 0 0 36px; width: 36px; height: 36px;
+    color: var(--sg-desktop-secondary); border-radius: 8px;
+  }
+  body.app-body .sidebar .sidebar-searchbar__menu:hover,
+  .desktop-new-chat:hover { background: var(--sg-desktop-hover); color: var(--sg-desktop-accent); }
+  .desktop-new-chat {
+    display: grid; place-items: center; text-decoration: none;
+    transition: background .12s ease, color .12s ease;
+  }
+  .desktop-new-chat svg, .desktop-empty-icon svg {
+    width: 22px; height: 22px; fill: none; stroke: currentColor;
+    stroke-width: 1.7; stroke-linejoin: round; stroke-linecap: round;
+  }
+  body.app-body .sidebar .sidebar-searchbar__field {
+    flex: 1 1 0; min-width: 0; height: 38px; padding-inline: 10px;
+    border-radius: 9px; background: var(--sg-desktop-field);
+    color: var(--sg-desktop-secondary); box-shadow: none;
+  }
+  body.app-body .sidebar .sidebar-searchbar__field:focus-within {
+    box-shadow: inset 0 0 0 1px var(--sg-desktop-accent);
+  }
+  body.app-body .sidebar .sidebar-searchbar__field input {
+    font-size: 13.5px; color: var(--ink);
+  }
+  body.app-body .sidebar .sidebar-searchbar__field input::placeholder,
+  body.app-body .sidebar .sidebar-searchbar__icon { color: var(--sg-desktop-secondary); }
+  .app-body .sidebar-chat-tools, .app-body .chat-folder-strip {
+    min-height: 36px; flex-shrink: 0; padding-inline: 6px;
+    background: var(--sg-desktop-surface); border-bottom: 1px solid var(--line);
+  }
+  .app-body .sidebar-chat-filters { gap: 0; }
+  .app-body .sidebar-chat-filters button, .app-body .chat-folder-strip a,
+  .app-body .chat-folder-strip button {
+    min-height: 36px; padding: 7px 8px; font-size: 12px;
+    white-space: nowrap; color: var(--sg-desktop-secondary); opacity: 1;
+  }
+  .app-body .sidebar-chat-filters button[aria-pressed="true"],
+  .app-body .chat-folder-strip a[aria-current="page"] {
+    color: var(--sg-desktop-accent); border-bottom-color: var(--sg-desktop-accent);
+  }
+  .app-body .sidebar-chat-filters button:hover,
+  .app-body .chat-folder-strip a:hover, .app-body .chat-folder-strip button:hover {
+    background: var(--sg-desktop-hover);
+  }
+  .app-body .sidebar-mark-read { width: 30px; color: var(--sg-desktop-secondary); }
+  .app-body .sidebar-mark-read:hover { color: var(--sg-desktop-accent); }
+  .app-body .archive-page-heading { min-height: 48px; background: var(--sg-desktop-surface); }
+  .app-body .archive-page-heading strong { color: var(--ink); font-size: 14px; }
+  .app-body .archive-page-heading small { color: var(--sg-desktop-secondary); font-size: 11px; }
+  .app-body .sidebar-global-search {
+    top: var(--sg-desktop-header-height); bottom: 46px;
+    background: var(--sg-desktop-list); border: 0; box-shadow: none;
+  }
+  .app-body .global-search-result { min-height: 60px; }
+  .app-body .global-search-result strong { font-size: 14px; }
+  .app-body .global-search-result small { font-size: 12px; color: var(--sg-desktop-secondary); }
+  .app-body .global-search-section__title { font-size: 11px; letter-spacing: .035em; }
+
+  /* Flat two-line dialog list: time always aligns with the right edge,
+     unread badges and pin/mute flags occupy the preview line only. */
+  .app-body #chatList {
+    flex: 1 1 0; min-height: 0; min-width: 0; padding: 0;
+    background: var(--sg-desktop-list); overscroll-behavior: contain;
+    scrollbar-width: thin; scrollbar-color: color-mix(in srgb,var(--sg-desktop-secondary) 35%,transparent) transparent;
+  }
+  .app-body #chatList.chat-list--empty { padding: 20px; }
+  .app-body .chat-row {
+    position: relative; grid-template-columns: 49px minmax(0,1fr); gap: 11px;
+    min-height: 68px; padding: 8px 12px; border-bottom: 0;
+    background: transparent; color: var(--ink); box-shadow: none;
+    transition: background .1s ease;
+  }
+  .app-body .chat-row:hover { background: var(--sg-desktop-hover); }
+  .app-body .chat-row.is-active {
+    background: var(--sg-desktop-active); box-shadow: inset 3px 0 0 var(--sg-desktop-accent);
+  }
+  .app-body .chat-list.is-selecting .chat-row.is-selected {
+    background: color-mix(in srgb,var(--sg-desktop-active) 85%,var(--red));
+  }
+  .app-body .chat-row__avatar { width: 49px; height: 49px; font-size: 15px; }
+  .app-body .chat-row__body { width: 100%; padding-bottom: 2px; }
+  .app-body .chat-row__headline { gap: 8px; align-items: baseline; }
+  .app-body .chat-row__headline strong { font-size: 14px; font-weight: 680; }
+  .app-body .chat-row__headline time { font-size: 11px; white-space: nowrap; color: var(--sg-desktop-secondary); }
+  .app-body .chat-row__meta { display: none; }
+  .app-body .chat-row__preview {
+    font-size: 12.5px; line-height: 1.4; margin-top: 4px; color: var(--sg-desktop-secondary);
+  }
+  .app-body .chat-row__preview--draft, .app-body .chat-row__preview b { color: var(--sg-desktop-accent); }
+  .app-body .chat-row__flags { right: 12px; bottom: 12px; gap: 3px; color: var(--sg-desktop-secondary); }
+  .app-body .chat-row__flags:has(+ .chat-row__unread) { right: 42px; }
+  .app-body .chat-row:has(.chat-row__unread) .chat-row__preview { padding-right: 30px; }
+  .app-body .chat-row:has(.chat-row__flags > span) .chat-row__preview { padding-right: 38px; }
+  .app-body .chat-row:has(.chat-row__unread):has(.chat-row__flags > span) .chat-row__preview { padding-right: 66px; }
+  .app-body .chat-row__unread {
+    position: absolute; right: 12px; bottom: 10px; margin: 0;
+    min-width: 21px; height: 21px; padding: 0 6px; font-size: 11px;
+  }
+  .app-body .chat-row__unread--manual { min-width: 9px; width: 9px; height: 9px; bottom: 16px; padding: 0; }
+  .app-body .chat-row[data-chat-muted="true"] .chat-row__unread { background: #83766a; }
+  .app-body .archive-folder-row {
+    min-height: 68px; grid-template-columns: 49px minmax(0,1fr) auto;
+    padding: 8px 12px; gap: 11px; color: var(--ink);
+  }
+  .app-body .archive-folder-row:hover { background: var(--sg-desktop-hover); }
+  .app-body .archive-folder-row__avatar { width: 49px; height: 49px; }
+  .app-body .archive-folder-row__body strong { font-size: 14px; }
+  .app-body .archive-folder-row__body small { font-size: 12px; color: var(--sg-desktop-secondary); }
+  .app-body .archive-select-marker { left: 42px; top: 42px; }
+  .app-body .chat-empty strong { color: var(--ink); font-size: 16px; }
+  .app-body .chat-empty p, .app-body .chat-filter-empty { color: var(--sg-desktop-secondary); font-size: 13px; }
+  .app-body .sidebar__footer {
+    flex: 0 0 46px; min-height: 46px; margin: 0;
+    grid-template-columns: minmax(0,1fr) auto auto auto; gap: 4px;
+    padding: 5px 10px; background: var(--sg-desktop-surface);
+  }
+  .app-body .account-mini__name { color: var(--ink); font-size: 12px; font-weight: 600; }
+  .app-body .sidebar__footer button { width: 30px; height: 32px; border-radius: 7px; }
+  .app-body .sidebar__footer button:hover { background: var(--sg-desktop-hover); }
+
+  /* Conversation header and history. Pins/selection stay in normal flow,
+     so they no longer cover the first visible messages. */
+  .app-body .conversation--chat {
+    display: flex; flex-direction: column; height: 100%; min-height: 0;
+    background: var(--sg-desktop-stage);
+  }
+  .app-body .conversation-header {
+    min-height: var(--sg-desktop-header-height); height: var(--sg-desktop-header-height);
+    flex: 0 0 auto; gap: 10px; padding: 7px 14px;
+    background: var(--sg-desktop-surface); border-color: var(--line); backdrop-filter: none;
+  }
+  .app-body .mobile-back { display: none; }
+  .app-body .conversation-header__identity {
+    min-width: 0; gap: 11px; padding: 0; text-align: left;
+  }
+  .app-body .conversation-header__avatar { width: 42px; height: 42px; font-size: 14px; }
+  .app-body .conversation-header__text strong { font-size: 15px; font-weight: 680; line-height: 1.25; }
+  .app-body .conversation-header__text small { font-size: 12px; margin-top: 2px; color: var(--sg-desktop-secondary); }
+  .app-body .conversation-header__actions { gap: 4px; flex-shrink: 0; }
+  .app-body .conversation-header__actions .icon-button {
+    width: 38px; height: 38px; border-radius: 8px; color: var(--sg-desktop-secondary);
+  }
+  .app-body .conversation-header__actions .icon-button:hover {
+    background: var(--sg-desktop-hover); color: var(--sg-desktop-accent);
+  }
+  .app-body .chat-menu { top: calc(100% + 6px); max-height: calc(100dvh - 76px); overflow-y: auto; border-radius: 9px; }
+  .app-body .chat-menu button, .app-body .chat-menu a { min-height: 39px; font-size: 13px; }
+  .app-body .chat-search-panel {
+    top: var(--sg-desktop-header-height); right: 8px; width: min(390px,calc(100% - 16px));
+    max-height: calc(100% - 76px); border-radius: 9px;
+  }
+  .app-body .pinned-message-bar, .app-body .message-selection-bar {
+    position: relative; top: auto; left: auto; right: auto;
+    flex: 0 0 auto; min-height: 46px; background: var(--sg-desktop-surface);
+    box-shadow: none; border-color: var(--line);
+  }
+  .app-body .pinned-message-bar__copy strong { font-size: 12px; }
+  .app-body .pinned-message-bar__copy > span { font-size: 12px; }
+  .app-body .message-stage {
+    width: 100%; flex: 1 1 0; min-height: 0; overflow-x: hidden;
+    background: var(--sg-desktop-stage); scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb,var(--sg-desktop-secondary) 40%,transparent) transparent;
+  }
+  .app-body .message-stage > .wallpaper, .app-body .conversation--empty > .wallpaper { opacity: .1; }
+  .app-body .message-flow, .app-body .message-stage.has-pins .message-flow {
+    max-width: 980px; padding: 18px clamp(34px,4vw,48px) 18px;
+  }
+  .app-body .conversation.is-message-selection .message-stage { padding-top: 0; }
+  .app-body .dialog-start {
+    width: min(340px,100%); padding: 18px 22px; border-radius: 13px;
+    border-color: var(--line); background: var(--sg-desktop-surface); box-shadow: none;
+  }
+  .app-body .dialog-start strong { font-size: 15px; }
+  .app-body .dialog-start p, .app-body .dialog-start small { font-size: 12px; color: var(--sg-desktop-secondary); }
+  .app-body .message {
+    max-width: min(590px,88%); min-width: 0; margin-bottom: 5px;
+    padding: 8px 11px 6px; border-radius: 11px; border-color: transparent;
+  }
+  .app-body .message:not(.is-selected):not(.is-pinned) { box-shadow: none; }
+  .app-body .message--incoming:not(:has(.message-sticker):not(:has(.message__text))) {
+    border-bottom-left-radius: 4px; background: var(--sg-desktop-incoming);
+  }
+  .app-body .message--outgoing:not(:has(.message-sticker):not(:has(.message__text))) {
+    border-bottom-right-radius: 4px; background: var(--sg-desktop-outgoing);
+  }
+  .app-body .message__text { font-size: 14px; line-height: 1.45; }
+  .app-body .message footer { font-size: 10.5px; margin-top: 3px; gap: 5px; }
+  .app-body .message--incoming footer { color: var(--sg-desktop-secondary); }
+  .app-body .message-reply-preview strong, .app-body .message-reply-preview span { font-size: 11px; }
+  .app-body .message-forwarded strong { font-size: 11px; }
+  .app-body .message-media__image, .app-body .message-media__video { max-width: 100%; }
+  .app-body .message-special, .app-body .message-media__audio, .app-body .message-file-card {
+    max-width: 100%; min-width: min(290px,100%);
+  }
+  .app-body .message__text.markdown-body pre { max-width: 100%; overflow-x: auto; }
+  .app-body .message-action-trigger {
+    top: 3px; right: -31px; width: 27px; height: 27px;
+    color: var(--sg-desktop-secondary); background: var(--sg-desktop-surface); box-shadow: none;
+  }
+  .app-body .message--outgoing .message-action-trigger { left: -31px; right: auto; }
+  .app-body .message-context-menu { max-height: calc(100dvh - 16px); overflow-y: auto; }
+  .app-body .message-context-menu button { font-size: 13px; min-height: 38px; }
+
+  /* Flat composer with separate attachment and send/voice buttons.
+     Keep the existing 16px chrome used by chat.js autosizing. */
+  .app-body .composer {
+    flex: 0 0 auto; grid-template-columns: auto minmax(0,1fr) auto;
+    min-height: 60px; gap: 7px; padding: 7px 12px 8px;
+    background: var(--sg-desktop-surface); border-color: var(--line);
+  }
+  .app-body .composer__field {
+    grid-column: 2; min-width: 0; min-height: 44px;
+    border: 1px solid transparent; padding: 7px 8px; background: transparent;
+    border-radius: 7px; gap: 4px;
+  }
+  .app-body .composer__field #messageInput {
+    min-width: 0; width: 0; flex: 1 1 0; font-size: 14px;
+    color: var(--ink); line-height: 1.45; padding-inline: 2px;
+  }
+  .app-body .composer__field #messageInput::placeholder { color: var(--sg-desktop-secondary); }
+  .app-body .composer__field .composer-tool-button {
+    width: 32px; height: 30px; flex: 0 0 32px; border-radius: 7px;
+    opacity: 1; color: var(--sg-desktop-secondary);
+  }
+  .app-body .composer__field .composer-tool-button:hover,
+  .app-body .composer__field .composer-tool-button[aria-expanded="true"] {
+    color: var(--sg-desktop-accent); background: var(--sg-desktop-hover);
+  }
+  .app-body .composer__field .composer-tools { gap: 2px; }
+  .app-body .attachment-control { grid-column: 1; width: 42px; height: 44px; }
+  .app-body .composer__attach-button { width: 42px; height: 44px; color: var(--sg-desktop-secondary); }
+  .app-body .composer__attach-button:hover { background: var(--sg-desktop-hover); color: var(--sg-desktop-accent); }
+  .app-body .composer-action-button { grid-column: 3; width: 44px; height: 44px; box-shadow: none; }
+  .app-body .composer-action-button:not(.is-voice-mode) { background: var(--red); }
+  .app-body .composer-action-button:hover { transform: none; }
+  .app-body .composer-reply { padding-inline: 7px; }
+  .app-body .composer-reply__copy strong, .app-body .composer-reply__copy small { font-size: 12px; }
+  .app-body .voice-recording-bar { min-height: 60px; }
+  .app-body .channel-readonly { flex: 0 0 auto; background: var(--sg-desktop-surface); }
+  .app-body .attachment-menu button { min-height: 42px; font-size: 13px; }
+
+  /* Empty workspace: useful instructions instead of a tiny floating tooltip. */
+  .app-body .conversation--empty { background: var(--sg-desktop-stage); }
+  body.app-body .conversation-empty-hint {
+    width: min(360px,calc(100% - 48px)); max-width: none;
+    display: grid; justify-items: center; gap: 10px;
+    padding: 28px 20px; border: 0; border-radius: 0;
+    background: transparent; color: var(--ink);
+    box-shadow: none; backdrop-filter: none; pointer-events: auto;
+    font-weight: 400; text-align: center;
+  }
+  .desktop-empty-icon {
+    display: grid; place-items: center; width: 74px; height: 74px;
+    margin-bottom: 4px; border-radius: 50%;
+    background: var(--sg-desktop-field); color: var(--sg-desktop-accent);
+  }
+  .desktop-empty-icon svg { width: 42px; height: 42px; stroke-width: 2; }
+  .conversation-empty-hint strong { font-size: 20px; line-height: 1.3; font-weight: 650; }
+  .conversation-empty-hint small { font-size: 13px; line-height: 1.45; color: var(--sg-desktop-secondary); }
+  .conversation-empty-hint a {
+    display: inline-flex; align-items: center; justify-content: center; min-height: 36px;
+    margin-top: 6px; padding: 0 15px; border-radius: 7px;
+    background: var(--red); color: #fff; font-size: 13px; font-weight: 650; text-decoration: none;
+  }
+  .conversation-empty-hint a:hover { filter: brightness(1.08); }
+
+  /* Keep popups compact, but avoid the tiny desktop type of the old UI. */
+  .app-body .profile-drawer--telegram { width: min(320px,92vw); }
+  .app-body .profile-account-header { min-height: 150px; }
+  .app-body .profile-account-header__bottom strong { font-size: 17px; }
+  .app-body .profile-drawer__nav--telegram a { min-height: 44px; font-size: 14px; gap: 8px; }
+  .app-body .profile-drawer__nav--telegram a strong { font-weight: 560; }
+  .user-profile-overlay > .tg-profile {
+    width: min(420px,calc(100vw - 32px)); border-radius: 10px;
+  }
+  .tg-profile__topbar { min-height: 50px; }
+  .tg-profile__hero { padding-bottom: 20px; }
+  .tg-profile__hero h2, .tg-profile__view.is-foreign .tg-profile__hero h2 { font-size: 19px; }
+  .tg-profile__hero p { font-size: 13px; }
+  .tg-profile__row strong { font-size: 14px; }
+  .tg-profile__row small { font-size: 12px; }
+  .tg-profile__view.is-foreign .tg-peer-actions > button { min-height: 60px; font-size: 13px; }
+  .tg-profile__view.is-foreign .tg-peer-menu button, .tg-profile__view.is-foreign .tg-peer-menu a {
+    min-height: 41px; font-size: 13px;
+  }
+  .tg-settings-overlay .tg-settings-window {
+    width: min(460px,calc(100vw - 32px)); height: min(700px,calc(100dvh - 32px));
+    min-height: 0; border-radius: 10px;
+  }
+  .tg-settings-topbar__title { font-size: 16px; font-weight: 650; }
+  .tg-settings-row { min-height: 46px; font-size: 13.5px; }
+  .tg-settings-row__label { font-weight: 450; }
+  .tg-settings-row__value { font-size: 12px; }
+  .tg-settings-cover__copy small { font-size: 13px; }
+  .tg-settings-popup a, .tg-settings-popup button { min-height: 40px; font-size: 13px; }
+  .community-profile { width: min(410px,100vw); }
+  .community-profile__quick-actions small { font-size: 12px; }
+  .community-profile__info-row strong, .community-profile__about p { font-size: 14px; }
+  .contacts-body .contacts-card--telegram { width: min(560px,calc(100vw - 32px)); border-radius: 12px; }
+  .contacts-topbar--compact strong { font-size: 17px; }
+  .telegram-actions strong, .person-row__identity strong { font-size: 14px; }
+  .telegram-actions small, .person-row__identity small { font-size: 12px; }
+  .telegram-row-button { font-size: 12px; min-height: 34px; }
+
+  .desktop-new-chat:focus-visible, .app-body .chat-row:focus-visible,
+  .app-body .sidebar-chat-filters button:focus-visible, .app-body .chat-folder-strip a:focus-visible {
+    outline: 2px solid var(--sg-desktop-accent); outline-offset: -2px;
+  }
+}
+
+@media (min-width: 821px) and (max-width: 1050px) and (min-height: 541px) {
+  .app-body .conversation-header { padding-inline: 10px; }
+  .app-body .message-flow, .app-body .message-stage.has-pins .message-flow { padding-inline: 33px; }
+  .app-body .composer { gap: 4px; padding-inline: 8px; }
+  .app-body .composer__field .composer-tool-button { width: 28px; flex-basis: 28px; }
+}
