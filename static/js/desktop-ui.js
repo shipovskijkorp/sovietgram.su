@@ -24,6 +24,29 @@
   let current = 0;
   let frame = 0;
   const stage = document.getElementById("messageStage");
+  const bottomBar = shell.querySelector(".conversation--chat > #messageForm, .conversation--chat > .channel-readonly");
+  const heightProperty = "--sg-desktop-bottom-height";
+
+  // The footer's border box follows the actual composer, including a
+  // multiline draft, replies and other in-flow composer controls.
+  // Observe only the right-hand bar: updating the sidebar cannot trigger
+  // an independent resize loop on the footer itself.
+  function syncBottomBar() {
+    if (!desktop.matches || !bottomBar) {
+      shell.style.removeProperty(heightProperty);
+      return;
+    }
+    const height = bottomBar.getBoundingClientRect().height;
+    if (height <= 0) return;
+    const value = height + "px";
+    if (shell.style.getPropertyValue(heightProperty) !== value) {
+      shell.style.setProperty(heightProperty, value);
+    }
+  }
+  if (bottomBar && typeof ResizeObserver !== "undefined") {
+    const observer = new ResizeObserver(syncBottomBar);
+    observer.observe(bottomBar, {box:"border-box"});
+  }
   function setWidth(width) {
     if (!desktop.matches) return;
     const follow = stage && stage.scrollHeight - stage.scrollTop - stage.clientHeight < 60;
@@ -36,6 +59,7 @@
     frame = requestAnimationFrame(() => {
       frame = 0;
       window.SovietgramChat?.resizeComposer?.();
+      syncBottomBar();
       if (follow && stage) stage.scrollTop = stage.scrollHeight;
     });
   }
@@ -106,9 +130,11 @@
     if (!desktop.matches) {
       finish(false);
       shell.style.removeProperty("--sg-desktop-sidebar");
+      syncBottomBar();
       return;
     }
     setWidth(preferred ?? defaultWidth());
+    syncBottomBar();
   }
   if (desktop.addEventListener) desktop.addEventListener("change", updateLayout);
   else desktop.addListener(updateLayout);

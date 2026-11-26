@@ -447,6 +447,29 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.assertEqual(MessageSendReceipt.objects.filter(sender=self.owner).count(), 1)
         second.close()
 
+    def test_desktop_footer_follows_composer_height(self):
+        self.go(self.direct)
+        def aligned():
+            self.page.wait_for_function("""() => {
+                const footer = document.querySelector("#desktopChatSidebar > .sidebar__footer");
+                const composer = document.querySelector("#messageForm");
+                const a = footer.getBoundingClientRect(), b = composer.getBoundingClientRect();
+                return Math.abs(a.top - b.top) <= 1 && Math.abs(a.height - b.height) <= 1
+                    && Math.abs(a.bottom - b.bottom) <= 1;
+            }""")
+        aligned()
+        initial = self.page.locator("#messageForm").bounding_box()["height"]
+        self.page.locator("#messageInput").fill("One\nTwo\nThree\nFour\nFive")
+        self.page.wait_for_function("(h) => document.querySelector('#messageForm').getBoundingClientRect().height > h + 10", arg=initial)
+        aligned()
+        self.page.locator("#messageInput").fill("")
+        self.page.wait_for_function("(h) => Math.abs(document.querySelector('#messageForm').getBoundingClientRect().height - h) <= 1", arg=initial)
+        aligned()
+        self.page.set_viewport_size({"width": 390, "height": 844})
+        self.hidden("#desktopChatSidebar")
+        self.page.set_viewport_size({"width": 1360, "height": 900})
+        aligned()
+
     def test_desktop_workspace_and_resizable_chat_list(self):
         self.go()
         self.visible("#desktopSidebarResizer")

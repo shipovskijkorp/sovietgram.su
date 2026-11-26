@@ -15,6 +15,8 @@
     --sg-desktop-accent: #b22b35;
     --sg-desktop-secondary: #786a5c;
     --sg-desktop-header-height: 60px;
+    --sg-desktop-bottom-min: 60px;
+    --sg-desktop-bottom-height: var(--sg-desktop-bottom-min);
   }
   body[data-theme="dark"] {
     --sg-desktop-list: #1b1815;
@@ -116,7 +118,7 @@
   .app-body .archive-page-heading strong { color: var(--ink); font-size: 14px; }
   .app-body .archive-page-heading small { color: var(--sg-desktop-secondary); font-size: 11px; }
   .app-body .sidebar-global-search {
-    top: var(--sg-desktop-header-height); bottom: 46px;
+    top: var(--sg-desktop-header-height); bottom: var(--sg-desktop-bottom-height);
     background: var(--sg-desktop-list); border: 0; box-shadow: none;
   }
   .app-body .global-search-result { min-height: 60px; }
@@ -178,7 +180,9 @@
   .app-body .chat-empty strong { color: var(--ink); font-size: 16px; }
   .app-body .chat-empty p, .app-body .chat-filter-empty { color: var(--sg-desktop-secondary); font-size: 13px; }
   .app-body .sidebar__footer {
-    flex: 0 0 46px; min-height: 46px; margin: 0;
+    flex: 0 0 var(--sg-desktop-bottom-height);
+    height: var(--sg-desktop-bottom-height); min-height: var(--sg-desktop-bottom-min);
+    margin: 0; box-sizing: border-box;
     grid-template-columns: minmax(0,1fr) auto auto auto; gap: 4px;
     padding: 5px 10px; background: var(--sg-desktop-surface);
   }
@@ -273,7 +277,7 @@
      Keep the existing 16px chrome used by chat.js autosizing. */
   .app-body .composer {
     flex: 0 0 auto; grid-template-columns: auto minmax(0,1fr) auto;
-    min-height: 60px; gap: 7px; padding: 7px 12px 8px;
+    min-height: var(--sg-desktop-bottom-min); gap: 7px; padding: 7px 12px 8px;
     background: var(--sg-desktop-surface); border-color: var(--line);
   }
   .app-body .composer__field {
@@ -304,7 +308,7 @@
   .app-body .composer-reply { padding-inline: 7px; }
   .app-body .composer-reply__copy strong, .app-body .composer-reply__copy small { font-size: 12px; }
   .app-body .voice-recording-bar { min-height: 60px; }
-  .app-body .channel-readonly { flex: 0 0 auto; background: var(--sg-desktop-surface); }
+  .app-body .channel-readonly { flex: 0 0 auto; min-height: var(--sg-desktop-bottom-min); background: var(--sg-desktop-surface); }
   .app-body .attachment-menu button { min-height: 42px; font-size: 13px; }
 
   /* Empty workspace: useful instructions instead of a tiny floating tooltip. */
