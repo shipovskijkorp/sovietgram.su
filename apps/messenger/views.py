@@ -86,7 +86,7 @@ from .models import (
     Sticker,
     VoiceMessagePlayback,
 )
-from .models import MessageReaction, MessageSendReceipt
+from .models import ChannelPostView, MessageReaction, MessageSendReceipt
 from .contact_names import contact_aliases, contact_display_name, normalize_alias
 from .ratelimit import rate_limit
 from .services import (
@@ -2960,6 +2960,56 @@ def mention_candidates(request, chat_id):
             and not is_blocked_between(request.user, candidate)
         ][:8],
     })
+
+
+@login_required
+@require_POST
+@rate_limit("channel_post_views")
+def channel_post_views(request, chat_id):
+    if request.POST.get("account_id") != str(request.user.pk):
+        return JsonResponse({"ok": False, "error": "Аккаунт изменился."}, status=409)
+    chat = _chat_for_user(request.user, chat_id)
+    if chat.type != Chat.Type.CHANNEL:
+        raise Http404
+    raw = request.POST.get("ids", "")
+    try:
+        if len(raw) > 2100:
+            raise ValueError
+        values = raw.split(",") if raw else []
+        if not 1 <= len(values) <= 100:
+            raise ValueError
+        ids = {int(value) for value in values}
+        if any(not 0 < value <= 9223372036854775807 for value in ids):
+            raise ValueError
+    except (ValueError, TypeError, OverflowError):
+        return JsonResponse({"ok": False, "error": "Некорректные идентификаторы публикаций."}, status=400)
+    with transaction.atomic():
+        # Match the chat/membership lock order used by community mutations.
+        chat = get_object_or_404(Chat.objects.select_for_update(), pk=chat.pk, type=Chat.Type.CHANNEL)
+        membership = ChatParticipant.objects.select_for_update().filter(
+            chat=chat, user=request.user, is_hidden=False,
+        ).first()
+        if membership is None or is_banned(chat, request.user.pk):
+            raise Http404
+        visible_ids = list(_visible_message_queryset(chat, request.user).filter(
+            pk__in=ids, is_deleted=False,
+        ).order_by().values_list("pk", flat=True).distinct())
+        if visible_ids:
+            # Account/post uniqueness is enforced by the database, including
+            # repeated or concurrent acknowledgements from different devices.
+            existing = set(ChannelPostView.objects.filter(
+                user=request.user, post_id__in=visible_ids,
+            ).values_list("post_id", flat=True))
+            ChannelPostView.objects.bulk_create([
+                ChannelPostView(post_id=pk, user=request.user)
+                for pk in visible_ids if pk not in existing
+            ], ignore_conflicts=True)
+        totals = dict(ChannelPostView.objects.filter(post_id__in=visible_ids)
+                      .values("post_id").annotate(total=Count("id")).values_list("post_id", "total"))
+    response = JsonResponse({"ok": True, "account_id": request.user.pk,
+                             "counts": {pk: totals.get(pk, 0) for pk in visible_ids}})
+    response["Cache-Control"] = "private, no-store"
+    return response
 
 
 @login_required

@@ -138,6 +138,7 @@
           data-chat-action-url="{% url 'messenger:chat_action' selected_chat.pk %}"
           data-special-send-url="{% url 'messenger:send_special_message' selected_chat.pk %}"
           data-chat-type="{{ selected_chat.type }}"
+          {% if selected_chat.type == 'channel' %}data-channel-views-url="{% url 'messenger:channel_post_views' selected_chat.pk %}"{% endif %}
           data-allowed-reactions="{{ allowed_reactions|join:',' }}"
           data-chat-role="{{ active_membership.role }}"
           data-can-moderate-messages="{{ can_moderate_messages|yesno:'true,false' }}"
@@ -587,6 +588,7 @@
               <footer>
                 {% if message.signature_name %}<span class="message-channel-signature">{{ message.signature_name }}</span>{% endif %}
                 {% if message.edited_at %}<span class="message-edited">изм.</span>{% endif %}
+                {% if selected_chat.type == 'channel' %}<span class="channel-post-views" title="Уникальные просмотры" aria-label="Просмотры: нет данных"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/></svg><span data-channel-view-count>—</span></span>{% endif %}
                 <time>{{ message.created_at|date:'H:i' }}</time>
                 {% if message.sender_id == request.user.pk %}<span class="message-check" role="img" data-read-state="{% if message.is_read_ui %}read{% else %}sent{% endif %}" aria-label="{% if message.is_read_ui %}Прочитано{% else %}Отправлено{% endif %}" title="{% if message.is_read_ui %}Прочитано{% else %}Отправлено{% endif %}"></span>{% endif %}
               </footer>
@@ -1292,6 +1294,7 @@
 <script src="{% static 'js/attachment-files.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/read-ack.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/channel-discussions.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/channel-views.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/chat.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/media-gallery.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/scheduled-messages.js' %}?v={{ static_version }}"></script>

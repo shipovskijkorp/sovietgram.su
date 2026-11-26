@@ -107,6 +107,7 @@ jobs:
           node --check static/js/read-ack.js
           node --check static/js/chat.js
           node --check static/js/channel-discussions.js
+          node --check static/js/channel-views.js
           node --check static/js/media-gallery.js
           node --check static/js/voice-messages.js
           node --check static/js/community-wizard.js

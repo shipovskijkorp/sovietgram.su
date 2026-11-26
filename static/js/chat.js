@@ -460,6 +460,7 @@ function buildMessageArticle(message) {
     edited.textContent = "изм.";
     footer.appendChild(edited);
   }
+  if (conversation.dataset.channelViewsUrl) window.SovietgramChannelViews?.append(footer);
   const time = document.createElement("time");
   time.textContent = message.time;
   footer.appendChild(time);

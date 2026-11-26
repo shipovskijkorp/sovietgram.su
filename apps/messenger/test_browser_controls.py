@@ -644,6 +644,37 @@ class BrowserControlsTests(StaticLiveServerTestCase):
                         self.expect(option).to_have_css("color", ink)
                         self.expect(option).to_have_css("background-color", surface)
 
+    def test_contact_alias_and_channel_post_view_counter(self):
+        from .models import Contact, ChannelPostView
+
+        Contact.objects.create(owner=self.owner, user=self.peer)
+        self.go(query="?profile=peer")
+        self.visible("#userProfileOverlay")
+        self.click("#userProfileMore")
+        self.click("#userProfileRenameContact")
+        self.page.locator("#userProfileAliasInput").fill("Личный контакт")
+        self.click("#userProfileAliasSave")
+        self.expect(self.page.locator("#userProfileName")).to_have_text("Личный контакт")
+        self.visible("#userProfileOriginalNameRow")
+        self.click("#userProfileClose")
+        self.expect(self.page.locator(f'#chatList [data-chat-id="{self.direct.pk}"] strong')).to_have_text("Личный контакт")
+        self.go(self.direct)
+        self.expect(self.page.locator(".conversation-header__text strong")).to_have_text("Личный контакт")
+        self.click(".conversation-header__identity")
+        self.click("#userProfileMore")
+        self.click("#userProfileRenameContact")
+        self.click("#userProfileAliasReset")
+        self.expect(self.page.locator("#userProfileName")).to_have_text("peer")
+        self.hidden("#userProfileOriginalNameRow")
+
+        post = Message.objects.create(chat=self.channel, sender=self.owner, text="Просмотры канала")
+        self.go(self.channel)
+        count = self.page.locator(f'#message-{post.pk} [data-channel-view-count]')
+        self.expect(count).to_have_text("1", timeout=15000)
+        self.page.reload(wait_until="domcontentloaded")
+        self.expect(count).to_have_text("1", timeout=15000)
+        self.assertEqual(ChannelPostView.objects.filter(post=post).count(), 1)
+
     def test_foreign_profile_controls(self):
         self.go(query="?profile=peer")
         self.visible("#userProfileOverlay")

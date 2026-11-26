@@ -1762,3 +1762,6 @@ body[data-theme="dark"] .channel-discussion { background:#211d1a; }
 /* More reactions use a compact, scrollable picker instead of widening the menu. */
 .message-reaction-picker { max-height: min(136px, 27dvh); overflow-y: auto; overscroll-behavior: contain; }
 .message-context-menu .message-reaction-picker button[hidden] { display: none !important; }
+
+.channel-post-views { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+.channel-post-views svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }

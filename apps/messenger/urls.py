@@ -43,6 +43,7 @@ urlpatterns = [
     path("chat/<int:chat_id>/scheduled/<int:scheduled_id>/", scheduled.scheduled_action, name="scheduled_action"),
     path("chat/<int:chat_id>/send-special/", views.send_special_message, name="send_special_message"),
     path("chat/<int:chat_id>/poll/", views.poll_messages, name="poll_messages"),
+    path("chat/<int:chat_id>/views/", views.channel_post_views, name="channel_post_views"),
     path("chat/<int:chat_id>/history/", views.message_history, name="message_history"),
     path("chat/<int:chat_id>/gallery/", views.chat_gallery, name="chat_gallery"),
     path("chat/<int:chat_id>/read/", views.read_messages, name="read_messages"),

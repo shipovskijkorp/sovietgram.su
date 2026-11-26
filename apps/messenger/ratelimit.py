@@ -12,6 +12,7 @@ DEFAULT_RATE_LIMITS = {
     "typing": {"limit": 120, "window": 60},
     "message_reaction": {"limit": 120, "window": 60},
     "channel_discussion_read": {"limit": 120, "window": 60},
+    "channel_post_views": {"limit": 40, "window": 60},
     "channel_discussion_write": {"limit": 30, "window": 60},
     "mention_candidates": {"limit": 90, "window": 60},
     "markdown_preview": {"limit": 30, "window": 60},

@@ -252,6 +252,20 @@ class Message(models.Model):
         return self.preview[:80]
 
 
+class ChannelPostView(models.Model):
+    """A unique authenticated account viewing a channel publication."""
+
+    post = models.ForeignKey(Message, on_delete=models.CASCADE, related_name="channel_views")
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="channel_post_views",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=("post", "user"), name="sg_channel_post_view_once"),
+        ]
+
+
 class MessageHiddenForUser(models.Model):
     message = models.ForeignKey(
         Message,
