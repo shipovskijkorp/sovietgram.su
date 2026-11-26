@@ -1,5 +1,6 @@
 """Private sticker library; every sent sticker becomes an immutable chat attachment."""
 from io import BytesIO
+from math import isfinite
 from uuid import uuid4
 import warnings
 
@@ -22,31 +23,94 @@ MAX_UPLOAD = 2 * 1024 * 1024
 MAX_STICKER = 256 * 1024
 
 
+# Animation budgets bound decoded memory, frame count and encoder work.
+MAX_ANIMATION_FRAMES = 60
+MAX_ANIMATION_DURATION_MS = 5000
+MAX_ANIMATION_PIXELS = 20 * 1024 * 1024
+MAX_ANIMATION_EDGE = 1024
+
+
+def clean_frame(frame, edge=512):
+    rgba = frame.convert("RGBA")
+    rgba.thumbnail((edge, edge), Image.Resampling.LANCZOS)
+    # The fresh canvas preserves alpha while dropping source metadata.
+    clean = Image.new("RGBA", rgba.size)
+    clean.paste(rgba)
+    return clean
+
+
+def normalize_animation(image, count):
+    # APNG may contain a standalone poster before the actual animation.
+    start = 1 if image.format == "PNG" and image.info.get("default_image") else 0
+    frames_count = count - start
+    if not 1 <= frames_count <= MAX_ANIMATION_FRAMES:
+        raise ValueError("Анимация должна содержать не более 60 кадров.")
+    if (max(image.size) > MAX_ANIMATION_EDGE
+            or image.width * image.height * frames_count > MAX_ANIMATION_PIXELS):
+        raise ValueError("Слишком большое разрешение или число пикселей анимации.")
+    frames, durations = [], []
+    total = 0
+    for index in range(start, count):
+        image.seek(index)
+        # Pillow composes disposal/blending for GIF/APNG. Loading also sets
+        # the duration for animated WebP before the frame is copied.
+        image.load()
+        raw = float(image.info.get("duration", 100) or 100)
+        if not isfinite(raw) or raw < 0:
+            raise ValueError("Некорректная длительность кадра.")
+        duration = max(20, round(raw))
+        total += duration
+        if total > MAX_ANIMATION_DURATION_MS:
+            raise ValueError("Анимация должна длиться не более 5 секунд.")
+        durations.append(duration)
+        frames.append(clean_frame(image))
+    if len(frames) == 1:
+        return encode_static(frames[0])
+
+    # Bounded attempts: preserve motion, transparency and frame order;
+    # reduce image quality/resolution rather than drop or speed up frames.
+    for edge, quality in ((512, 80), (512, 55), (384, 50), (256, 35)):
+        encoded = frames if max(frames[0].size) <= edge else [
+            clean_frame(frame, edge) for frame in frames
+        ]
+        output = BytesIO()
+        encoded[0].save(
+            output, format="WEBP", save_all=True, append_images=encoded[1:],
+            duration=durations, loop=0, quality=quality, method=2,
+        )
+        if output.tell() <= MAX_STICKER:
+            return output.getvalue()
+    raise ValueError("Не удалось сжать анимированный стикер до 256 КБ.")
+
+
+def encode_static(clean):
+    for quality in (90, 75, 55, 35):
+        output = BytesIO()
+        clean.save(output, format="WEBP", quality=quality, method=4)
+        if output.tell() <= MAX_STICKER:
+            return output.getvalue()
+    raise ValueError("Не удалось сжать стикер до 256 КБ.")
+
+
 def normalize_image(source):
-    """Decode only bounded static raster images and discard metadata."""
+    """Normalize bounded static or animated raster images to WebP."""
     if len(source) > MAX_UPLOAD:
         raise ValueError("Изображение должно быть не больше 2 МБ.")
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
             with Image.open(BytesIO(source)) as image:
-                if image.format not in {"PNG", "WEBP", "JPEG"} or getattr(image, "n_frames", 1) != 1:
-                    raise ValueError("Используйте статический PNG, WebP или JPEG.")
+                if image.format not in {"PNG", "WEBP", "JPEG", "GIF"}:
+                    raise ValueError("Используйте PNG, WebP, GIF или JPEG.")
                 if image.width * image.height > 4096 * 4096 or max(image.size) > 4096:
                     raise ValueError("Слишком большое разрешение изображения.")
-                image = ImageOps.exif_transpose(image).convert("RGBA")
-                image.thumbnail((512, 512), Image.Resampling.LANCZOS)
-                # A fresh canvas strips EXIF, ICC and other input metadata.
-                clean = Image.new("RGBA", image.size)
-                clean.paste(image)
-                for quality in (90, 75, 55, 35):
-                    output = BytesIO()
-                    clean.save(output, format="WEBP", quality=quality, method=4)
-                    if output.tell() <= MAX_STICKER:
-                        return output.getvalue()
-    except (UnidentifiedImageError, OSError, Image.DecompressionBombError, Image.DecompressionBombWarning):
+                count = getattr(image, "n_frames", 1)
+                if count > 1:
+                    return normalize_animation(image, count)
+                return encode_static(clean_frame(ImageOps.exif_transpose(image)))
+    except (UnidentifiedImageError, OSError, EOFError, SyntaxError, OverflowError,
+            Image.DecompressionBombError, Image.DecompressionBombWarning):
         raise ValueError("Не удалось прочитать изображение.") from None
-    raise ValueError("Не удалось сжать стикер до 256 КБ.")
 
 
 def error(message, status=400):

@@ -19,13 +19,14 @@
   <div id="stickerGrid" class="sticker-grid"></div>
   <label class="sticker-silent" id="stickerSilentRow" hidden><input type="checkbox" id="stickerSilent"> Отправить без звука</label>
   <form id="stickerUploadForm" hidden>
-    <label>Добавить изображение <input type="file" id="stickerFile" accept="image/png,image/webp,image/jpeg" required></label>
+    <label>Добавить изображение <input type="file" id="stickerFile" accept="image/png,image/webp,image/jpeg,image/gif" required></label>
     <label>Эмодзи или подпись (необязательно)<input id="stickerEmoji" maxlength="24" placeholder="😀"></label>
     <button type="submit">Добавить стикер</button>
-    <small>PNG, WebP, JPEG до 2 МБ. Размер автоматически приводится к 512 пикселям или меньше.</small>
+    <small>PNG, WebP, GIF, JPEG до 2 МБ. Анимация: до 5 секунд и 60 кадров; результат — WebP до 256 КБ и 512 пикселей.</small>
   </form>
   <div class="sticker-pack-actions">
     <button type="button" id="stickerCreatePack">Создать набор</button>
+    <button type="button" id="stickerInstallLink">Установить по ссылке</button>
     <button type="button" id="stickerSaveIncoming" class="sticker-primary" hidden>Сохранить в набор</button>
   </div>
 </dialog>

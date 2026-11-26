@@ -22,6 +22,14 @@ def image_bytes(size=(600, 300)):
     return buffer.getvalue()
 
 
+def animated_bytes(fmt="GIF", *, size=(64, 32), duration=120):
+    buffer = BytesIO()
+    frames = [Image.new("RGBA", size, color) for color in ("red", "blue")]
+    frames[0].save(buffer, format=fmt, save_all=True, append_images=frames[1:],
+                   duration=duration, loop=0)
+    return buffer.getvalue()
+
+
 class StickerImageTests(SimpleTestCase):
     def test_normalized_image_is_static_bounded_and_preserves_alpha(self):
         result = normalize_image(image_bytes())
@@ -32,17 +40,39 @@ class StickerImageTests(SimpleTestCase):
             self.assertEqual(decoded.n_frames, 1)
             self.assertEqual(decoded.mode, "RGBA")
 
-    def test_invalid_oversized_and_animated_images_are_rejected(self):
-        for data in (b"<svg onload='alert(1)'/>", b"x" * (2 * 1024 * 1024 + 1)):
+    def test_invalid_oversized_and_long_animations_are_rejected(self):
+        for data in (b"<svg onload='alert(1)'/>", b"x" * (2 * 1024 * 1024 + 1),
+                     animated_bytes("GIF", duration=3000)):
             with self.assertRaises(ValueError):
                 normalize_image(data)
-        output = BytesIO()
-        Image.new("RGBA", (8, 8), "red").save(
-            output, format="PNG", save_all=True,
-            append_images=[Image.new("RGBA", (8, 8), "blue")], duration=100, loop=0,
-        )
-        with self.assertRaises(ValueError):
-            normalize_image(output.getvalue())
+        frames = [Image.new("RGB", (4, 4), (i * 3, 20, 100)) for i in range(61)]
+        buffer = BytesIO()
+        frames[0].save(buffer, format="GIF", save_all=True, append_images=frames[1:],
+                       duration=30, loop=0)
+        with self.assertRaisesMessage(ValueError, "60 кадров"):
+            normalize_image(buffer.getvalue())
+        with self.assertRaisesMessage(ValueError, "разрешение"):
+            normalize_image(animated_bytes("PNG", size=(1025, 8)))
+
+    def test_gif_apng_and_webp_keep_animation_and_bounded_size(self):
+        for fmt in ("GIF", "PNG", "WEBP"):
+            with self.subTest(fmt=fmt):
+                result = normalize_image(animated_bytes(fmt))
+                self.assertLessEqual(len(result), 256 * 1024)
+                with Image.open(BytesIO(result)) as decoded:
+                    self.assertEqual(decoded.format, "WEBP")
+                    self.assertEqual(decoded.n_frames, 2)
+                    self.assertEqual(decoded.size, (64, 32))
+                    durations = []
+                    for i in range(2):
+                        decoded.seek(i)
+                        decoded.load()
+                        durations.append(decoded.info["duration"])
+                    self.assertEqual(durations, [120, 120])
+                    self.assertEqual(decoded.info["loop"], 0)
+                # Saving a received animated WebP must not flatten it.
+                with Image.open(BytesIO(normalize_image(result))) as saved:
+                    self.assertEqual(saved.n_frames, 2)
 
 
 class StickerLibraryTests(TestCase):
@@ -140,6 +170,28 @@ class StickerLibraryTests(TestCase):
         Chat.objects.filter(pk=self.chat.pk).update(protect_content=True)
         self.assertEqual(peer.post(self.url, fields).status_code, 403)
         self.assertEqual(pack.stickers.count(), 1)
+
+    def test_animated_sticker_is_sent_and_saved_without_flattening(self):
+        uploaded = SimpleUploadedFile("animated.gif", animated_bytes("GIF"), content_type="image/gif")
+        response = self.action("add", pack_id=self.pack.pk, image=uploaded, emoji="🎉")
+        self.assertEqual(response.status_code, 200, response.content)
+        item = self.pack.stickers.exclude(pk=self.sticker.pk).get()
+        with Image.open(BytesIO(bytes(item.image))) as image:
+            self.assertEqual(image.n_frames, 2)
+        sent = self.send(sticker_id=item.pk)
+        self.assertEqual(sent.status_code, 200, sent.content)
+        attachment = MessageAttachment.objects.get()
+        with attachment.file.open("rb") as source:
+            with Image.open(source) as image:
+                self.assertEqual(image.n_frames, 2)
+        other = StickerPack.objects.create(owner=self.bob, name="Saved")
+        peer = Client()
+        peer.force_login(self.bob)
+        result = peer.post(self.url, {"account_id":self.bob.pk, "action":"save_message",
+            "pack_id":other.pk, "attachment_id":attachment.pk})
+        self.assertEqual(result.status_code, 200, result.content)
+        with Image.open(BytesIO(bytes(other.stickers.get().image))) as image:
+            self.assertEqual(image.n_frames, 2)
 
     def test_sticker_cannot_be_combined_with_text_or_sent_from_wrong_account(self):
         self.assertEqual(self.send(text="Caption").status_code, 400)

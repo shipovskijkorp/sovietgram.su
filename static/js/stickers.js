@@ -170,6 +170,8 @@
     $("stickerEditMode").textContent=removing?"Готово":"Удалить стикеры";
     $("stickerEditMode").setAttribute("aria-pressed",String(removing));
     $("stickerCreatePack").disabled=busy||packs.length>=10;
+    $("stickerInstallLink").hidden=mode==="save";
+    $("stickerInstallLink").disabled=busy||packs.length>=10;
     grid.replaceChildren();
     const items=selected==="favorites"?favorites:selected==="recent"?recent:current?.stickers||[];
     if(!items.length){
@@ -243,6 +245,19 @@
   $("stickerCreatePack").addEventListener("click",()=>{
     const name=window.prompt("Название набора");
     if(name?.trim())void mutate("create",{name:name.trim()});
+  });
+  $("stickerInstallLink").addEventListener("click",()=>{
+    if(busy)return;
+    const raw=window.prompt("Вставьте ссылку на набор Sovietgram");
+    if(!raw?.trim())return;
+    try{
+      const link=new URL(raw.trim(),window.location.origin);
+      if(link.origin!==window.location.origin||link.username||link.password||
+         !/^\/addstickers\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/?$/i.test(link.pathname)){
+        throw new Error("Invalid link");
+      }
+      window.location.assign(link.origin+link.pathname.replace(/\/?$/,"/"));
+    }catch(_){error("Нужна действительная ссылка на набор этого сервера Sovietgram.");}
   });
   $("stickerRename").addEventListener("click",()=>{
     const current=pack();if(!current)return;

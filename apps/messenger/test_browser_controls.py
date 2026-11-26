@@ -292,6 +292,32 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.click("#messageReadersClose")
         self.hidden("#messageReadersDialog")
 
+    def test_sticker_pack_publish_revoke_and_preview(self):
+        from io import BytesIO
+        from PIL import Image
+        from .models import Sticker, StickerPack
+
+        buffer = BytesIO()
+        Image.new("RGBA", (16, 16), "red").save(buffer, format="WEBP")
+        pack = StickerPack.objects.create(owner=self.owner, name="Share test")
+        Sticker.objects.create(pack=pack, image=buffer.getvalue(), emoji="X")
+        self.go(query="?manage_stickers=1")
+        self.visible("#stickerDialog")
+        self.expect(self.page.locator("#stickerShare")).to_be_enabled()
+        self.click("#stickerShare")
+        self.visible("#stickerSharePanel")
+        link = self.page.locator("#stickerShareLink").input_value()
+        self.assertIn("/addstickers/", link)
+        self.visible("#stickerUnshare")
+        self.page.goto(link, wait_until="domcontentloaded")
+        self.visible(".shared-sticker-preview img")
+        self.expect(self.page.locator(".auth-heading h1")).to_have_text("Share test")
+        self.go(query="?manage_stickers=1")
+        self.visible("#stickerSharePanel")
+        self.click("#stickerUnshare")
+        self.hidden("#stickerSharePanel")
+        self.assertEqual(self.page.request.get(link).status, 404)
+
     def test_chat_search_stickers_attachments_scheduling_and_folders(self):
         self.go(self.direct)
         self.click("#chatSearchToggle")
