@@ -111,6 +111,7 @@ ASGI_APPLICATION = "config.asgi.application"
 
 RUNTIME_DIR = BASE_DIR / "var"
 RUNTIME_DIR.mkdir(exist_ok=True)
+SOVIETGRAM_OPS_DIR = RUNTIME_DIR / "ops"
 
 if os.getenv("DB_ENGINE", "sqlite").lower() in {"postgres", "postgresql"}:
     DATABASES = {

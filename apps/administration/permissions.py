@@ -11,8 +11,8 @@ from apps.accounts.models import User
 
 ROLES = {
     User.PlatformRole.MODERATOR: frozenset({"dashboard", "reports"}),
-    User.PlatformRole.ADMIN: frozenset({"dashboard", "reports", "users", "communities", "audit"}),
-    User.PlatformRole.OWNER: frozenset({"dashboard", "reports", "users", "communities", "audit", "roles"}),
+    User.PlatformRole.ADMIN: frozenset({"dashboard", "reports", "users", "communities", "audit", "operations"}),
+    User.PlatformRole.OWNER: frozenset({"dashboard", "reports", "users", "communities", "audit", "roles", "operations"}),
 }
 
 

@@ -31,6 +31,7 @@ def panel(request, screen, **context):
         "can_communities": permits(request.user, "communities"),
         "can_audit": permits(request.user, "audit"),
         "can_roles": permits(request.user, "roles"),
+        "can_operations": permits(request.user, "operations"),
         **context,
     })
 
@@ -82,6 +83,14 @@ def dashboard(request):
             ("Административные аккаунты", User.objects.exclude(platform_role="").count()),
         ]
     return panel(request, "dashboard", metrics=metrics, recent=PlatformReport.objects.filter(status="open")[:8])
+
+
+@panel_permission("operations")
+@require_GET
+def operations_status(request):
+    from config.operations import collect_status
+
+    return panel(request, "operations", operations=collect_status())
 
 
 @panel_permission("users")

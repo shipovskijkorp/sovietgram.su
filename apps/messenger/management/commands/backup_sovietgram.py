@@ -6,6 +6,7 @@ import tarfile
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.messenger.backup import BackupError, create_backup, verify_backup
+from config.operations import job_run
 
 
 class Command(BaseCommand):
@@ -24,7 +25,8 @@ class Command(BaseCommand):
                     f"Verified {manifest['database']} backup: {len(manifest['files'])} files."
                 ))
                 return
-            result = create_backup(options["directory"], keep=options["keep"])
+            with job_run("backup"):
+                result = create_backup(options["directory"], keep=options["keep"])
         except (BackupError, OSError, EOFError, sqlite3.Error, subprocess.SubprocessError,
                 tarfile.TarError, json.JSONDecodeError) as exc:
             raise CommandError(f"Backup failed: {exc}") from exc

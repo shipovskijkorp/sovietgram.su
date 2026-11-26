@@ -20,3 +20,15 @@ body[data-theme="dark"] .platform-sidebar,body[data-theme="dark"] .platform-metr
   color: var(--ink);
   background-color: var(--panel-strong);
 }
+
+/* Restricted operational status, readable in both palettes. */
+.platform-metrics section small { display:block;font-size:12px;color:var(--muted);margin-top:5px;line-height:1.4; }
+.platform-metrics section strong.ops-ok,.ops-ok {color:#237c43}
+.platform-metrics section strong.ops-warning,.ops-warning {color:#95620a}
+.platform-metrics section strong.ops-error,.ops-error {color:#b52d36}
+.platform-metrics section strong.ops-unknown,.ops-unknown {color:var(--muted)}
+body[data-theme="dark"] .platform-metrics section strong.ops-ok,body[data-theme="dark"] .ops-ok {color:#8bd2a1}
+body[data-theme="dark"] .platform-metrics section strong.ops-warning,body[data-theme="dark"] .ops-warning {color:#f0c278}
+body[data-theme="dark"] .platform-metrics section strong.ops-error,body[data-theme="dark"] .ops-error {color:#ff898c}
+.ops-progress {display:block;width:100%;height:8px;margin-top:10px;accent-color:var(--red)}
+.platform-refresh {display:inline-flex;align-items:center;padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;white-space:nowrap}

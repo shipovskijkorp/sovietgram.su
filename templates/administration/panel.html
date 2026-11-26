@@ -14,6 +14,7 @@
       {% if can_communities %}<a href="{% url 'administration:communities' %}" {% if screen == 'communities' or screen == 'community' %}aria-current="page"{% endif %}>Сообщества</a>{% endif %}
       <a href="{% url 'administration:reports' %}" {% if screen == 'reports' or screen == 'report' %}aria-current="page"{% endif %}>Жалобы</a>
       {% if can_audit %}<a href="{% url 'administration:audit' %}" {% if screen == 'audit' %}aria-current="page"{% endif %}>Журнал действий</a>{% endif %}
+      {% if can_operations %}<a href="{% url 'administration:operations' %}" {% if screen == 'operations' %}aria-current="page"{% endif %}>Состояние сервера</a>{% endif %}
       <a href="{% url 'messenger:home' %}">← В мессенджер</a>
     </nav>
   </aside>
@@ -25,6 +26,18 @@
       <section class="platform-section"><h2>Последние открытые жалобы</h2><div class="platform-table-wrap"><table><thead><tr><th>ID</th><th>Объект</th><th>Причина</th><th>Получена</th></tr></thead><tbody>
         {% for row in recent %}<tr><td><a href="{% url 'administration:report_detail' row.pk %}">#{{ row.pk }}</a></td><td>{{ row.target_label }}</td><td>{{ row.get_reason_display }}</td><td>{{ row.created_at|date:"d.m.Y H:i" }}</td></tr>{% empty %}<tr><td colspan="4">Открытых жалоб нет.</td></tr>{% endfor %}
       </tbody></table></div></section>
+    {% elif screen == 'operations' %}
+      <header class="platform-heading"><div><small>ИНФРАСТРУКТУРА</small><h1>Состояние сервера</h1><p>Снимок при открытии страницы · {{ operations.checked_at|date:"d.m.Y H:i:s" }}</p></div><a class="platform-refresh" href="{% url 'administration:operations' %}">Обновить</a></header>
+      <div class="platform-metrics">
+        <section><span>База данных</span><strong class="ops-{{ operations.database.state }}">{{ operations.database.label }}</strong><small>{{ operations.database.engine }}{% if operations.database.ms != None %} · {{ operations.database.ms }} мс{% endif %}</small></section>
+        <section><span>Кэш</span><strong class="ops-{{ operations.cache.state }}">{{ operations.cache.label }}</strong><small>{{ operations.cache.backend }}{% if operations.cache.ms != None %} · {{ operations.cache.ms }} мс{% endif %}</small></section>
+        {% for metric in operations.resources %}<section><span>{{ metric.label }}</span><strong class="ops-{{ metric.state }}">{{ metric.value }}</strong><small>{{ metric.detail }}</small>{% if metric.percent != None %}<progress class="ops-progress" max="100" value="{{ metric.percent|stringformat:'d' }}">{{ metric.percent }}%</progress>{% endif %}</section>{% endfor %}
+      </div>
+      <section class="platform-section"><h2>Фоновые задачи</h2><div class="platform-table-wrap"><table><thead><tr><th>Задача</th><th>Состояние</th><th>Последний запуск</th><th>Последний успех</th></tr></thead><tbody>
+        {% for job in operations.jobs %}<tr><td>{{ job.label }}</td><td><span class="ops-{{ job.state }}">{{ job.status }}</span></td><td>{{ job.started_at|date:"d.m.Y H:i:s"|default:"—" }}</td><td>{{ job.success_at|date:"d.m.Y H:i:s"|default:"—" }}</td></tr>{% endfor %}
+      </tbody></table></div><p>Состояние определяется по отметкам самих задач, а не по статусу systemd. Отсутствие отметки означает, что задача ещё не отчиталась после обновления. Для проверки ошибок используй журнал службы на VPS.</p></section>
+      <section class="platform-section"><h2>Очередь отложенной отправки</h2><dl class="platform-details"><dt>Ожидают</dt><dd>{{ operations.queue.pending|default_if_none:"Нет данных" }}</dd><dt>Просрочены более минуты</dt><dd>{{ operations.queue.overdue|default_if_none:"Нет данных" }}</dd><dt>С ошибками</dt><dd>{{ operations.queue.failed|default_if_none:"Нет данных" }}</dd></dl></section>
+      <section class="platform-section"><h2>Границы мониторинга</h2><p>Показатели CPU и памяти описывают хост (в контейнере могут отличаться от лимита приложения). Диск — файловая система каталога приложения. Эта страница не хранит историю нагрузки и не отправляет оповещения. Внешний монитор доступности может проверять <code>/healthz/</code>; для проверки базы и кэша используется серверная команда <code>manage.py healthcheck</code>.</p></section>
     {% elif screen == 'users' %}
       <header class="platform-heading"><div><small>АККАУНТЫ</small><h1>Пользователи</h1><p>Поиск, статус и глобальные роли.</p></div></header>
       <form class="platform-filter" method="get"><input name="q" value="{{ q }}" placeholder="ID, @username, имя или точная почта" maxlength="150"><select name="status" aria-label="Статус"><option value="">Все</option><option value="active" {% if status == 'active' %}selected{% endif %}>Активные</option><option value="suspended" {% if status == 'suspended' %}selected{% endif %}>Заблокированные</option><option value="inactive" {% if status == 'inactive' %}selected{% endif %}>Неактивные</option><option value="admin" {% if status == 'admin' %}selected{% endif %}>Администрация</option></select><button>Найти</button></form>

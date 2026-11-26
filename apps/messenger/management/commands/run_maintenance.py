@@ -1,3 +1,5 @@
+from config.operations import job_run
+
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.accounts.maintenance import purge_inactive_accounts
@@ -16,9 +18,10 @@ class Command(BaseCommand):
         accounts = options["account_limit"]
         if not 0 <= messages <= 10000 or not 0 <= accounts <= 1000:
             raise CommandError("Limits: 0–10000 messages, 0–1000 accounts.")
-        removed_messages = purge_expired_messages(limit=messages)
-        removed_accounts = purge_inactive_accounts(limit=accounts)
-        self.stdout.write(
-            f"Maintenance: removed {removed_messages} expired message(s), "
-            f"{removed_accounts} inactive account(s)."
-        )
+        with job_run("maintenance"):
+            removed_messages = purge_expired_messages(limit=messages)
+            removed_accounts = purge_inactive_accounts(limit=accounts)
+            self.stdout.write(
+                f"Maintenance: removed {removed_messages} expired message(s), "
+                f"{removed_accounts} inactive account(s)."
+            )
