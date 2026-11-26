@@ -29,6 +29,7 @@ class Contact(models.Model):
         on_delete=models.CASCADE,
         related_name="contact_of",
     )
+    alias = models.CharField(max_length=100, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -436,6 +437,24 @@ class MessageReaction(models.Model):
         LAUGH = "😂", "Смешно"
         SURPRISE = "😮", "Удивление"
         THUMBS_DOWN = "👎", "Не нравится"
+        PARTY = "🎉", "Праздник"
+        CLAP = "👏", "Аплодисменты"
+        THINKING = "🤔", "Задумался"
+        CRY = "😢", "Грустно"
+        ANGRY = "😡", "Злость"
+        HEART_EYES = "😍", "Восхищение"
+        WINK = "😉", "Подмигивание"
+        COOL = "😎", "Круто"
+        SALUTE = "🫡", "Салют"
+        OK = "👌", "Отлично"
+        HUNDRED = "💯", "Сто процентов"
+        PRAY = "🙏", "Спасибо"
+        SKULL = "💀", "Череп"
+        CLOWN = "🤡", "Клоун"
+        FACEPALM = "🤦", "Фейспалм"
+        POPCORN = "🍿", "Попкорн"
+        ROCKET = "🚀", "Ракета"
+        CHECK = "✅", "Согласен"
 
     message = models.ForeignKey(
         Message, on_delete=models.CASCADE, related_name="reactions",

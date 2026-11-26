@@ -40,6 +40,13 @@
             <button type="button" data-peer-timer="2592000">1 месяц</button>
           </div>
           <button type="button" id="userProfileMenuContact" hidden><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M19 9v6m-3-3h6"/></svg><span id="userProfileMenuContactLabel">Добавить контакт</span></button>
+          <button type="button" id="userProfileRenameContact" hidden><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m5 16 11-11 3 3L8 19H5v-3Zm8-8 3 3"/></svg><span>Изменить имя контакта</span></button>
+          <div class="tg-peer-alias-editor" id="userProfileAliasEditor" hidden>
+            <label for="userProfileAliasInput">Имя (видно только вам)</label>
+            <input id="userProfileAliasInput" type="text" maxlength="100" autocomplete="off" placeholder="Имя контакта">
+            <button type="button" id="userProfileAliasSave">Сохранить</button>
+            <button type="button" id="userProfileAliasReset">Вернуть имя пользователя</button>
+          </div>
           <button type="button" id="userProfileProtection" hidden><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></svg><span id="userProfileProtectionLabel">Запретить копирование</span></button>
           <button type="button" id="userProfileCopyLink"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg><span>Скопировать ссылку</span></button>
           <a id="userProfileReport" hidden><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4m0 1c6-5 8 5 14 0v11c-6 5-8-5-14 0"/></svg><span>Пожаловаться</span></a>
@@ -69,6 +76,7 @@
       </div>
 
       <section class="tg-profile__rows">
+        <div class="tg-profile__row" id="userProfileOriginalNameRow" hidden><span class="tg-profile__row-copy"><strong id="userProfileOriginalName"></strong><small>Имя в профиле</small></span></div>
         <button class="tg-profile__row tg-profile__row--interactive" id="userProfileUsernameRow" type="button" title="Скопировать ссылку на профиль">
           <span class="tg-profile__row-copy">
             <strong id="userProfileUsername"></strong>

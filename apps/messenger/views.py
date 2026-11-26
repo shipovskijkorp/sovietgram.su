@@ -87,6 +87,7 @@ from .models import (
     VoiceMessagePlayback,
 )
 from .models import MessageReaction, MessageSendReceipt
+from .contact_names import contact_aliases, contact_display_name, normalize_alias
 from .ratelimit import rate_limit
 from .services import (
     apply_archive_rules_on_new_message,
@@ -338,7 +339,7 @@ def _presence_text(user, viewer=None):
     return f"был(а) {local_seen:%d.%m.%Y} в {local_seen:%H:%M}"
 
 
-def _decorate_chat_ui(chat, user):
+def _decorate_chat_ui(chat, user, aliases=None):
     chat.is_saved_ui = (
         chat.type == Chat.Type.PRIVATE
         and chat.direct_key == f"self:{user.pk}"
@@ -348,7 +349,7 @@ def _decorate_chat_ui(chat, user):
     if chat.type == Chat.Type.PRIVATE:
         other_user = other_user_for_chat(chat, user)
         chat.other_user = other_user
-        chat.display_name_ui = "Избранное" if chat.is_saved_ui else other_user.display_name
+        chat.display_name_ui = "Избранное" if chat.is_saved_ui else contact_display_name(user, other_user, aliases)
         chat.username_ui = "" if chat.is_saved_ui else other_user.username
         chat.avatar_text_ui = "★" if chat.is_saved_ui else other_user.initials
         chat.other_user_avatar_url_ui = (
@@ -360,7 +361,7 @@ def _decorate_chat_ui(chat, user):
             )
             else ""
         )
-        chat.search_text_ui = f"{chat.display_name_ui} {chat.username_ui}".lower()
+        chat.search_text_ui = f"{chat.display_name_ui} {other_user.display_name} {chat.username_ui}".lower()
         chat.status_ui = "Личное облако" if chat.is_saved_ui else _presence_text(other_user, user)
     else:
         chat.other_user = None
@@ -714,8 +715,9 @@ def _prepare_sidebar_chats(user, archived=False):
         ):
             attachment_kinds.setdefault(message_id, kind)
 
+    aliases = contact_aliases(user)
     for chat in chats:
-        _decorate_chat_ui(chat, user)
+        _decorate_chat_ui(chat, user, aliases)
         chat.is_archived_ui = archived
         chat.has_unread_ui = bool(chat.unread_count_ui or chat.marked_unread_ui)
         chat.unread_badge_count_ui = max(chat.unread_count_ui or 0, int(chat.marked_unread_ui))
@@ -830,8 +832,9 @@ def _forward_targets(user):
         .order_by("-updated_at")[:60]
     )
     visible = []
+    aliases = contact_aliases(user)
     for chat in targets:
-        _decorate_chat_ui(chat, user)
+        _decorate_chat_ui(chat, user, aliases)
         membership = _membership(chat, user)
         capabilities = _posting_capabilities(chat, membership, user)
         chat.can_forward_text_ui = capabilities["text"]
@@ -1595,6 +1598,8 @@ def global_search(request):
         )
 
     normalized = query.lower().lstrip("@")
+    aliases = contact_aliases(request.user)
+    alias_matches = [pk for pk, alias in aliases.items() if normalized in alias.casefold()]
     active_folder = requested_folder(request.user, request.GET.get("folder"))
     archive_only = request.GET.get("archived") == "1" and not active_folder
     membership_scope = {"is_archived": True} if archive_only else {}
@@ -1620,7 +1625,12 @@ def global_search(request):
         peer_name = (
             User.objects.filter(chat_memberships__chat_id=OuterRef("chat_id"))
             .exclude(pk=request.user.pk)
-            .annotate(search_name=Concat(Trim(Concat("first_name", Value(" "), "last_name")), Value(" "), "username", output_field=TextField()))
+            .annotate(search_name=Concat(
+                Trim(Concat("first_name", Value(" "), "last_name")), Value(" "), "username", Value(" "),
+                Coalesce(Subquery(Contact.objects.filter(owner=request.user, user_id=OuterRef("pk"))
+                                  .values("alias")[:1]), Value("")),
+                output_field=TextField(),
+            ))
             .order_by("pk").values("search_name")[:1]
         )
         candidates = membership_base.annotate(
@@ -1655,7 +1665,7 @@ def global_search(request):
             chat = membership.chat
             if chat.type != Chat.Type.PRIVATE:
                 chat.member_count_ui = collective_counts.get(chat.pk, 0)
-            _decorate_chat_ui(chat, request.user)
+            _decorate_chat_ui(chat, request.user, aliases)
             chat_results.append({
                 "id": chat.pk,
                 "type": chat.type,
@@ -1677,6 +1687,7 @@ def global_search(request):
             Q(username__icontains=normalized)
             | Q(first_name__icontains=query)
             | Q(last_name__icontains=query)
+            | Q(pk__in=alias_matches)
         )
         .order_by("-last_seen_at", "username")[:10]
     )
@@ -1685,7 +1696,7 @@ def global_search(request):
             "id": user.pk,
             "avatar_kind": "user",
             "avatar_id": user.pk,
-            "display_name": user.display_name,
+            "display_name": contact_display_name(request.user, user, aliases),
             "username": user.username,
             "avatar_url": (
                 user.avatar_url
@@ -1767,7 +1778,7 @@ def global_search(request):
         chat = message.chat
         decorated = chat_by_id.get(chat.pk)
         if decorated is None:
-            _decorate_chat_ui(chat, request.user)
+            _decorate_chat_ui(chat, request.user, aliases)
             decorated = chat
             chat_by_id[chat.pk] = chat
         message_results.append({
@@ -1806,7 +1817,10 @@ def contacts(request):
         .order_by("user__username")
     )
     contact_ids = {item.user_id for item in contact_links}
+    aliases = {item.user_id: item.alias for item in contact_links if item.alias}
+    contact_links.sort(key=lambda item: (item.alias or item.user.display_name).casefold())
     for item in contact_links:
+        item.display_name_ui = item.alias or item.user.display_name
         item.avatar_url_ui = (
             item.user.avatar_url
             if item.user.avatar and privacy_allows(item.user, request.user, "profile_photo")
@@ -1821,12 +1835,15 @@ def contacts(request):
     channel_results = []
     if query:
         user_results = list(
-            User.objects.filter(is_active=True, username__icontains=query)
-            .exclude(pk=request.user.pk)
+            User.objects.filter(is_active=True).filter(
+                Q(username__icontains=query) |
+                Q(pk__in=[pk for pk, alias in aliases.items() if query.casefold() in alias.casefold()])
+            ).exclude(pk=request.user.pk)
             .order_by("username")[:30]
         )
         for user in user_results:
             user.is_contact_ui = user.pk in contact_ids
+            user.display_name_ui = contact_display_name(request.user, user, aliases)
             user.avatar_url_ui = (
                 user.avatar_url
                 if user.avatar and privacy_allows(user, request.user, "profile_photo")
@@ -1899,6 +1916,26 @@ def remove_contact(request, username):
 
     messages.success(request, f"@{target.username} удалён из контактов.")
     return redirect(_safe_next(request, reverse("messenger:contacts")))
+
+
+@login_required
+@require_POST
+@rate_limit("chat_list_action")
+def rename_contact(request, username):
+    if request.POST.get("account_id", str(request.user.pk)) != str(request.user.pk):
+        return JsonResponse({"ok": False, "error": "Аккаунт изменился. Обновите страницу."}, status=409)
+    target = get_object_or_404(User, username__iexact=username, is_active=True)
+    try:
+        alias = normalize_alias(request.POST.get("alias", ""))
+    except ValueError as error:
+        return JsonResponse({"ok": False, "error": str(error)}, status=400)
+    if target.pk == request.user.pk or not Contact.objects.filter(owner=request.user, user=target).update(alias=alias):
+        return JsonResponse({"ok": False, "error": "Сначала добавьте пользователя в контакты."}, status=404)
+    response = JsonResponse({"ok": True, "contact_alias": alias,
+                             "contact_name": alias or target.display_name,
+                             "message": "Имя контакта сохранено."})
+    response["Cache-Control"] = "private, no-store"
+    return response
 
 
 def _send_request_digest(request):
@@ -4019,13 +4056,13 @@ def poll_messages(request, chat_id):
         other_status = "Личное облако" if is_saved else _presence_text(other_user, request.user)
         if not is_saved:
             other_user_id = other_user.pk
-            other_user_display_name = other_user.display_name
+            other_user_display_name = contact_display_name(request.user, other_user)
             other_user_username = other_user.username
             other_user_initials = other_user.initials
             other_user_profile_url = reverse(
                 "accounts:public_profile", args=[other_user.username],
             )
-            chat_title = other_user.display_name
+            chat_title = other_user_display_name
             chat_username = other_user.username
             chat_avatar_text = other_user.initials
             if other_user.avatar and privacy_allows(other_user, request.user, "profile_photo"):

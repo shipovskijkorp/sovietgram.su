@@ -749,8 +749,11 @@ def public_profile(request, username):
     viewer = request.user if request.user.is_authenticated else None
     is_self = bool(viewer and viewer.pk == profile_user.pk)
     is_contact = False
+    contact_alias = ""
     if viewer and not is_self:
-        is_contact = Contact.objects.filter(owner=viewer, user=profile_user).exists()
+        link = Contact.objects.filter(owner=viewer, user=profile_user).first()
+        is_contact = link is not None
+        contact_alias = link.alias if link else ""
 
     if request.user.is_authenticated and request.headers.get("x-requested-with") != "XMLHttpRequest":
         return redirect(f"{reverse('messenger:home')}?profile={profile_user.username}")
@@ -847,6 +850,9 @@ def public_profile(request, username):
                 ),
                 "initials": profile_user.initials,
                 "is_contact": is_contact,
+                "contact_alias": contact_alias,
+                "contact_name": contact_alias or profile_user.display_name,
+                "rename_contact_url": reverse("messenger:rename_contact", args=[profile_user.username]) if viewer and not is_self else "",
                 "is_self": is_self,
                 "is_blocked": blocked,
                 "blocked_by_me": blocked_by_me,

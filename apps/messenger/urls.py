@@ -22,6 +22,7 @@ urlpatterns = [
     path("join-requests/", community_profiles.my_join_requests, name="my_join_requests"),
     path("contacts/<str:username>/add/", views.add_contact, name="add_contact"),
     path("contacts/<str:username>/remove/", views.remove_contact, name="remove_contact"),
+    path("contacts/<str:username>/rename/", views.rename_contact, name="rename_contact"),
     path("saved/", views.saved_messages, name="saved_messages"),
     path("calls/", views.calls, name="calls"),
     path("chat/start/<str:username>/", views.start_chat, name="start_chat"),

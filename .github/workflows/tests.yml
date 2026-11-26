@@ -71,7 +71,10 @@ jobs:
           PGPORT: "5432"
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y postgresql-client
+          sudo apt-get install -y postgresql-client-16
+          export PATH="/usr/lib/postgresql/16/bin:$PATH"
+          pg_dump --version
+          pg_restore --version
           python manage.py migrate --noinput
           python manage.py shell -c 'from apps.accounts.models import User; User.objects.create_user("backup_ci", "backup@example.net", "Backup-ci-test-1945!")'
           BACKUP_DIR=$(mktemp -d)

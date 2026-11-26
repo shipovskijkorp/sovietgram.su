@@ -2359,3 +2359,8 @@ body:not([data-theme="dark"]) .tg-profile__view.is-foreign {
 .tg-profile__view.is-foreign .tg-peer-menu button:focus-visible { outline-offset: -2px; }
 .tg-profile__view.is-foreign #userProfileUsernameRow:hover { background: var(--peer-tile); }
 .tg-profile__view.is-foreign #userProfileName { overflow-wrap: anywhere; }
+
+.tg-peer-alias-editor { padding: 8px 12px; border-block: 1px solid var(--line); }
+.tg-peer-alias-editor label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+.tg-peer-alias-editor input { box-sizing: border-box; width: 100%; min-height: 40px; border: 1px solid var(--line); border-radius: 7px; background: var(--peer-tile); color: var(--ink); padding: 8px; font: inherit; font-size: 16px; }
+.tg-profile__view.is-foreign .tg-peer-menu { max-height: min(65dvh, 440px); overflow-y: auto; }

@@ -1758,3 +1758,7 @@ body[data-theme="dark"] .channel-discussion { background:#211d1a; }
 .discussion-reply { grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;font-size:11px;gap:8px; }
 .discussion-readonly,.discussion-empty { font-size:12px;text-align:center;opacity:.75;padding:10px; }
 .channel-discussion.is-content-protected .discussion-comment-text { user-select:none; }
+
+/* More reactions use a compact, scrollable picker instead of widening the menu. */
+.message-reaction-picker { max-height: min(136px, 27dvh); overflow-y: auto; overscroll-behavior: contain; }
+.message-context-menu .message-reaction-picker button[hidden] { display: none !important; }

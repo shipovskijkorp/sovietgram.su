@@ -45,6 +45,14 @@ class MessageSocialTests(TestCase):
         self.assertEqual(self.react("invalid").status_code, 400)
         self.assertEqual(self.client.post(self.url).status_code, 400)
 
+    def test_extended_reaction_catalog(self):
+        self.assertEqual(len(MessageReaction.Emoji.values), 24)
+        for emoji in ("🎉", "👏", "🫡", "💯", "🚀"):
+            result = self.react(emoji)
+            self.assertEqual(result.status_code, 200)
+            self.assertEqual(result.json()["reactions"], [{"emoji": emoji, "count": 1, "selected": True}])
+        self.assertContains(self.client.get(reverse("messenger:chat", args=[self.chat.pk])), 'data-pick-reaction="🫡"')
+
     def test_counts_are_shared_but_selection_is_personal(self):
         peer = Client()
         peer.force_login(self.bob)

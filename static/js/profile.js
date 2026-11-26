@@ -131,6 +131,7 @@ const userProfileContact = document.getElementById("userProfileContact");
 const peerProfileElements = Object.fromEntries([
   "Mute", "MuteLabel", "MuteMenu", "Unmute", "More", "MoreMenu", "AutoDelete",
   "AutoDeleteLabel", "TimerOptions", "MenuContact", "MenuContactLabel", "ContactLabel",
+  "RenameContact", "AliasEditor", "AliasInput", "AliasSave", "AliasReset", "OriginalNameRow", "OriginalName",
   "Protection", "ProtectionLabel", "CopyLink", "Report", "Block", "BlockSection",
   "BlockLabel", "MenuBlock", "MenuBlockLabel", "CommonGroups", "CommonGroupsLabel", "CommonGroupsList",
 ].map(key => [key, document.getElementById("userProfile" + key)]));
@@ -390,7 +391,8 @@ async function refreshProfilePresence() {
     openedProfile.is_contact = fresh.is_contact;
     if (!openedProfile.is_self) {
       for (const key of ["bio", "birthday", "birthday_display", "start_chat_url", "is_blocked",
-        "blocked_by_me", "direct_chat", "common_groups", "report_url", "block_url"]) {
+        "blocked_by_me", "direct_chat", "common_groups", "report_url", "block_url",
+        "contact_alias", "contact_name", "rename_contact_url", "display_name"]) {
         if (Object.prototype.hasOwnProperty.call(fresh, key)) openedProfile[key] = fresh[key];
       }
       renderPeerProfileDetails(openedProfile);
@@ -639,7 +641,7 @@ function renderPeerProfileDetails(profile) {
 
 function closePeerProfileMenus() {
   const e = peerProfileElements;
-  for (const key of ["MuteMenu", "MoreMenu", "TimerOptions"]) {
+  for (const key of ["MuteMenu", "MoreMenu", "TimerOptions", "AliasEditor"]) {
     if (e[key]) e[key].hidden = true;
   }
   for (const key of ["Mute", "More"]) e[key]?.setAttribute("aria-expanded", "false");
@@ -660,6 +662,11 @@ function renderPeerProfileActions(profile) {
   const foreign = !profile.is_self;
   const direct = foreign ? profile.direct_chat : null;
   const showContact = foreign && Boolean(profile.is_contact ? profile.remove_contact_url : profile.add_contact_url);
+  if (foreign && userProfileName) userProfileName.textContent = profile.contact_alias || profile.display_name || profile.username || "";
+  if (e.OriginalNameRow) e.OriginalNameRow.hidden = !foreign || !profile.contact_alias || profile.contact_alias === profile.display_name;
+  if (e.OriginalName) e.OriginalName.textContent = foreign ? profile.display_name || "" : "";
+  if (e.RenameContact) e.RenameContact.hidden = !foreign || !profile.is_contact || !profile.rename_contact_url;
+  if (!profile.is_contact && e.AliasEditor) e.AliasEditor.hidden = true;
   const contactText = profile.is_contact ? "Удалить контакт" : "Добавить в контакты";
   const blockText = profile.blocked_by_me ? "Разблокировать" : "Заблокировать";
   if (userProfileActions) userProfileActions.hidden = !foreign;
@@ -728,7 +735,7 @@ function renderUserProfile(profile) {
     userProfileAvatar.disabled = !profile.avatar_url;
     userProfileAvatar.classList.toggle("is-clickable", Boolean(profile.avatar_url));
   }
-  if (userProfileName) userProfileName.textContent = profile.display_name || profile.username || "";
+  if (userProfileName) userProfileName.textContent = profile.contact_alias || profile.display_name || profile.username || "";
   updateProfilePresence(profile);
   if (userProfileUsername) userProfileUsername.textContent = `@${profile.username || ""}`;
 
@@ -1309,7 +1316,22 @@ function changePeerProfileContact() {
   const removing = Boolean(openedProfile.is_contact);
   if (removing && !window.confirm("Удалить пользователя из контактов?")) return;
   void runPeerProfileAction(removing ? openedProfile.remove_contact_url : openedProfile.add_contact_url,
-    {}, (payload, target) => { target.is_contact = Boolean(payload.is_contact); });
+    {}, (payload, target) => {
+      target.is_contact = Boolean(payload.is_contact);
+      if (!target.is_contact) target.contact_alias = "";
+      void window.SovietgramSidebar?.refresh?.();
+    });
+}
+
+function renamePeerContact(reset = false) {
+  const profile = openedProfile;
+  if (!profile?.is_contact || !profile.rename_contact_url) return;
+  const alias = reset ? "" : peerProfileElements.AliasInput?.value || "";
+  void runPeerProfileAction(profile.rename_contact_url, {alias}, (payload, target) => {
+    target.contact_alias = payload.contact_alias || "";
+    target.contact_name = payload.contact_name;
+    void window.SovietgramSidebar?.refresh?.();
+  });
 }
 
 function changePeerProfileBlock() {
@@ -1354,6 +1376,22 @@ function changePeerChatSetting(values) {
 
 userProfileContact?.addEventListener("click", changePeerProfileContact);
 peerProfileElements.MenuContact?.addEventListener("click", changePeerProfileContact);
+peerProfileElements.RenameContact?.addEventListener("click", () => {
+  if (!openedProfile?.is_contact) return;
+  const {AliasEditor, AliasInput} = peerProfileElements;
+  if (!AliasEditor || !AliasInput) return;
+  AliasEditor.hidden = !AliasEditor.hidden;
+  if (!AliasEditor.hidden) {
+    AliasInput.value = openedProfile.contact_alias || openedProfile.display_name || "";
+    AliasInput.focus();
+    AliasInput.select();
+  }
+});
+peerProfileElements.AliasSave?.addEventListener("click", () => renamePeerContact());
+peerProfileElements.AliasReset?.addEventListener("click", () => renamePeerContact(true));
+peerProfileElements.AliasInput?.addEventListener("keydown", event => {
+  if (event.key === "Enter") { event.preventDefault(); renamePeerContact(); }
+});
 peerProfileElements.Block?.addEventListener("click", changePeerProfileBlock);
 peerProfileElements.MenuBlock?.addEventListener("click", changePeerProfileBlock);
 peerProfileElements.More?.addEventListener("click", () => togglePeerProfileMenu("More"));

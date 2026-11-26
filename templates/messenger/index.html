@@ -145,7 +145,7 @@
           data-chat-muted="{{ active_membership.notifications_muted|yesno:'true,false' }}"
           data-chat-protected="{{ selected_chat.protect_content|yesno:'true,false' }}"
           data-chat-title="{{ selected_chat.display_name_ui|escape }}"
-          data-chat-peer-name="{% if selected_chat.type == 'private' and not selected_chat.is_saved_ui %}{{ selected_chat.other_user.display_name|escape }}{% else %}{{ selected_chat.display_name_ui|escape }}{% endif %}"
+          data-chat-peer-name="{{ selected_chat.display_name_ui|escape }}"
           data-channel-signatures="{{ selected_chat.signatures_enabled|yesno:'true,false' }}"
           data-comments-enabled="{{ selected_chat.comments_enabled|yesno:'true,false' }}"
           data-can-send-text="{{ can_send_text|yesno:'true,false' }}"

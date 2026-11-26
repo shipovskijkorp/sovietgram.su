@@ -52,7 +52,7 @@
                 {% else %}
                   <span class="person-row__avatar person-row__avatar--fallback">{{ person.initials }}</span>
                 {% endif %}
-                <span><strong>{{ person.display_name }}</strong><small>@{{ person.username }}</small></span>
+                <span><strong>{{ person.display_name_ui }}</strong><small>@{{ person.username }}</small></span>
               </a>
               {% if person.can_message_ui %}
                 <form method="post" action="{% url 'messenger:start_chat' person.username %}">
@@ -107,7 +107,7 @@
                 {% else %}
                   <span class="person-row__avatar person-row__avatar--fallback">{{ contact.user.initials }}</span>
                 {% endif %}
-                <span><strong>{{ contact.user.display_name }}</strong><small>@{{ contact.user.username }}</small></span>
+                <span><strong>{{ contact.display_name_ui }}</strong><small>@{{ contact.user.username }}</small></span>
               </a>
               {% if contact.can_message_ui %}
                 <form method="post" action="{% url 'messenger:start_chat' contact.user.username %}">
