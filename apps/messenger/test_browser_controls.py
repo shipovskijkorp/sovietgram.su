@@ -367,7 +367,7 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.click("#stickerInstallLink")
         self.page.locator("#stickerPromptInput").fill("https://example.invalid/addstickers/invalid")
         self.click("#stickerPromptSubmit")
-        self.expect(self.page.locator("#stickerError")).to_contain_text("ссылку на набор")
+        self.expect(self.page.locator("#stickerError")).to_contain_text("ссылка на набор")
         self.click("#stickerBack")
         self.click("#stickerDialogClose")
 
