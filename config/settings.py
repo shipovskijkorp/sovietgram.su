@@ -23,6 +23,28 @@ SECRET_KEY_FALLBACKS = env_list("DJANGO_SECRET_KEY_FALLBACKS")
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost")
 CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS")
 
+# A shared cache is required for process-wide throttles in production.
+# Keep the local development backend when Redis has not been provisioned.
+REDIS_URL = os.getenv("SOVIETGRAM_REDIS_URL", "").strip()
+if REDIS_URL and not REDIS_URL.startswith(("redis://", "rediss://", "unix://")):
+    raise ImproperlyConfigured("SOVIETGRAM_REDIS_URL must be a Redis URL.")
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
+        "KEY_PREFIX": "sovietgram",
+        "OPTIONS": {"socket_connect_timeout": 3, "socket_timeout": 3},
+    } if REDIS_URL else {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "sovietgram-local",
+    },
+}
+
+# Enable only after the maintenance timer is installed and verified.
+SOVIETGRAM_BACKGROUND_MAINTENANCE = os.getenv(
+    "SOVIETGRAM_BACKGROUND_MAINTENANCE", "0"
+).lower() in {"1", "true", "yes", "on"}
+
 SOVIETGRAM_RATE_LIMITS = {
     "send_message": {
         "limit": int(os.getenv("RATE_LIMIT_SEND_PER_MINUTE", "30")),

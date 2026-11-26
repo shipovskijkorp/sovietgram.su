@@ -550,3 +550,39 @@ systemctl list-timers sovietgram-scheduled.timer
 Отдельная панель /control/ доступна только аккаунтам с глобальной ролью и включённой двухфакторной защитой. Эти роли не предоставляют права Django Admin. Модератор рассматривает жалобы и может удалить конкретное сообщение, на которое подана жалоба. Администратор также управляет обычными аккаунтами (блокировка, восстановление, отзыв сеансов), публичностью сообществ и приглашениями, просматривает журнал. Владелец платформы назначает/снимает роли администратора и модератора. Для первого владельца зарегистрируйте аккаунт, включите 2FA, затем на сервере выполните:
     python manage.py platform_admin ИМЯ_ПОЛЬЗОВАТЕЛЯ --reason "Initial platform owner"
 После этого необходимо войти повторно. Другие владельцы назначаются только серверной командой; последнего владельца нельзя снять этой командой. Системные роли и данные 2FA не редактируются обычными настройками аккаунта. Не создаются предустановленные пароли. Панель не предоставляет произвольного доступа к личной переписке или вложениям; модератор видит только существующий текст сообщения, на которое пожаловался участник. Запрет публичности сообщества снимает @адрес, не удаляет его и не блокирует существующих участников/приглашения; отзыв приглашений — отдельная операция. Жалобы хранят описание пользователя и идентификатор объекта, но не копируют содержимое сообщения. Миграции accounts 0012, messenger 0025 и administration 0001 обязательны.
+
+
+### Shared Redis cache and independent maintenance
+
+Production can use one shared Redis cache for all Gunicorn workers. The
+Django cache backs request throttles and other short-lived coordination;
+sessions and messages remain in the database. Install Redis on the VPS,
+keep it bound to loopback (do not expose port 6379), install updated Python
+requirements, and set `SOVIETGRAM_REDIS_URL=redis://127.0.0.1:6379/1` in
+the existing .env. For development or an unchanged VPS, the default remains
+the local-memory cache. Do not silently fall back to local memory during a
+Redis outage: that would disable shared rate limits. Verify connectivity:
+
+```bash
+sudo -u sovietgram -H .venv/bin/python manage.py shell -c 'from django.core.cache import cache; cache.set("deploy:probe", 1, 30); assert cache.get("deploy:probe") == 1; cache.delete("deploy:probe")'
+```
+
+Install and verify the maintenance timer before setting the opt-in flag:
+
+```bash
+sudo install -m 644 deploy/systemd/sovietgram-maintenance.service /etc/systemd/system/
+sudo install -m 644 deploy/systemd/sovietgram-maintenance.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now sovietgram-maintenance.timer
+sudo systemctl start sovietgram-maintenance.service
+sudo systemctl list-timers sovietgram-maintenance.timer
+sudo journalctl -u sovietgram-maintenance.service -n 20 --no-pager
+```
+
+Only after successful execution set `SOVIETGRAM_BACKGROUND_MAINTENANCE=1`
+in .env and restart sovietgram. Bulk expiry cleanup no longer runs in HTTP
+requests. Each background run deletes at most 500 expired messages and 25
+inactive accounts; accounts are checked again under the deletion lock.
+Expired accounts remain unable to sign in or resume a session. If the timer
+is not installed, the default 0 keeps the previous request-triggered cleanup.
+No schema changes are required. The scheduled-message timer is unchanged.

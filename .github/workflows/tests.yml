@@ -14,6 +14,16 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -28,6 +38,12 @@ jobs:
         run: python manage.py makemigrations accounts messenger administration --check --dry-run
       - name: Run Django tests
         run: python manage.py test
+      - name: Verify shared cache across Django processes
+        env:
+          SOVIETGRAM_REDIS_URL: redis://127.0.0.1:6379/15
+        run: |
+          python manage.py shell -c 'from django.core.cache import cache; cache.set("ci:shared-cache", 41, 60)'
+          python manage.py shell -c 'from django.core.cache import cache; assert cache.incr("ci:shared-cache") == 42; cache.delete("ci:shared-cache")'
       - name: Check JavaScript syntax
         run: |
           node --check static/js/app.js

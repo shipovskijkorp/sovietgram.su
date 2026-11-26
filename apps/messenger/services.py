@@ -612,14 +612,29 @@ def serialize_pins(chat):
 
 
 def purge_expired_messages(limit=100):
+    if limit <= 0:
+        return 0
     now = timezone.now()
     expired = list(
         Message.objects.filter(
             expires_at__isnull=False,
             expires_at__lte=now,
-        ).order_by("expires_at", "id")[:limit]
+        ).order_by("expires_at", "id").values_list("pk", "chat_id")[:limit]
     )
-    for message in expired:
-        delete_message_content(message)
-        message.delete()
-    return len(expired)
+    deleted = 0
+    for message_id, chat_id in expired:
+        with transaction.atomic():
+            # Use the same chat-before-message lock order as chat mutations.
+            # Recheck after acquiring the lock: a concurrent cleanup may
+            # already have removed the candidate.
+            if not Chat.objects.select_for_update().filter(pk=chat_id).first():
+                continue
+            message = Message.objects.select_for_update().filter(
+                pk=message_id, chat_id=chat_id, expires_at__lte=now,
+            ).first()
+            if message is None:
+                continue
+            delete_message_content(message)
+            message.delete()
+            deleted += 1
+    return deleted

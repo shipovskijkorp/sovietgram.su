@@ -31,7 +31,7 @@ def _delete_chat_with_files(chat):
 
 
 @transaction.atomic
-def delete_user_account(user):
+def delete_user_account(user, *, inactive_at=None):
     """
     Delete an account without leaving structurally broken messenger state.
 
@@ -50,6 +50,13 @@ def delete_user_account(user):
     locked_user = UserModel.objects.select_for_update().filter(pk=user.pk).first()
     if locked_user is None or locked_user.platform_role or locked_user.is_staff or locked_user.is_superuser or locked_user.platform_suspended_at:
         return
+    if inactive_at is not None:
+        from .privacy import account_expired_for_inactivity
+
+        # The user may have become active or changed their preference after
+        # the maintenance job selected the account. Recheck under the lock.
+        if not locked_user.is_active or not account_expired_for_inactivity(locked_user, inactive_at):
+            return False
     user = locked_user
 
     owned = list(
@@ -127,3 +134,4 @@ def delete_user_account(user):
     )
     _delete_stored_file(user.avatar)
     user.delete()
+    return True

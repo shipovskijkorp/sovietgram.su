@@ -1,0 +1,14 @@
+[Unit]
+Description=Clean up expired Sovietgram messages and inactive accounts
+After=network.target
+
+[Service]
+Type=oneshot
+User=sovietgram
+Group=www-data
+WorkingDirectory=/opt/sovietgram
+EnvironmentFile=/opt/sovietgram/.env
+ExecStart=/opt/sovietgram/.venv/bin/python manage.py run_maintenance
+UMask=0077
+Nice=5
+TimeoutStartSec=600
