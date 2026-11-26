@@ -453,6 +453,7 @@ class BrowserControlsTests(StaticLiveServerTestCase):
             self.page.wait_for_function("""() => {
                 const footer = document.querySelector("#desktopChatSidebar > .sidebar__footer");
                 const composer = document.querySelector("#messageForm");
+                if (!footer || !composer) return false;
                 const a = footer.getBoundingClientRect(), b = composer.getBoundingClientRect();
                 return Math.abs(a.top - b.top) <= 1 && Math.abs(a.height - b.height) <= 1
                     && Math.abs(a.bottom - b.bottom) <= 1;

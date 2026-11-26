@@ -13,7 +13,10 @@ def contact_display_name(owner, user, aliases=None):
     if owner.pk == user.pk:
         return user.display_name
     if aliases is None:
-        alias = Contact.objects.filter(owner=owner, user=user).values_list("alias", flat=True).first()
+        if hasattr(user, "contact_alias_ui"):
+            alias = user.contact_alias_ui
+        else:
+            alias = Contact.objects.filter(owner=owner, user=user).values_list("alias", flat=True).first()
     else:
         alias = aliases.get(user.pk)
     return alias or user.display_name

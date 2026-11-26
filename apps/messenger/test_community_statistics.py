@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import User
-from .models import Chat, ChatParticipant, Message, MessageReaction
+from .models import ChannelPostView, Chat, ChatParticipant, Message, MessageReaction
 
 
 class CommunityStatisticsTests(TestCase):
@@ -50,6 +50,31 @@ class CommunityStatisticsTests(TestCase):
         self.assertEqual(thirty["new_members"],3)
         self.assertEqual(thirty["reactions"],2)
         self.assertEqual(len(thirty["series"]),30)
+
+    def test_channel_reach_uses_first_view_dates_and_retained_posts(self):
+        channel = Chat.objects.create(type=Chat.Type.CHANNEL, title="Channel stats")
+        ChatParticipant.objects.create(chat=channel, user=self.owner, role="owner")
+        old = Message.objects.create(chat=channel, sender=self.owner, text="Old")
+        Message.objects.filter(pk=old.pk).update(created_at=timezone.now()-timedelta(days=12))
+        recent = Message.objects.create(chat=channel, sender=self.owner, text="Recent")
+        unseen = Message.objects.create(chat=channel, sender=self.owner, text="Unseen")
+        deleted = Message.objects.create(chat=channel, sender=self.owner, is_deleted=True)
+        for post, user, stamp in (
+            (old, self.member, timezone.now()),
+            (recent, self.member, timezone.now()),
+            (recent, self.admin, None),
+            (deleted, self.outsider, timezone.now()),
+        ):
+            ChannelPostView.objects.create(post=post, user=user, viewed_at=stamp)
+        url = reverse("messenger:community_statistics", args=[channel.pk])
+        data = self.client.get(url).json()
+        self.assertEqual(data["channel_stats"], {
+            "views": 2, "reach": 1, "published_views": 2,
+            "average_views": 1.0, "undated_views": 1,
+        })
+        self.assertEqual(sum(row["views"] for row in data["series"]), 2)
+        self.assertIsNone(self.client.get(self.url).json()["channel_stats"])
+        self.assertEqual(self.client.get(url, {"days":30}).json()["channel_stats"]["published_views"], 3)
 
     def test_permission_account_guard_and_period_validation(self):
         self.assertEqual(self.client.get(self.url,{"days":"999"}).status_code,400)

@@ -691,7 +691,12 @@ def _prepare_sidebar_chats(user, archived=False):
                 Value(0, output_field=BigIntegerField()),
             ),
         )
-        .prefetch_related("participants")
+        .prefetch_related(Prefetch(
+            "participants",
+            queryset=User.objects.annotate(contact_alias_ui=Subquery(
+                Contact.objects.filter(owner=user, user_id=OuterRef("pk")).values("alias")[:1]
+            )),
+        ))
         .order_by(
             F("is_pinned_ui").desc(nulls_last=True),
             F("pin_order_ui").desc(nulls_last=True),
@@ -715,9 +720,8 @@ def _prepare_sidebar_chats(user, archived=False):
         ):
             attachment_kinds.setdefault(message_id, kind)
 
-    aliases = contact_aliases(user)
     for chat in chats:
-        _decorate_chat_ui(chat, user, aliases)
+        _decorate_chat_ui(chat, user)
         chat.is_archived_ui = archived
         chat.has_unread_ui = bool(chat.unread_count_ui or chat.marked_unread_ui)
         chat.unread_badge_count_ui = max(chat.unread_count_ui or 0, int(chat.marked_unread_ui))

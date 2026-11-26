@@ -259,11 +259,14 @@ class ChannelPostView(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="channel_post_views",
     )
+    # NULL only for legacy views that were recorded before timestamps existed.
+    viewed_at = models.DateTimeField(default=timezone.now, null=True, blank=True)
 
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=("post", "user"), name="sg_channel_post_view_once"),
         ]
+        indexes = [models.Index(fields=("post", "viewed_at"), name="sg_post_view_date_idx")]
 
 
 class MessageHiddenForUser(models.Model):

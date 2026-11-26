@@ -159,6 +159,17 @@
       }
       renderStatsChart($("communityStatsMessages"), data.series || [], "messages");
       renderStatsChart($("communityStatsMembers"), data.series || [], "new_members");
+      const channel = $("communityStatsChannel");
+      if (channel) {
+        channel.hidden = !data.channel_stats;
+        if (data.channel_stats) {
+          for (const element of channel.querySelectorAll("[data-channel-stat]")) {
+            element.textContent = Number(data.channel_stats[element.dataset.channelStat] || 0)
+              .toLocaleString("ru-RU", {maximumFractionDigits: 1});
+          }
+          renderStatsChart($("communityStatsViews"), data.series || [], "views");
+        }
+      }
       status.textContent = "Часовой пояс: " + data.timezone;
       content.hidden = false;
     } catch (error) {

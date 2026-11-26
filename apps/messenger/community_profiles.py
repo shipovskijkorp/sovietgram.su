@@ -25,6 +25,7 @@ from .models import (
     ChatJoinRequest,
     ChatMemberModeration,
     ChatParticipant,
+    ChannelPostView,
     Message,
     MessageAttachment,
     MessageReaction,
@@ -512,6 +513,29 @@ def community_statistics(request, chat_id):
         arrivals.order_by().annotate(day=TruncDate("joined_at", tzinfo=tz))
         .values("day").annotate(total=Count("pk")).values_list("day", "total")
     )
+    # Count first unique views during the selected calendar period, even
+    # on older retained posts. Never fabricate dates for pre-migration views.
+    channel_stats = None
+    view_counts = {}
+    if actor.chat.type == Chat.Type.CHANNEL:
+        retained_views = ChannelPostView.objects.filter(
+            Q(post__expires_at__isnull=True) | Q(post__expires_at__gt=now),
+            post__chat_id=chat_id, post__is_deleted=False,
+        )
+        period_views = retained_views.filter(viewed_at__gte=start, viewed_at__lte=now)
+        view_counts = dict(
+            period_views.order_by().annotate(day=TruncDate("viewed_at", tzinfo=tz))
+            .values("day").annotate(total=Count("pk")).values_list("day", "total")
+        )
+        published_views = retained_views.filter(post__in=history).count()
+        published_count = sum(message_counts.values())
+        channel_stats = {
+            "views": sum(view_counts.values()),
+            "reach": period_views.order_by().values("user_id").distinct().count(),
+            "published_views": published_views,
+            "average_views": round(published_views / published_count, 1) if published_count else 0,
+            "undated_views": retained_views.filter(viewed_at__isnull=True).count(),
+        }
     series = []
     for offset in range(days):
         day = first + timedelta(days=offset)
@@ -519,6 +543,7 @@ def community_statistics(request, chat_id):
             "date": day.isoformat(),
             "messages": message_counts.get(day, 0),
             "new_members": member_counts.get(day, 0),
+            "views": view_counts.get(day, 0),
         })
     response = JsonResponse({
         "ok": True, "account_id": request.user.pk, "days": days,
@@ -529,6 +554,7 @@ def community_statistics(request, chat_id):
         "active_authors": history.order_by().values("sender_id").distinct().count(),
         "reactions": MessageReaction.objects.filter(message__in=history).count(),
         "series": series,
+        "channel_stats": channel_stats,
     })
     response["Cache-Control"] = "private, no-store"
     return response

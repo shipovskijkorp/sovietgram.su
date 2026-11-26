@@ -347,9 +347,21 @@
             <div><small>Активные авторы</small><strong data-stats-value="active_authors"></strong></div>
             <div><small>Реакции к сообщениям</small><strong data-stats-value="reactions"></strong></div>
           </div>
+          <section id="communityStatsChannel" hidden>
+            <h3>Охват канала</h3>
+            <div class="community-stats-grid">
+              <div><small>Новые уникальные просмотры за период</small><strong data-channel-stat="views"></strong></div>
+              <div><small>Охват за период (аккаунты)</small><strong data-channel-stat="reach"></strong></div>
+              <div><small>Всего просмотров публикаций этого периода</small><strong data-channel-stat="published_views"></strong></div>
+              <div><small>Среднее на публикацию этого периода</small><strong data-channel-stat="average_views"></strong></div>
+              <div><small>Ранние просмотры без даты</small><strong data-channel-stat="undated_views"></strong></div>
+            </div>
+            <h3>Новые просмотры по дням</h3><div class="community-stats-chart" id="communityStatsViews"></div>
+            <p class="community-settings__hint">Один просмотр на аккаунт и публикацию за всё время. Охват — разные аккаунты, впервые просмотревшие хотя бы одну сохранившуюся публикацию за выбранные дни. Среднее включает все накопленные просмотры публикаций, созданных в выбранном периоде. Старые просмотры без даты не включены в график и охват.</p>
+          </section>
           <h3>Сообщения по дням</h3><div class="community-stats-chart" id="communityStatsMessages"></div>
           <h3>Новые участники по дням</h3><div class="community-stats-chart" id="communityStatsMembers"></div>
-          <p class="community-settings__hint">Учитываются сохранившиеся сообщения за выбранный период, без удалённых и просроченных. Новые участники — нынешние участники, вступившие в указанные дни. Реакции — текущие реакции на сообщения этого периода. Это не журнал просмотров или выходов из сообщества.</p>
+          <p class="community-settings__hint">Учитываются сохранившиеся сообщения за выбранный период, без удалённых и просроченных. Новые участники — нынешние участники, вступившие в указанные дни. Реакции — текущие реакции на сообщения этого периода. История выходов из сообщества не ведётся.</p>
         </div>
       </div>
     </section>
