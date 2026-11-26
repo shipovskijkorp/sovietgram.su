@@ -158,6 +158,12 @@
       tab.setAttribute("aria-pressed",String(item.id===selected));tab.disabled=busy;tabs.appendChild(tab);
     }
     actions.hidden=!current||mode==="save";
+    const shared=Boolean(current?.share_url);
+    $("stickerShare").textContent=shared?"Открыть ссылку":"Поделиться набором";
+    $("stickerShare").disabled=busy||!current||(!shared&&!current.stickers.length);
+    $("stickerUnshare").hidden=!shared;
+    $("stickerSharePanel").hidden=!shared||mode==="save";
+    $("stickerShareLink").value=shared?new URL(current.share_url,window.location.origin).href:"";
     upload.hidden=!current||mode==="save";
     silentRow.hidden=mode!=="send";
     save.hidden=mode!=="save"||!current;
@@ -248,6 +254,29 @@
       void mutate("delete",{pack_id:current.id});
   });
   $("stickerEditMode").addEventListener("click",()=>{removing=!removing;draw();});
+  $("stickerShare").addEventListener("click",async ()=>{
+    const current=pack();if(!current||busy)return;
+    if(current.share_url){
+      window.open(new URL(current.share_url,window.location.origin).href,"_blank","noopener,noreferrer");
+    }else if(window.confirm("Опубликовать набор по ссылке? Любой вошедший пользователь со ссылкой сможет сохранить его копию.")){
+      await mutate("share",{pack_id:current.id});
+    }
+  });
+  $("stickerUnshare").addEventListener("click",()=>{
+    const current=pack();if(!current||!current.share_url||busy)return;
+    if(window.confirm("Отозвать ссылку? Уже установленные копии сохранятся."))void mutate("unshare",{pack_id:current.id});
+  });
+  $("stickerCopyLink").addEventListener("click",async ()=>{
+    const value=$("stickerShareLink").value;
+    if(!value)return;
+    try{
+      await navigator.clipboard.writeText(value);
+      window.showToast?.("Ссылка скопирована.");
+    }catch(_){
+      $("stickerShareLink").focus();$("stickerShareLink").select();
+      error("Скопируйте выделенную ссылку вручную.");
+    }
+  });
   $("stickerClearRecent").addEventListener("click",()=>{
     if(window.confirm("Очистить список недавних стикеров? Избранное и наборы останутся."))void mutate("clear_recent");
   });

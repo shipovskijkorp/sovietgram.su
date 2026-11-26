@@ -562,10 +562,17 @@ class ChatFolder(models.Model):
 class StickerPack(models.Model):
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sticker_packs")
     name = models.CharField(max_length=48)
+    share_token = models.UUIDField(null=True, blank=True, unique=True, editable=False)
+    # A local snapshot, independent of deletion/revocation of the source.
+    # Do not expose the source ID or token to recipients' public profiles.
+    source_pack_id = models.PositiveBigIntegerField(null=True, blank=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ("id",)
+        constraints = [
+            models.UniqueConstraint(fields=("owner", "source_pack_id"), name="sg_one_imported_sticker_pack"),
+        ]
 
 
 class Sticker(models.Model):

@@ -33,7 +33,8 @@ test("text and media retries include silent mode and outbox uses a private endpo
   const chat=read("static/js/chat.js");
   assert.match(chat,/if \(item.silent\) data.set\("silent", "1"\)/);
   assert.match(chat,/data.set\("client_message_id", item.id\)/);
-  assert.match(chat,/textOutbox.enqueue\(messageInput.value, replyToInput\?\.value \|\| "", silent\)/);
+  assert.match(chat,/textOutbox.enqueue\(text, reply, silent, quote\)/);
+  assert.match(chat,/if \(item.reply && item.quote\) data.set\("reply_quote", item.quote\)/);
   const media=read("static/js/attachment-files.js");
   assert.match(media,/data.append\("silent", "1"\)/);
   assert.match(media,/clientId, silent, 1, compress/);

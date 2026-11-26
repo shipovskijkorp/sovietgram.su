@@ -1,5 +1,6 @@
 """Private sticker library; every sent sticker becomes an immutable chat attachment."""
 from io import BytesIO
+from uuid import uuid4
 import warnings
 
 from django.contrib.auth import get_user_model
@@ -58,7 +59,9 @@ def sticker_payload(item):
 
 
 def pack_payload(pack):
-    return {"id": pack.pk, "name": pack.name, "stickers": [
+    return {"id": pack.pk, "name": pack.name,
+            "share_url": reverse("messenger:shared_sticker_pack", args=[pack.share_token]) if pack.share_token else "",
+            "stickers": [
         sticker_payload(item) for item in pack.stickers.defer("image").all()
     ]}
 
@@ -84,7 +87,7 @@ def sticker_packs(request):
     if request.POST.get("account_id") != str(request.user.pk):
         return error("Аккаунт изменился. Обновите страницу.", 409)
     action = request.POST.get("action", "")
-    if action not in {"create", "rename", "delete", "add", "remove", "save_message", "favorite", "forget_recent", "clear_recent"}:
+    if action not in {"create", "rename", "delete", "add", "remove", "save_message", "favorite", "forget_recent", "clear_recent", "share", "unshare"}:
         return error("Неизвестное действие.")
     image = None
     emoji = request.POST.get("emoji", "").strip()
@@ -161,6 +164,16 @@ def sticker_packs(request):
                 return error("Набор с таким названием уже существует.")
             pack.name = name
             pack.save(update_fields=["name"])
+        elif action == "share":
+            if not pack.stickers.exists():
+                return error("Добавьте хотя бы один стикер перед публикацией.")
+            if pack.share_token is None:
+                pack.share_token = uuid4()
+                pack.save(update_fields=["share_token"])
+        elif action == "unshare":
+            if pack.share_token is not None:
+                pack.share_token = None
+                pack.save(update_fields=["share_token"])
         elif action == "delete":
             pack.delete()
             return JsonResponse({"ok": True})

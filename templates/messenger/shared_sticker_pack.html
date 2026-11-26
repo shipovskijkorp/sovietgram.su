@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{{ pack.name }} — Стикеры Sovietgram{% endblock %}
+{% block body_class %}auth-body{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/settings.css' %}?v={{ static_version }}">{% endblock %}
+{% block content %}
+<main class="auth-shell">
+  <section class="auth-card auth-card--wide shared-sticker-page">
+    <a class="auth-brand" href="{% url 'messenger:home' %}"><span class="brand__mark">★</span><span>SOVIETGRAM</span></a>
+    <div class="auth-heading"><p class="eyebrow">Набор стикеров</p><h1>{{ pack.name }}</h1>
+      <p>{{ stickers|length }} шт. · Установка создаёт личную копию набора.</p></div>
+    <div class="shared-sticker-preview">
+      {% for item in stickers %}
+      <div><img src="{% url 'messenger:shared_sticker_image' pack.share_token item.pk %}" alt="{{ item.emoji|default:'Стикер' }}" loading="lazy"><small>{{ item.emoji }}</small></div>
+      {% empty %}<p>В наборе пока нет стикеров.</p>{% endfor %}
+    </div>
+    {% if problem %}<p class="form-alert" role="alert">{{ problem }}</p>{% endif %}
+    {% if installed %}
+      <p class="micro-copy">Этот набор уже есть в вашей библиотеке.</p>
+      <a class="primary-button" href="{% url 'messenger:home' %}?manage_stickers=1">Открыть наборы</a>
+    {% elif stickers %}
+      <form method="post" class="auth-form">
+        {% csrf_token %}
+        <input type="hidden" name="account_id" value="{{ request.user.pk }}">
+        <button type="submit" class="primary-button">Установить набор</button>
+      </form>
+    {% endif %}
+    <p class="auth-switch"><a href="{% url 'messenger:home' %}">В мессенджер</a></p>
+  </section>
+</main>
+{% endblock %}

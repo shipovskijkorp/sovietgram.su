@@ -7,6 +7,13 @@
     <button type="button" id="stickerRename">Переименовать</button>
     <button type="button" id="stickerDeletePack">Удалить набор</button>
     <button type="button" id="stickerEditMode" aria-pressed="false">Удалить стикеры</button>
+    <button type="button" id="stickerShare">Поделиться набором</button>
+    <button type="button" id="stickerUnshare" hidden>Отозвать ссылку</button>
+  </div>
+  <div id="stickerSharePanel" class="sticker-share-panel" hidden>
+    <label for="stickerShareLink">Ссылка на набор</label>
+    <div><input type="text" id="stickerShareLink" readonly><button type="button" id="stickerCopyLink">Копировать</button></div>
+    <small>Любой авторизованный пользователь со ссылкой может установить копию. Отзыв ссылки не удаляет уже установленные копии.</small>
   </div>
   <div class="sticker-pack-actions"><button type="button" id="stickerClearRecent" hidden>Очистить недавние</button></div>
   <div id="stickerGrid" class="sticker-grid"></div>
