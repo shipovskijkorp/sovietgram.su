@@ -504,10 +504,33 @@
     if (pinLabel) pinLabel.textContent = article.dataset.messagePinned === "true" ? "Открепить" : "Закрепить";
     window.SovietgramSocial?.preparePicker(article);
 
+    // A fixed menu belongs to the viewport, not a scrolling or transformed
+    // conversation ancestor. Measure from a known origin before clamping.
+    if (contextMenu.parentElement !== document.body) document.body.append(contextMenu);
+    const viewport = window.visualViewport;
+    const left = viewport?.offsetLeft || 0, top = viewport?.offsetTop || 0;
+    const width = viewport?.width || window.innerWidth;
+    const height = viewport?.height || window.innerHeight;
+    Object.assign(contextMenu.style, {
+      position: "fixed", inset: "auto", left: "0px", top: "0px",
+      maxWidth: Math.max(0, width - 12) + "px",
+      maxHeight: Math.max(0, height - 12) + "px",
+      overflowY: "auto", transform: "none",
+    });
     contextMenu.hidden = false;
+    contextMenu.scrollTop = 0;
     const rect = contextMenu.getBoundingClientRect();
-    contextMenu.style.left = Math.max(6, Math.min(x, window.innerWidth - rect.width - 6)) + "px";
-    contextMenu.style.top = Math.max(6, Math.min(y, window.innerHeight - rect.height - 6)) + "px";
+    const targetLeft = Math.max(left + 6, Math.min(x, left + width - rect.width - 6));
+    const targetTop = Math.max(top + 6, Math.min(y, top + height - rect.height - 6));
+    const scaleX = rect.width / contextMenu.offsetWidth || 1;
+    const scaleY = rect.height / contextMenu.offsetHeight || 1;
+    contextMenu.style.left = (targetLeft - rect.left) / scaleX + "px";
+    contextMenu.style.top = (targetTop - rect.top) / scaleY + "px";
+    if (contextQuote && quoteButton) {
+      const action = quoteButton.getBoundingClientRect();
+      const menu = contextMenu.getBoundingClientRect();
+      if (action.bottom > menu.bottom) contextMenu.scrollTop += (action.bottom - menu.bottom + 6) / scaleY;
+    }
   }
 
   function setReply(article, quote = "") {

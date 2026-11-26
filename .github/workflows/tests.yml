@@ -12,7 +12,8 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Ubuntu 24.04 ships the same PostgreSQL major version as the CI service.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     services:
       postgres:

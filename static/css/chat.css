@@ -1770,3 +1770,6 @@ body[data-theme="dark"] .channel-discussion { background:#211d1a; }
 .message-reply-preview--quote .message-reply-quote { display: block; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 6em; overflow: hidden; text-overflow: ellipsis; text-align: left; }
 .message-reply-preview--quote strong::before { content: "❝ "; }
 .message-context-menu [data-message-action="quote"][hidden] { display: none !important; }
+
+/* Context menus must be scrollable within short desktop/mobile viewports. */
+.message-context-menu { box-sizing: border-box; overscroll-behavior: contain; max-width: calc(100vw - 12px); max-height: calc(100dvh - 12px); overflow-y: auto; }

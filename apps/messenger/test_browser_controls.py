@@ -697,6 +697,14 @@ class BrowserControlsTests(StaticLiveServerTestCase):
             selection.addRange(range);
         }""")
         source.dispatch_event("contextmenu", {"clientX": 700, "clientY": 300, "button": 2})
+        self.visible('[data-message-action="quote"]')
+        self.page.wait_for_function("""() => {
+            const menu = document.getElementById("messageContextMenu").getBoundingClientRect();
+            const action = document.querySelector('[data-message-action="quote"]').getBoundingClientRect();
+            return menu.top >= -1 && menu.left >= -1 &&
+                menu.bottom <= innerHeight + 1 && menu.right <= innerWidth + 1 &&
+                action.top >= 0 && action.bottom <= innerHeight;
+        }""")
         self.click('[data-message-action="quote"]')
         self.expect(self.page.locator("#composerReplyPreview")).to_have_text("direct")
         self.page.locator("#messageInput").fill("Reply with a quote")
