@@ -470,6 +470,40 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.page.set_viewport_size({"width": 1360, "height": 900})
         aligned()
 
+    def test_desktop_sidebar_width_is_applied_before_late_scripts(self):
+        self.go(self.direct)
+        separator = self.page.locator("#desktopSidebarResizer")
+        sidebar = self.page.locator("#desktopChatSidebar")
+        separator.focus()
+        separator.press("Home")
+        self.expect(separator).to_have_attribute("aria-valuenow", "280")
+        self.assertAlmostEqual(sidebar.bounding_box()["width"], 280, delta=1)
+
+        # Simulate a slow/unavailable end-of-body layout controller. The
+        # next chat must already have the saved width even without that JS.
+        script_url = re.compile(r"/static/js/desktop-ui\.js(?:\?.*)?$")
+        self.page.route(script_url, lambda route: route.abort())
+        self.click(f'#chatList a[data-chat-id="{self.group.pk}"]')
+        self.page.wait_for_load_state("domcontentloaded")
+        self.visible(".conversation--chat")
+        self.assertAlmostEqual(sidebar.bounding_box()["width"], 280, delta=1)
+        self.assertEqual(self.page.evaluate("""() =>
+            document.documentElement.style.getPropertyValue("--sg-desktop-sidebar")"""), "280px")
+
+        self.page.unroute(script_url)
+        self.page.reload(wait_until="domcontentloaded")
+        self.expect(separator).to_have_attribute("aria-valuenow", "280")
+        self.assertAlmostEqual(sidebar.bounding_box()["width"], 280, delta=1)
+        separator.press("End")
+        self.expect(separator).to_have_attribute("aria-valuenow", "520")
+        self.click(f'#chatList a[data-chat-id="{self.direct.pk}"]')
+        self.page.wait_for_load_state("domcontentloaded")
+        self.expect(separator).to_have_attribute("aria-valuenow", "520")
+        self.assertAlmostEqual(sidebar.bounding_box()["width"], 520, delta=1)
+        separator.press("Enter")
+        self.assertEqual(self.page.evaluate("""() =>
+            document.documentElement.style.getPropertyValue("--sg-desktop-sidebar")"""), "")
+
     def test_desktop_workspace_and_resizable_chat_list(self):
         self.go()
         self.visible("#desktopSidebarResizer")

@@ -6,10 +6,11 @@
   const handle = document.getElementById("desktopSidebarResizer");
   if (!shell || !sidebar || !handle) return;
   const desktop = window.matchMedia("(min-width: 821px) and (min-height: 541px), (min-width: 1101px)");
-  const key = "sovietgram.desktop.sidebar-width.v1." + (document.body.dataset.accountId || "default");
+  const root = document.documentElement;
+  const widthProperty = "--sg-desktop-sidebar";
+  const key = "sovietgram.desktop.sidebar-width.v1." + (root.dataset.accountId || document.body.dataset.accountId || "default");
   const min = 280;
   const maximum = () => Math.max(min, Math.min(520, Math.floor(shell.clientWidth * .4)));
-  const defaultWidth = () => Math.round(Math.min(400, Math.max(300, shell.clientWidth * .28)));
   const clamp = width => Math.max(min, Math.min(maximum(), Math.round(width)));
   let preferred = null;
   try {
@@ -50,8 +51,18 @@
   function setWidth(width) {
     if (!desktop.matches) return;
     const follow = stage && stage.scrollHeight - stage.scrollTop - stage.clientHeight < 60;
-    current = clamp(width);
-    shell.style.setProperty("--sg-desktop-sidebar", current + "px");
+    // CSS owns the responsive default and the maximum width. In particular,
+    // don't replace a restored/default CSS width with a slightly different
+    // JS-computed size after the first paint.
+    if (width == null) {
+      root.style.removeProperty(widthProperty);
+    } else {
+      const value = width + "px";
+      if (root.style.getPropertyValue(widthProperty) !== value) {
+        root.style.setProperty(widthProperty, value);
+      }
+    }
+    current = clamp(sidebar.getBoundingClientRect().width);
     handle.setAttribute("aria-valuemin", String(min));
     handle.setAttribute("aria-valuemax", String(maximum()));
     handle.setAttribute("aria-valuenow", String(current));
@@ -70,7 +81,7 @@
   function reset() {
     preferred = null;
     try { localStorage.removeItem(key); } catch (_error) {}
-    setWidth(defaultWidth());
+    setWidth(null);
   }
   function finish(save = true) {
     if (pointer === null) return;
@@ -92,7 +103,7 @@
   });
   handle.addEventListener("pointermove", event => {
     if (event.pointerId !== pointer) return;
-    setWidth(startWidth + event.clientX - startX);
+    setWidth(clamp(startWidth + event.clientX - startX));
   });
   handle.addEventListener("pointerup", event => {
     if (event.pointerId === pointer) finish();
@@ -100,7 +111,7 @@
   handle.addEventListener("pointercancel", event => {
     if (event.pointerId === pointer) {
       finish(false);
-      setWidth(preferred ?? defaultWidth());
+      setWidth(preferred);
     }
   });
   handle.addEventListener("lostpointercapture", event => {
@@ -123,17 +134,16 @@
       default: return;
     }
     event.preventDefault();
-    setWidth(width);
+    setWidth(clamp(width));
     persist();
   });
   function updateLayout() {
     if (!desktop.matches) {
       finish(false);
-      shell.style.removeProperty("--sg-desktop-sidebar");
       syncBottomBar();
       return;
     }
-    setWidth(preferred ?? defaultWidth());
+    setWidth(pointer === null ? preferred : current);
     syncBottomBar();
   }
   if (desktop.addEventListener) desktop.addEventListener("change", updateLayout);

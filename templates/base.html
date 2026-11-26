@@ -2,7 +2,7 @@
 <!doctype html>
 <html lang="ru"
       data-theme="{% if request.user.is_authenticated %}{{ request.user.theme }}{% else %}light{% endif %}"
-      data-authenticated="{{ request.user.is_authenticated|yesno:'true,false' }}">
+      data-authenticated="{{ request.user.is_authenticated|yesno:'true,false' }}"{% if request.user.is_authenticated %} data-account-id="{{ request.user.pk }}"{% endif %}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -19,6 +19,20 @@
       }
       root.dataset.theme = theme;
       root.style.colorScheme = theme === "dark" ? "dark" : "light";
+
+      // Restore the per-account sidebar preference before stylesheets and
+      // workspace markup load. The desktop CSS clamps it to the viewport;
+      // mobile CSS does not use this property.
+      if (root.dataset.authenticated === "true" && root.dataset.accountId) {
+        try {
+          const key = "sovietgram.desktop.sidebar-width.v1." + root.dataset.accountId;
+          const stored = localStorage.getItem(key);
+          const width = Number(stored);
+          if (stored && Number.isFinite(width) && width >= 280 && width <= 520) {
+            root.style.setProperty("--sg-desktop-sidebar", width + "px");
+          }
+        } catch (_error) {}
+      }
     })();
   </script>
   <link rel="icon" type="image/png" href="{% static 'img/sovietgram-icon.png' %}">
