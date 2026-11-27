@@ -36,6 +36,16 @@ SELECT avatar FROM messenger_chat WHERE avatar <> ''
 UNION
 SELECT file FROM messenger_messageattachment WHERE file <> ''
 """
+AVATAR_HISTORY_QUERY = "\nUNION\nSELECT image FROM accounts_avatarhistory WHERE image <> ''"
+
+
+def sqlite_media_names(connection):
+    # Old archives can predate avatar history; newer archives must include it.
+    has_history = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='accounts_avatarhistory'"
+    ).fetchone()
+    query = MEDIA_QUERY + (AVATAR_HISTORY_QUERY if has_history else "")
+    return sorted(media_name(row[0]) for row in connection.execute(query))
 
 
 def media_name(value):
@@ -57,7 +67,7 @@ def sqlite_snapshot(database, work):
         live.backup(snapshot, pages=256, sleep=.05)
         if snapshot.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
             raise BackupError("SQLite snapshot failed quick_check.")
-        media = sorted(media_name(row[0]) for row in snapshot.execute(MEDIA_QUERY))
+        media = sqlite_media_names(snapshot)
     return "sqlite", destination, media
 
 
@@ -88,7 +98,8 @@ def postgres_snapshot(database, work):
     with psycopg.connect(**kwargs, connect_timeout=10) as connection:
         connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         snapshot_id = connection.execute("SELECT pg_export_snapshot()").fetchone()[0]
-        media = sorted(media_name(row[0]) for row in connection.execute(MEDIA_QUERY))
+        # Production schema is expected to be migrated before backups run.
+        media = sorted(media_name(row[0]) for row in connection.execute(MEDIA_QUERY + AVATAR_HISTORY_QUERY))
         subprocess.run(
             ["pg_dump", "--format=custom", "--no-password", "--snapshot=" + snapshot_id,
              "--file=" + str(destination)],
@@ -184,6 +195,43 @@ def verify_backup(path):
     if not db_name or db_name not in actual or len(set(actual) & {"database.sqlite3", "database.dump"}) != 1:
         raise BackupError("Backup must contain exactly one database snapshot.")
     return manifest
+
+
+def rehearse_sqlite_backup(path):
+    """Restore only the DB to a private temp directory; never touch live data.
+
+    Verify the entire archive and then verify the extracted snapshot again,
+    so a replaced archive cannot silently substitute a different database.
+    """
+    manifest = verify_backup(path)
+    if manifest["database"] != "sqlite":
+        raise BackupError("SQLite rehearsal requires an SQLite backup. PostgreSQL needs an isolated pg_restore database.")
+    with tempfile.TemporaryDirectory(prefix="sovietgram-rehearsal-") as directory:
+        restored = Path(directory) / "database.sqlite3"
+        with tarfile.open(path, "r:gz") as archive:
+            item = archive.getmember("database.sqlite3")
+            if not item.isfile() or item.size != manifest["files"][item.name]["size"]:
+                raise BackupError("Restored database entry changed.")
+            with archive.extractfile(item) as source, restored.open("xb") as target:
+                reader = HashReader(source)
+                while chunk := reader.read(CHUNK):
+                    target.write(chunk)
+                if reader.result() != manifest["files"][item.name]:
+                    raise BackupError("Restored database does not match manifest.")
+        with closing(sqlite3.connect(restored.as_uri() + "?mode=ro", uri=True)) as connection:
+            if connection.execute("PRAGMA integrity_check").fetchall() != [("ok",)]:
+                raise BackupError("Restored SQLite database failed integrity_check.")
+            if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+                raise BackupError("Restored SQLite database contains broken foreign keys.")
+            referenced = sqlite_media_names(connection)
+            missing = [name for name in referenced if "media/" + name not in manifest["files"]]
+            if missing:
+                raise BackupError(f"Backup is missing {len(missing)} referenced media file(s).")
+            tables = connection.execute(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            ).fetchone()[0]
+    return {"database": "sqlite", "tables": tables, "referenced_media": len(referenced),
+            "verified_files": len(manifest["files"])}
 
 
 def backup_directory(directory, base, media_root):

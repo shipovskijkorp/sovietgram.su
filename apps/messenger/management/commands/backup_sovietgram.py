@@ -5,7 +5,7 @@ import tarfile
 
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.messenger.backup import BackupError, create_backup, verify_backup
+from apps.messenger.backup import BackupError, create_backup, verify_backup, rehearse_sqlite_backup
 from config.operations import job_run
 
 
@@ -15,10 +15,21 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("--directory", default="/var/lib/sovietgram-backup")
         parser.add_argument("--keep", type=int, default=7)
-        parser.add_argument("--verify", metavar="ARCHIVE")
+        mode = parser.add_mutually_exclusive_group()
+        mode.add_argument("--verify", metavar="ARCHIVE")
+        mode.add_argument("--rehearse-sqlite", metavar="ARCHIVE",
+                          help="Verify and restore a SQLite snapshot into a temporary directory.")
 
     def handle(self, *args, **options):
         try:
+            if options["rehearse_sqlite"]:
+                report = rehearse_sqlite_backup(options["rehearse_sqlite"])
+                self.stdout.write(self.style.SUCCESS(
+                    f"SQLite restore rehearsal passed: {report['tables']} tables, "
+                    f"{report['referenced_media']} referenced media, "
+                    f"{report['verified_files']} verified files."
+                ))
+                return
             if options["verify"]:
                 manifest = verify_backup(options["verify"])
                 self.stdout.write(self.style.SUCCESS(
