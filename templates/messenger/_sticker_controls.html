@@ -4,6 +4,7 @@
     <div class="sticker-heading"><h2 id="stickerDialogTitle">Стикеры</h2><small id="stickerSubtitle"></small></div>
     <button type="button" class="sticker-icon-button" id="stickerManage" aria-label="Управление наборами" title="Управление наборами"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="m9 3-.8 2.4-2.4.9L3.5 6l-1.5 2.6 1.8 1.8v2.9L2 15.2l1.5 2.6 2.4-.4 2.4 1L9 21h3l.8-2.6 2.4-1 2.4.4 1.5-2.6-1.8-1.8v-2.9l1.8-1.8L17.6 6l-2.4.4-2.4-1L12 3z" transform="translate(1 0)"/></svg></button>
     <button type="button" class="sticker-icon-button" id="stickerPackMenuToggle" aria-label="Действия с набором" aria-expanded="false" aria-controls="stickerPackActions" hidden><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="12" cy="19" r="1.3"/></svg></button>
+    {% if can_send_image %}<button type="button" class="sticker-icon-button gif-switch" data-open-gifs data-gif-send="true" aria-label="Открыть GIF" title="GIF-анимации">GIF</button>{% endif %}
     <button type="button" class="sticker-icon-button" id="stickerDialogClose" aria-label="Закрыть"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
   </header>
   <div id="stickerSearchRow" class="sticker-search" hidden>

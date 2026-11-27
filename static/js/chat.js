@@ -224,6 +224,7 @@ function makeFileCard(attachment) {
   const link = document.createElement("a");
   link.className = "message-file-card";
   link.href = attachment.url;
+  if (/\.gif$/i.test(attachment.name || "")) {link.dataset.gifAttachment=String(attachment.id);link.dataset.gifName=attachment.name;}
 
   const icon = document.createElement("span");
   icon.className = "message-file-card__icon";
@@ -343,6 +344,7 @@ function makeMedia(attachment, isOwn = false) {
     link.rel = "noopener";
     link.dataset.lightboxImage = attachment.url;
     link.dataset.mediaName = attachment.name || "";
+    if (/\.gif$/i.test(attachment.name || "")) {link.dataset.gifAttachment=String(attachment.id);link.dataset.gifName=attachment.name;}
     link.dataset.mediaDownload = "/attachment/" + attachment.id + "/download/";
     const image = document.createElement("img");
     image.className = "message-media__image";

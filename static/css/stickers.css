@@ -132,3 +132,34 @@
 .sticker-catalog-entry small { color:var(--muted); margin-top:4px; font-size:12px; }
 .sticker-catalog-pagination { display:flex; justify-content:center; gap:14px; align-items:center; }
 .sticker-catalog-page select { font:inherit; border:1px solid var(--line); border-radius:8px; background:var(--panel-strong); color:var(--ink); padding:9px; }
+
+/* GIF library uses the same palette and spacing as the sticker manager. */
+.gif-menu-icon{display:inline-grid;place-items:center;min-width:24px;height:20px;padding:0 3px;border:1.5px solid currentColor;border-radius:4px;font-size:10px;font-weight:700;line-height:1;}
+.sticker-dialog .gif-switch{font-size:10px;font-weight:700;}
+.gif-dialog{width:min(590px,calc(100vw - 20px));height:min(660px,calc(100dvh - 20px));}
+.gif-dialog [hidden]{display:none!important;}
+.gif-dialog .sticker-heading{flex:1;min-width:0;}
+#gifBrowse{flex:1 1 0;min-height:0;overflow:auto;overscroll-behavior:contain;display:flex;flex-direction:column;padding:8px 10px 12px;gap:8px;}
+.gif-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;border-bottom:1px solid var(--line);flex-shrink:0;}
+.gif-tabs button{font-size:13px;padding:10px 3px;border-bottom:2px solid transparent;}
+.gif-tabs button[aria-pressed=true]{color:var(--sticker-accent,var(--red));border-bottom-color:currentColor;font-weight:600;}
+.gif-search-row{display:flex;align-items:center;gap:5px;flex-shrink:0;}
+.gif-search-row input{min-width:0;flex:1;border:1px solid var(--line);border-radius:8px;padding:9px;color:var(--ink);background:var(--panel-strong);font:inherit;font-size:13px;}
+.gif-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;align-content:start;}
+.gif-card{min-width:0;display:flex;flex-direction:column;gap:4px;border:1px solid var(--line);border-radius:10px;padding:5px;overflow:hidden;}
+.gif-dialog .gif-preview{position:relative;width:100%;aspect-ratio:4/3;min-height:70px;overflow:hidden;border-radius:7px;background:var(--sticker-hover);}
+.gif-preview img{display:block;width:100%;height:100%;object-fit:contain;}
+.gif-play{position:absolute;bottom:4px;left:4px;background:#000a;color:white;border-radius:4px;font-size:10px;padding:3px 4px;}
+.gif-card strong,.gif-card small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12px;padding:0 3px;}
+.gif-card small{color:var(--muted);}
+.gif-card-actions{display:flex;flex-wrap:wrap;gap:3px;margin-top:auto;}
+.gif-dialog .gif-card-actions button{border:1px solid var(--line);font-size:11px;border-radius:6px;padding:5px;flex:1 0 auto;color:var(--ink);}
+.gif-card-actions button[data-gif-action=send]{background:var(--sticker-accent,var(--red));color:white;border-color:transparent;}
+.gif-card-actions button[data-gif-action=delete]{color:var(--red);}
+.gif-pagination{display:flex;align-items:center;justify-content:center;gap:12px;margin:6px 0;}
+.gif-pagination button{border:1px solid var(--line);border-radius:7px;padding:6px 12px;}
+.gif-incoming,.gif-dialog .sticker-edit-form{overflow:auto;padding:12px;flex:1;min-height:0;}
+.gif-incoming-row{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--line);}
+.gif-incoming-row span{flex:1;min-width:0;overflow-wrap:anywhere;}
+.gif-incoming-row button{color:var(--sticker-accent,var(--red));}
+@media(max-width:480px){.gif-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.gif-card-actions button{font-size:11px;}.gif-dialog{height:min(670px,calc(100dvh - 12px));}}

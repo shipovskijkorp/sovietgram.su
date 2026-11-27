@@ -589,6 +589,50 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.click("#stickerBack")
         self.click("#stickerDialogClose")
 
+    def test_gif_library_catalog_and_saving_from_message(self):
+        from .models import SavedGif
+        from .test_gif_and_formatting import gif_bytes
+
+        storage = self.enterContext(TemporaryDirectory())
+        self.enterContext(override_settings(MEDIA_ROOT=storage))
+        self.go(self.direct)
+        self.click("#attachmentButton")
+        self.click('#attachmentMenu [data-open-gifs]')
+        self.visible("#gifDialog")
+        self.click("#gifUploadToggle")
+        self.page.locator("#gifFile").set_input_files({
+            "name":"animation.gif","mimeType":"image/gif","buffer":gif_bytes(),
+        })
+        self.page.locator("#gifName").fill("Котик")
+        self.page.locator("#gifTags").fill("Смех")
+        self.click("#gifEditorSave")
+        tile = self.page.locator(".gif-card")
+        self.expect(tile).to_contain_text("Котик")
+        item = SavedGif.objects.get(owner=self.owner)
+        self.click('[data-gif-action="publish"]')
+        self.expect(tile.locator('[data-gif-action="publish"]')).to_have_text("Снять публикацию")
+        item.refresh_from_db()
+        self.assertIsNotNone(item.published_at)
+        self.click('[data-gif-scope="catalog"]')
+        self.page.locator("#gifSearch").fill("смех")
+        self.expect(tile).to_contain_text("Котик")
+        self.click('[data-gif-action="send"]')
+        self.hidden("#gifDialog")
+        self.visible("#mediaComposeBackdrop")
+        self.click("#mediaComposeSend")
+        self.hidden("#mediaComposeBackdrop")
+        attachment = MessageAttachment.objects.get(message__chat=self.direct, kind="image")
+        with attachment.file.open("rb") as stream:
+            self.assertEqual(stream.read(), gif_bytes())
+        selector = f'[data-gif-attachment="{attachment.pk}"]'
+        self.page.locator(selector).click(button="right")
+        self.click('[data-message-action="save-gif"]')
+        self.visible("#gifIncoming")
+        self.click('[data-gif-action="save-message"]')
+        self.expect(self.page.locator(".gif-card")).to_contain_text("Котик")
+        self.assertEqual(SavedGif.objects.filter(owner=self.owner).count(), 1)
+        self.click("#gifDialogClose")
+
     def test_sticker_picker_context_actions_and_incoming_preview(self):
         from io import BytesIO
         from PIL import Image

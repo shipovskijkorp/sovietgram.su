@@ -319,6 +319,9 @@
     if (forwardButton) forwardButton.hidden = chatProtected;
     const stickerSave = contextMenu?.querySelector('[data-message-action="save-sticker"]');
     if (stickerSave) stickerSave.hidden = chatProtected || !contextArticle?.querySelector("[data-sticker-attachment]");
+    const gifSave = contextMenu?.querySelector('[data-message-action="save-gif"]');
+    if (gifSave) gifSave.hidden = chatProtected || !window.SovietgramGifs?.candidates(contextArticle).length;
+    if(chatProtected)window.SovietgramGifs?.closeIncoming?.();
   }
 
   applyChatProtection(chatProtected);
@@ -486,6 +489,8 @@
 
     const saveStickerButton = contextMenu.querySelector('[data-message-action="save-sticker"]');
     if (saveStickerButton) saveStickerButton.hidden = chatProtected || !article.querySelector("[data-sticker-attachment]");
+    const saveGifButton=contextMenu.querySelector('[data-message-action="save-gif"]');
+    if(saveGifButton)saveGifButton.hidden=chatProtected||!window.SovietgramGifs?.candidates(article).length;
     const editButton = contextMenu.querySelector('[data-message-action="edit"]');
     const copyButton = contextMenu.querySelector('[data-message-action="copy"]');
     const forwardButton = contextMenu.querySelector('[data-message-action="forward"]');
@@ -1167,6 +1172,7 @@
       if (action === "save-sticker" && !chatProtected) {
         window.SovietgramStickers?.openIncoming?.(article.querySelector("[data-sticker-attachment]"));
       }
+      if (action === "save-gif" && !chatProtected) window.SovietgramGifs?.openIncoming(article);
       if (action === "reactors") openReactors(article);
       if (action === "readers") openReaders(article);
       if (action === "edit") openEditModal(article);

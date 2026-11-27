@@ -493,6 +493,7 @@
     if (backdrop) backdrop.hidden = false;
     updateDraftUI();void persistCurrent();
     window.setTimeout(() => captionNode?.focus(), 0);
+    return true;
   }
 
   function pick(mode, append = false) {
@@ -817,5 +818,6 @@
     close: closeComposer,
     visible: () => Boolean(backdrop && !backdrop.hidden),
     send: sendSelected,
+    openGif: file => openComposer([file], "media"),
   };
 })();

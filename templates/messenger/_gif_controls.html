@@ -1,0 +1,36 @@
+<dialog id="gifDialog" class="sticker-dialog gif-dialog" data-url="{% url 'messenger:gif_library' %}" data-account-id="{{ request.user.pk }}" data-can-send="{{ can_send_image|yesno:'true,false' }}" aria-labelledby="gifDialogTitle">
+  <header class="sticker-header">
+    <div class="sticker-heading"><h2 id="gifDialogTitle">GIF-анимации</h2><small id="gifUsage"></small></div>
+    <button type="button" class="sticker-icon-button" id="gifDialogClose" aria-label="Закрыть">×</button>
+  </header>
+  <div id="gifBrowse">
+    <nav class="gif-tabs" aria-label="Разделы GIF">
+      <button type="button" data-gif-scope="library" aria-pressed="true">Мои GIF</button>
+      <button type="button" data-gif-scope="favorites" aria-pressed="false">Избранное</button>
+      <button type="button" data-gif-scope="catalog" aria-pressed="false">Каталог</button>
+    </nav>
+    <div class="gif-search-row"><input id="gifSearch" type="search" maxlength="80" placeholder="Поиск по названию и тегам" aria-label="Поиск GIF" autocomplete="off"><button type="button" id="gifUploadToggle" class="sticker-text-button">＋ Добавить</button></div>
+    <p id="gifCatalogHint" class="sticker-hint" hidden>Внутренний каталог: только GIF, добровольно опубликованные пользователями Sovietgram.</p>
+    <div class="gif-grid" id="gifGrid" aria-live="polite"></div>
+    <p id="gifEmpty" class="sticker-hint" hidden></p>
+    <nav class="gif-pagination" id="gifPagination" aria-label="Страницы GIF" hidden>
+      <button type="button" id="gifPrev">Назад</button><span id="gifPage"></span><button type="button" id="gifNext">Далее</button>
+    </nav>
+  </div>
+  <section id="gifIncoming" class="gif-incoming" hidden>
+    <p class="sticker-hint">Выберите GIF из сообщения. Сохранится отдельная личная копия.</p>
+    <div id="gifIncomingList"></div>
+    <button type="button" id="gifIncomingBack" class="sticker-text-button">Открыть мои GIF</button>
+  </section>
+  <form id="gifEditor" class="sticker-edit-form" hidden>
+    <h3 id="gifEditorTitle">Добавить GIF</h3>
+    <label id="gifFileRow" for="gifFile">Файл GIF (до 8 МиБ)</label>
+    <input id="gifFile" type="file" accept=".gif,image/gif">
+    <label for="gifName">Название</label><input id="gifName" type="text" maxlength="80" placeholder="Название анимации">
+    <label for="gifTags">Теги</label><input id="gifTags" type="text" maxlength="160" placeholder="кот, смех, реакция">
+    <button type="submit" class="sticker-primary" id="gifEditorSave">Сохранить</button>
+    <button type="button" class="sticker-text-button" id="gifEditorCancel">Отмена</button>
+  </form>
+  <p id="gifError" class="sticker-error" role="status" hidden></p>
+  <p id="gifLoading" class="sticker-hint" role="status" hidden>Загрузка…</p>
+</dialog>

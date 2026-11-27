@@ -1114,6 +1114,7 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
             "can_send_text": can_send_text,
             "can_send_media": can_send_media,
             "can_send_visual": bool({"image", "video"}.intersection(capabilities["media_kinds"])),
+            "can_send_image": "image" in capabilities["media_kinds"],
             "can_send_file": "file" in capabilities["media_kinds"],
             "can_send_audio": "audio" in capabilities["media_kinds"],
             "can_send_sticker": "sticker" in capabilities["media_kinds"],
