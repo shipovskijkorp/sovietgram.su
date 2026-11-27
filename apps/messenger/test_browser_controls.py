@@ -486,6 +486,9 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.click("#historyJumpLatest")
         self.visible(f"#message-{link.pk}")
         self.hidden("#historyJumpLatest")
+        self.expect(self.page.locator("#messageStage")).to_have_attribute("data-focus-message", "0")
+        from urllib.parse import urlsplit, parse_qs
+        self.assertNotIn("message", parse_qs(urlsplit(self.page.url).query))
         self.assertEqual(self.page.locator(f"#message-{old.pk}").count(), 0)
         # The old pin must navigate back to the actual message.
         self.click("#pinnedMessageBar")

@@ -155,7 +155,15 @@ function jumpToMessage(messageId) {
       if (folder && /^\d+$/.test(folder)) target.searchParams.set("folder", folder);
       target.searchParams.set("message", String(messageId));
       target.hash = "message-" + messageId;
-      window.location.assign(target.href);
+      const current = new URL(window.location.href);
+      if (current.pathname === target.pathname && current.search === target.search) {
+        // The URL can still point at a message no longer mounted after
+        // replacing a history window. Hash-only navigation cannot load it.
+        window.history.replaceState(window.history.state, "", target.href);
+        window.location.reload();
+      } else {
+        window.location.assign(target.href);
+      }
     }
     return;
   }
@@ -1590,6 +1598,14 @@ async function replaceHistoryWindow(params, anchor = null) {
 async function loadLatestHistory() {
   if (historyBusy) { pendingLatest = true; return; }
   if (await replaceHistoryWindow({})) {
+    // A successful return to the latest page leaves no focused historical
+    // message. Clear the URL too, preserving the active folder and other
+    // query parameters, so a subsequent pin/reply jump really navigates.
+    const url = new URL(window.location.href);
+    url.searchParams.delete("message");
+    if (/^#message-\d+$/.test(url.hash)) url.hash = "";
+    if (url.href !== window.location.href) window.history.replaceState(window.history.state, "", url.href);
+    messageStage.dataset.focusMessage = "0";
     scrollToBottom(true);
     storeScrollPosition();
     scheduleReadCheck();
