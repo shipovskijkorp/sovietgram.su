@@ -131,6 +131,9 @@
             <span class="tg-settings-row__label">Активные сеансы</span>
             <span class="tg-settings-row__value" id="privacySessionCount">{{ settings_sessions|length }}</span>
           </button>
+          <a class="tg-settings-row tg-settings-row--plain" href="{% url 'accounts:security_history' %}" data-settings-close-on-follow>
+            <span class="tg-settings-row__label">История безопасности</span>
+          </a>
         </div>
 
         <div class="tg-settings-divider"></div>

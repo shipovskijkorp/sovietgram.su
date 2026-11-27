@@ -17,7 +17,8 @@ from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_http_methods
 
 from .account_security import _limited
-from .models import User
+from .models import SecurityEvent, User
+from .security_events import record_event
 from .multiaccount import remember_current_account
 from .two_factor import decrypt_secret, encrypt_secret, matching_step, new_recovery_codes, verify_factor_locked
 
@@ -130,6 +131,7 @@ def two_factor_settings(request):
                         "two_factor_secret", "two_factor_recovery_hashes", "two_factor_last_step",
                         "two_factor_failures", "two_factor_failure_window", "security_version",
                     ])
+                    record_event(request, user, SecurityEvent.Kind.FACTOR_ENABLE)
                     rotate = True
         elif action in {"disable", "regenerate"}:
             if not user.two_factor_enabled:
@@ -151,6 +153,7 @@ def two_factor_settings(request):
                 user.save(update_fields=[
                     "two_factor_secret", "two_factor_recovery_hashes", "two_factor_last_step", "security_version",
                 ])
+                record_event(request, user, SecurityEvent.Kind.FACTOR_DISABLE if action == "disable" else SecurityEvent.Kind.FACTOR_CODES)
                 rotate = True
         else:
             error = "Неизвестное действие."

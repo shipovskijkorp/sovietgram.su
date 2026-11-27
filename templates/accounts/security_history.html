@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}История безопасности — Sovietgram{% endblock %}
+{% block body_class %}auth-body{% endblock %}
+{% block content %}
+<main class="auth-shell">
+  <section class="auth-card auth-card--wide storage-page">
+    <a class="auth-brand" href="{% url 'messenger:home' %}?settings=privacy"><span class="brand__mark">★</span><span>SOVIETGRAM</span></a>
+    <div class="auth-heading">
+      <p class="eyebrow">Конфиденциальность и безопасность</p>
+      <h1>История безопасности</h1>
+      <p>Последние 100 событий вашего аккаунта. Браузер сообщает сведения об устройстве самостоятельно.</p>
+    </div>
+    <section class="storage-section">
+      {% for event in events %}
+      <div class="storage-breakdown">
+        <p><strong>{{ event.get_kind_display }}</strong> · <time datetime="{{ event.created_at|date:'c' }}">{{ event.created_at|date:"d.m.Y H:i:s" }}</time></p>
+        {% if event.device %}<p class="micro-copy" style="overflow-wrap:anywhere">{{ event.device }}</p>{% endif %}
+      </div>
+      {% empty %}
+      <p>Пока нет записей. История начинается после обновления приложения.</p>
+      {% endfor %}
+    </section>
+    <p class="micro-copy">При новом входе с паролем на подтверждённую почту может быть отправлено предупреждение. Повторные предупреждения ограничены 15 минутами.</p>
+    <a class="primary-button" href="{% url 'messenger:home' %}?settings=privacy">Вернуться к настройкам</a>
+  </section>
+</main>
+{% endblock %}

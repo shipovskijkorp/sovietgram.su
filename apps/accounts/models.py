@@ -85,6 +85,7 @@ class User(AbstractUser):
     platform_suspended_at = models.DateTimeField(null=True, blank=True, editable=False, db_index=True)
     platform_suspension_reason = models.CharField(max_length=300, blank=True, default="", editable=False)
     security_version = models.PositiveBigIntegerField(default=0, editable=False)
+    last_login_alert_at = models.DateTimeField(null=True, blank=True, editable=False)
     two_factor_secret = models.TextField(blank=True, default="", editable=False)
     two_factor_recovery_hashes = models.JSONField(default=list, blank=True, editable=False)
     two_factor_last_step = models.BigIntegerField(default=-1, editable=False)
@@ -186,3 +187,23 @@ class AccountSecurityRequest(models.Model):
                 fields=("user", "purpose"), name="unique_account_security_purpose",
             ),
         ]
+
+
+class SecurityEvent(models.Model):
+    class Kind(models.TextChoices):
+        LOGIN = "login", "Вход в аккаунт"
+        PASSWORD = "password", "Изменение пароля"
+        RESET = "password_reset", "Восстановление пароля"
+        EMAIL = "email_change", "Изменение почты"
+        FACTOR_ENABLE = "factor_enable", "Включение двухфакторной защиты"
+        FACTOR_DISABLE = "factor_disable", "Отключение двухфакторной защиты"
+        FACTOR_CODES = "factor_codes", "Обновление резервных кодов"
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="security_events")
+    kind = models.CharField(max_length=20, choices=Kind.choices)
+    device = models.CharField(max_length=240, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-id",)
+        indexes = [models.Index(fields=["user", "-id"], name="sg_security_user_idx")]

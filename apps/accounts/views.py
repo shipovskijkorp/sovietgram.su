@@ -35,7 +35,8 @@ from .forms import (
     RegisterForm,
     UserSettingsForm,
 )
-from .models import User, UserBlock
+from .models import SecurityEvent, User, UserBlock
+from .security_events import record_event
 from .two_factor import verify_factor_locked
 from .multiaccount import (
     activate_account,
@@ -214,6 +215,7 @@ class SovietgramLoginView(LoginView):
         response = super().form_valid(form)
         remember_current_account(self.request)
         remember_session_device(self.request)
+        record_event(self.request, self.request.user, SecurityEvent.Kind.LOGIN)
         return response
 
 
@@ -258,6 +260,7 @@ class SovietgramPasswordChangeView(LoginRequiredMixin, PasswordChangeView):
             else:
                 user.set_password(form.cleaned_data["new_password1"])
                 user.save(update_fields=["password"])
+                record_event(self.request, user, SecurityEvent.Kind.PASSWORD)
         if form.errors:
             return self.form_invalid(form)
         update_session_auth_hash(self.request, user)
@@ -324,8 +327,11 @@ def add_account(request):
 
     if request.method == "POST" and mode == "login" and login_form.is_valid():
         user = login_form.get_user()
-        add_authenticated_account(request, user, backend)
+        if add_authenticated_account(request, user, backend) is None:
+            messages.error(request, "Не удалось добавить аккаунт. Войдите повторно.")
+            return redirect("accounts:add_account")
         remember_session_device(request)
+        record_event(request, user, SecurityEvent.Kind.LOGIN)
         messages.success(request, f"Аккаунт @{user.username} добавлен.")
         return redirect("messenger:home")
 

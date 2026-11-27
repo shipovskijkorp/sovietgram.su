@@ -170,6 +170,7 @@ def build_export(user, include_files=False):
             )}
             profile["avatar_archive_path"] = avatar_path
             writer.json("profile.json", profile)
+            writer.jsonl("security_events.jsonl", rows(user.security_events.all(), "kind", "device", "created_at"))
             writer.jsonl("contacts.jsonl", rows(Contact.objects.filter(owner=user),
                 "user_id", "user__username", "alias", "created_at"))
             writer.jsonl("blocked.jsonl", rows(UserBlock.objects.filter(blocker=user),

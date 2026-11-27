@@ -30,7 +30,8 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_GET, require_http_methods
 
-from .models import AccountSecurityRequest, User
+from .models import AccountSecurityRequest, SecurityEvent, User
+from .security_events import record_event
 from .lifecycle import delete_user_account
 from .multiaccount import remove_current_account
 from .privacy import account_expired_for_inactivity
@@ -268,6 +269,7 @@ def password_reset_confirm(request, token):
             if request.method == "POST" and form.is_valid():
                 user = form.save(commit=False)
                 user.save(update_fields=["password"])
+                record_event(request, user, SecurityEvent.Kind.RESET)
                 _consume(pending)
                 # Password-derived session hashes invalidate existing Django
                 # sessions and stored multi-account slots. Do not auto-login.
@@ -350,6 +352,7 @@ def email_change_confirm(request, token):
             user.email_verified_at = timezone.now()
             user.email_verification_sent_at = None
             user.save(update_fields=["email", "email_verified_at", "email_verification_sent_at"])
+            record_event(request, user, SecurityEvent.Kind.EMAIL)
             _consume(pending)
     except IntegrityError:
         # Another account may have claimed the address since issuance.
