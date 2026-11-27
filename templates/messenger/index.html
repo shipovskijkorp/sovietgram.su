@@ -669,8 +669,9 @@
           <button type="button" id="mediaDraftDiscard">Удалить</button>
         </div>
         <div class="voice-retry-row" id="voiceRetryRow" hidden>
-          <span>Голосовое сообщение не подтверждено сервером.</span>
+          <span id="voiceRetryStatus">Голосовое сообщение не подтверждено сервером.</span>
           <button type="button" id="voiceRetrySend">Повторить</button>
+          <button type="button" id="voiceRetrySchedule" hidden>Позже</button>
           <button type="button" id="voiceRetryDiscard">Отменить</button>
         </div>
         <div class="voice-recording-bar" id="voiceRecordingBar" hidden>
@@ -684,6 +685,7 @@
           <span class="voice-recording-bar__lock" id="voiceRecordLock" aria-hidden="true">
             <span>⌃</span><b>🔒</b>
           </span>
+          <button type="button" class="voice-recording-bar__schedule" id="voiceRecordSchedule" aria-label="Запланировать голосовое сообщение" title="Отправить позже" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></svg></button>
           <button class="voice-recording-bar__send" id="voiceRecordSend" type="button" aria-label="Отправить голосовое сообщение" title="Отправить">
             <span class="tg-native-icon tg-native-icon--send" aria-hidden="true"></span>
           </button>
@@ -829,6 +831,11 @@
       <span><strong>Отправить без звука</strong><small>Не воспроизводить звук уведомления у получателя</small></span>
       <span class="media-compose-switch"><input id="mediaComposeSilent" type="checkbox"><span><i></i></span></span>
     </label>
+    <label class="media-compose-group">
+      <span><strong>Отправить позже</strong><small>Сервер отправит вложения в выбранное время</small></span>
+      <span class="media-compose-switch"><input id="mediaComposeSchedule" type="checkbox"><span><i></i></span></span>
+    </label>
+    <label class="media-compose-date" id="mediaComposeDateRow" hidden>Дата и время (ваш часовой пояс)<input type="datetime-local" id="mediaComposeDate"></label>
     <div class="media-upload-progress" id="mediaUploadProgress" hidden><span id="mediaUploadProgressBar"></span></div>
     <footer class="media-compose-footer"><small id="mediaComposeHint">Фото, GIF и видео будут отправлены как медиа.</small><button type="button" class="gallery-open-link" id="mediaComposeAbort" hidden>Остановить</button><button class="media-compose-send" id="mediaComposeSend" type="button">Отправить</button></footer>
   </section>

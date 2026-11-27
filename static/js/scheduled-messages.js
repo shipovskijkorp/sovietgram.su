@@ -32,6 +32,27 @@
   const menu = $("sendOptionsMenu"), toggle = $("sendOptionsToggle"), send = $("sendButton");
   const input = $("messageInput"), reply = $("replyToInput");
   const scheduleButton = $("scheduleCurrentMessage"), silentButton = $("sendWithoutSound");
+  const recordingDialog=$("scheduleRecordingDialog"),recordingForm=$("scheduleRecordingForm");
+  const recordingDate=$("scheduleRecordingDate"),recordingError=$("scheduleRecordingError");
+  let recordingResolve=null,recordingResult=null;
+  window.SovietgramSchedule.pickRecordingTime=()=>{
+    if(!recordingDialog||recordingDialog.open)return Promise.resolve(null);
+    recordingDate.min=localDateValue(Date.now()+60000);
+    recordingDate.max=localDateValue(Date.now()+365*86400000-60000);
+    recordingDate.value=localDateValue(Date.now()+300000);
+    recordingError.hidden=true;recordingResult=null;
+    return new Promise(resolve=>{recordingResolve=resolve;recordingDialog.showModal();recordingDate.focus();});
+  };
+  recordingForm?.addEventListener("submit",event=>{
+    event.preventDefault();
+    try{recordingResult=toScheduledISO(recordingDate.value);recordingDialog.close();}
+    catch(e){recordingError.textContent=e.message;recordingError.hidden=false;}
+  });
+  $("scheduleRecordingCancel")?.addEventListener("click",()=>recordingDialog.close());
+  recordingDialog?.addEventListener("keydown",event=>event.stopPropagation());
+  recordingDialog?.addEventListener("close",()=>{
+    recordingResolve?.(recordingResult);recordingResolve=null;recordingResult=null;
+  });
   const keys = window.SovietgramSendRetry.batch();
   const keyScope = "sovietgram.pending-schedule."+account+"."+url;
   let editing = null, original = null, stickerDraft = null, busy = false, listVersion = 0;
@@ -128,6 +149,10 @@
       const labels = {poll:"Опрос", todo:"Список задач", location:"Геопозиция", article:"Статья"};
       body.textContent = item.attachment_type === "sticker" ? "Стикер" :
         (labels[item.special_type] ? labels[item.special_type] + ": " : "") + (item.display_text || item.text);
+      if(item.attachments?.length){
+        const names=item.attachments.map(a=>a.name).join(", ");
+        body.textContent="Вложения ("+item.attachments.length+"): "+names+(item.text?" · "+item.text:"");
+      }
       const state = document.createElement("small");
       state.textContent = item.status === "failed" ? "Не отправлено: "+item.error
         : item.error ? item.error+" Следующая попытка: "+formatDate(item.next_attempt_at)
@@ -251,6 +276,14 @@
     text.value=stickerMode ? "Стикер" : item ? (item.display_text || item.text) : original.text;
     text.readOnly=Boolean(item?.special_type || stickerMode);
     showSpecialFields(item);
+    const fileSummary=$("scheduledFileSummary"),hasFiles=Boolean(item?.attachments?.length);
+    fileSummary.hidden=!hasFiles;
+    fileSummary.textContent=hasFiles?item.attachments.map(a=>a.name).join(", "):"";
+    if(hasFiles){
+      text.required=false;
+      text.readOnly=item.attachments.some(a=>["voice","video_note"].includes(a.kind));
+      textRow.hidden=text.readOnly;
+    }
     const minimum = localDateValue(Date.now()+60000);
     date.min=minimum; date.max=localDateValue(Date.now()+365*86400000-60000);
     date.value=item && new Date(item.scheduled_for).getTime()>Date.now()+60000 ? localDateValue(item.scheduled_for) : localDateValue(Date.now()+300000);
@@ -286,7 +319,7 @@
     try {
       when=toScheduledISO(date.value);
       if (collectSpecial) specialPayload=collectSpecial();
-      else if (!text.value.trim()) throw new Error("Введите текст сообщения.");
+      else if (!text.value.trim()&&!editing?.attachments?.length) throw new Error("Введите текст сообщения.");
     } catch(e) {error(e.message);return;}
     setBusy(true);
     try {

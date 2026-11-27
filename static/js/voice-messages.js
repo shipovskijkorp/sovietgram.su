@@ -7,6 +7,7 @@
   const recordBar = document.getElementById("voiceRecordingBar");
   const recordDelete = document.getElementById("voiceRecordDelete");
   const recordSend = document.getElementById("voiceRecordSend");
+  const recordSchedule = document.getElementById("voiceRecordSchedule");
   const recordTimer = document.getElementById("voiceRecordTimer");
   const recordWaveform = document.getElementById("voiceRecordWaveform");
   const recordHint = document.getElementById("voiceRecordHint");
@@ -830,6 +831,7 @@
           : "Сдвиньте влево для отмены";
     }
     if (recordLock) recordLock.hidden = Boolean(session?.locked || session?.sending);
+    if (recordSchedule) recordSchedule.hidden = !session?.locked || Boolean(session?.sending);
   }
 
   function clearRecordingUi() {
@@ -842,6 +844,7 @@
     }
     if (recordTimer) recordTimer.textContent = "0:00.0";
     if (recordLock) recordLock.hidden = false;
+    if (recordSchedule) recordSchedule.hidden = true;
     syncComposerActions();
   }
 
@@ -849,7 +852,10 @@
   const voiceRetrySend = document.getElementById("voiceRetrySend");
   const voiceRetryDiscard = document.getElementById("voiceRetryDiscard");
   let pendingVoiceData = null;
-  let voiceRetryBusy = false;
+  let voiceRetryBusy = false, voiceAttempted = false;
+  const voiceRetrySchedule = document.getElementById("voiceRetrySchedule");
+  const voiceRetryStatus = document.getElementById("voiceRetryStatus");
+  const scheduleStage = document.getElementById("messageStage");
 
   function prepareVoice(blob, mime, durationMs, waveform) {
     if (!form) throw new Error("Форма отправки недоступна.");
@@ -861,6 +867,7 @@
     data.append("csrfmiddlewaretoken", csrfToken);
     data.append("text", "");
     data.append("attachment_mode", "voice");
+    data.append("account_id", scheduleStage?.dataset.accountId || "");
     data.append("client_message_id", window.SovietgramSendRetry.uuid());
     data.append("voice_duration_ms", String(Math.max(MIN_RECORDING_MS, Math.round(durationMs))));
     data.append("voice_waveform", JSON.stringify(waveform));
@@ -878,7 +885,8 @@
   }
 
   async function uploadVoice(data) {
-    const response = await window.SovietgramSendRetry.fetchSend(form.action, {
+    const endpoint = data.has("scheduled_for") ? scheduleStage.dataset.scheduledUrl : form.action;
+    const response = await window.SovietgramSendRetry.fetchSend(endpoint, {
       method: "POST",
       credentials: "same-origin",
       headers: { "X-Requested-With": "XMLHttpRequest" },
@@ -889,29 +897,41 @@
       const first = Object.values(payload.errors || {}).flat()?.[0]?.message;
       throw new Error(payload.error || first || "Не удалось отправить голосовое сообщение.");
     }
-    return payload.message;
+    if(data.has("scheduled_for") && (!payload.item || payload.item.status === "canceled"))
+      throw Error("Эта отложенная отправка уже отменена.");
+    return payload;
   }
 
   function updateVoiceRetryUi() {
     if (voiceRetryRow) voiceRetryRow.hidden = !pendingVoiceData;
-    if (voiceRetrySend) voiceRetrySend.disabled = voiceRetryBusy;
+    if (voiceRetrySend) {
+      voiceRetrySend.disabled = voiceRetryBusy;
+      voiceRetrySend.textContent=voiceAttempted?"Повторить": "Отправить";
+    }
+    if(voiceRetrySchedule){voiceRetrySchedule.hidden=voiceAttempted||!pendingVoiceData||!scheduleStage?.dataset.scheduledUrl;voiceRetrySchedule.disabled=voiceRetryBusy;}
+    if(voiceRetryStatus)voiceRetryStatus.textContent=voiceAttempted?"Отправка голосового не подтверждена сервером.":"Запись готова к отправке." ;
     if (voiceRetryDiscard) voiceRetryDiscard.disabled = voiceRetryBusy;
   }
 
   async function sendPendingVoice() {
     if (!pendingVoiceData || voiceRetryBusy) return;
     const data = pendingVoiceData;
-    voiceRetryBusy = true;
+    voiceRetryBusy = true;voiceAttempted=true;
     updateVoiceRetryUi();
     try {
-      const message = await uploadVoice(data);
+      const result = await uploadVoice(data);
       pendingVoiceData = null;
       if (replyInput && replyInput.value === (data.get("reply_to") || "") &&
           (window.SovietgramChat?.currentQuote?.() || "") === (data.get("reply_quote") || "")) {
         window.SovietgramChat?.clearReplyState?.();
       }
-      const inserted = publishSentVoice(message);
-      if (!inserted) window.setTimeout(() => window.SovietgramChat?.syncNow?.(), 50);
+      if(data.has("scheduled_for")){
+        notify("Голосовое сообщение запланировано.");
+        if(result.item.status==="sent")void window.SovietgramChat?.syncNow?.();
+      }else{
+        const inserted = publishSentVoice(result.message);
+        if (!inserted) window.setTimeout(() => window.SovietgramChat?.syncNow?.(), 50);
+      }
     } catch (error) {
       notify(error.message || "Не удалось отправить голосовое сообщение. Запись сохранена для повтора.");
     } finally {
@@ -920,6 +940,18 @@
     }
   }
 
+  async function schedulePendingVoice(){
+    if(!pendingVoiceData||voiceRetryBusy||voiceAttempted)return;
+    const data=pendingVoiceData;
+    voiceRetryBusy=true;updateVoiceRetryUi();
+    let when=null;
+    try{when=await window.SovietgramSchedule?.pickRecordingTime?.();}
+    finally{voiceRetryBusy=false;updateVoiceRetryUi();}
+    if(!when||pendingVoiceData!==data)return;
+    data.set("scheduled_for",when);
+    await sendPendingVoice();
+  }
+  voiceRetrySchedule?.addEventListener("click",()=>void schedulePendingVoice());
   voiceRetrySend?.addEventListener("click", sendPendingVoice);
   voiceRetryDiscard?.addEventListener("click", () => {
     if (voiceRetryBusy) return;
@@ -940,7 +972,7 @@
 
     if (recordSession === session) recordSession = null;
 
-    if (action !== "send") {
+    if (action !== "send" && action !== "schedule") {
       clearRecordingUi();
       window.SovietgramChat?.focusComposer?.();
       return;
@@ -958,7 +990,8 @@
     setRecordingUi(session);
     try {
       pendingVoiceData = prepareVoice(blob, mime, durationMs, waveform);
-      await sendPendingVoice();
+      voiceAttempted=false;updateVoiceRetryUi();
+      if(action==="schedule")await schedulePendingVoice();else await sendPendingVoice();
     } catch (error) {
       notify(error.message || "Не удалось отправить голосовое сообщение.");
     } finally {
@@ -1203,6 +1236,9 @@
 
   recordDelete?.addEventListener("click", () => {
     if (recordSession && !recordSession.sending) requestStop(recordSession, "cancel");
+  });
+  recordSchedule?.addEventListener("click",()=>{
+    if(recordSession?.locked&&!recordSession.sending)requestStop(recordSession,"schedule");
   });
   recordSend?.addEventListener("click", () => {
     if (recordSession && !recordSession.sending) requestStop(recordSession, "send");

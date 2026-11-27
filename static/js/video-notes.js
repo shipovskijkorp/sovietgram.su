@@ -239,7 +239,7 @@
   const preview=$("videoNotePreview"), clock=$("videoNoteClock"), status=$("videoNoteStatus");
   const start=$("videoNoteStart"), stop=$("videoNoteStop"), send=$("videoNoteSend");
   const camera=$("videoNoteCamera"), retake=$("videoNoteRetake"), close=$("videoNoteClose"), retry=$("videoNoteRetry");
-  const silent=$("videoNoteSilent"), silentRow=$("videoNoteSilentRow");
+  const silent=$("videoNoteSilent"), silentRow=$("videoNoteSilentRow"), scheduleButton=$("videoNoteSchedule");
   const gestureBar=$("videoNoteGesture"), gestureHint=$("videoNoteGestureHint"), elapsed=$("videoNoteElapsed");
   const MAX_MS=60000, MIN_MS=200, MAX_BYTES=25*1024*1024;
   const CAMERA_TIMEOUT=30000, STOP_TIMEOUT=5000, DECODE_TIMEOUT=10000;
@@ -271,6 +271,7 @@
     send.querySelector("span").textContent=next==="sending"?"Отправка…":"Отправить";
     silentRow.hidden=next!=="review";
     silent.disabled=Boolean(pending?.data);
+    if(scheduleButton){scheduleButton.hidden=next!=="review"||Boolean(pending?.data);scheduleButton.disabled=!pending?.verified;}
     clock.hidden=!["recording","stopping"].includes(next);
   }
   function clearPreview() {
@@ -500,7 +501,7 @@
     }
     fail("Не удалось запустить видеокодек"+(lastError?.name?" ("+lastError.name+")":"")+". Попробуйте другой браузер или камеру.");
   }
-  async function upload() {
+  async function upload(scheduledFor="") {
     if(state!=="review"||!pending?.verified)return;
     const item=pending,token=generation;
     if(!item.data){
@@ -514,25 +515,30 @@
       data.append("client_message_id",window.SovietgramSendRetry.uuid());
       data.append("silent",silent.checked?"1":"0");data.append("preserve_draft","1");
       if(reply)data.append("reply_to",reply);if(quote)data.append("reply_quote",quote);
-      data.append("attachments",item.blob,item.filename);item.data=data;
+      data.append("attachments",item.blob,item.filename);
+      if(scheduledFor)data.append("scheduled_for",scheduledFor);
+      item.data=data;
     }
     preview.pause();ui("sending","Отправка видеокружка…");
     const controller=new AbortController();uploadController=controller;
     const deadline=setTimeout(()=>controller.abort(),90000);
     try {
-      const response=await window.SovietgramSendRetry.fetchSend(form.action,{
+      const endpoint=item.data.has("scheduled_for")?stage.dataset.scheduledUrl:form.action;
+      const response=await window.SovietgramSendRetry.fetchSend(endpoint,{
         method:"POST",credentials:"same-origin",headers:{"X-Requested-With":"XMLHttpRequest"},
         body:item.data,signal:controller.signal,
       });
       const result=await response.json().catch(()=>({}));
       if(token!==generation||pending!==item)return;
-      if(!response.ok||!result.ok||!result.message)
+      const scheduled=item.data.has("scheduled_for");
+      if(!response.ok||!result.ok||(scheduled?(!result.item||result.item.status==="canceled"):!result.message))
         throw new Error(result.error||Object.values(result.errors||{}).flat()[0]?.message||"Не удалось отправить запись.");
       if(($("replyToInput")?.value||"")===(item.data.get("reply_to")||"")&&
          (window.SovietgramChat?.currentQuote?.()||"")===(item.data.get("reply_quote")||""))
         window.SovietgramChat?.clearReplyState?.();
-      if(!window.SovietgramChat?.acceptSentMessage?.(result.message))window.SovietgramChat?.syncNow?.();
-      closeRecorder();notify("Видеокружок отправлен.");
+      if(scheduled){if(result.item.status==="sent")void window.SovietgramChat?.syncNow?.();}
+      else if(!window.SovietgramChat?.acceptSentMessage?.(result.message))window.SovietgramChat?.syncNow?.();
+      closeRecorder();notify(scheduled?"Видеокружок запланирован.":"Видеокружок отправлен.");
     } catch(error) {
       if(token===generation&&pending===item)ui("review",
         (controller.signal.aborted?"Отправка прервана или сервер не ответил.":error.message||"Ошибка отправки.")+
@@ -603,6 +609,12 @@
     if(["review","checking"].includes(state)&&window.confirm("Удалить текущую запись и записать новую?")){
       holdMode=false;holdLocked=false;void openCamera();
     }
+  });
+  scheduleButton?.addEventListener("click",async()=>{
+    if(state!=="review"||!pending?.verified||pending.data)return;
+    const item=pending;
+    const when=await window.SovietgramSchedule?.pickRecordingTime?.();
+    if(when&&pending===item&&state==="review"&&!item.data)void upload(when);
   });
   send.addEventListener("click",()=>{if(state==="recording")finish(true);else void upload();});
   document.addEventListener("keydown",event=>{

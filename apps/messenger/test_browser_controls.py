@@ -795,6 +795,38 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.visible(selector)
         self.hidden(selector + " img")
 
+    def test_schedule_file_from_composer_and_edit_then_send(self):
+        from .models import ScheduledMessage
+        storage = self.enterContext(TemporaryDirectory())
+        self.enterContext(override_settings(MEDIA_ROOT=storage))
+        self.go(self.direct)
+        self.page.locator("#fileAttachmentsInput").set_input_files({
+            "name":"future.txt","mimeType":"text/plain","buffer":b"scheduled file",
+        })
+        self.visible("#mediaComposeBackdrop")
+        self.page.locator("#mediaComposeCaption").fill("Future file")
+        self.page.locator("#mediaComposeSchedule").check()
+        self.visible("#mediaComposeDate")
+        self.expect(self.page.locator("#mediaComposeSend")).to_have_text("Запланировать")
+        self.click("#mediaComposeSend")
+        self.hidden("#mediaComposeBackdrop")
+        item = ScheduledMessage.objects.get(sender=self.owner, chat=self.direct)
+        self.assertEqual(item.text,"Future file")
+        self.assertEqual(item.attachments.get().original_name,"future.txt")
+        self.assertFalse(MessageAttachment.objects.filter(message__chat=self.direct).exists())
+        self.menu("[data-open-scheduled]")
+        self.expect(self.page.locator("#scheduledList")).to_contain_text("future.txt")
+        self.page.locator("#scheduledList").get_by_role("button", name="Изменить", exact=True).click()
+        self.page.locator("#scheduledText").fill("")
+        self.click("#scheduledSave")
+        self.expect(self.page.locator("#scheduledList")).to_contain_text("future.txt")
+        self.page.locator("#scheduledList").get_by_role("button", name="Отправить сейчас", exact=True).click()
+        self.expect(self.page.locator("#scheduledList")).not_to_contain_text("future.txt")
+        item.refresh_from_db()
+        self.assertEqual(item.status,"sent")
+        self.assertEqual(item.delivered_message.attachments.get().original_name,"future.txt")
+        self.click("#scheduledClose")
+
     def test_media_draft_persists_per_chat_and_discards(self):
         from PIL import Image
 

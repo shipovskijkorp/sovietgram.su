@@ -17,8 +17,10 @@
        typeof data.quote!=="string"||Array.from(data.quote).length>1024||
        (data.quote&&!data.reply)||typeof data.originalDraft!=="string"||
        data.originalDraft.length>4096)return false;
+    if(data.scheduleDate!==undefined&&(typeof data.scheduleDate!=="string"||data.scheduleDate.length>40))return false;
     const plan=data.plan;
     if(!plan)return true;
+    if(plan.scheduledFor!==undefined&&typeof plan.scheduledFor!=="string")return false;
     if(plan.mode!==data.mode||!Array.isArray(plan.batches)||plan.batches.length<1||plan.batches.length>10||
        !Number.isInteger(plan.completed)||plan.completed<0||plan.completed>plan.batches.length||
        typeof plan.originalDraft!=="string"||typeof plan.originalReply!=="string"||

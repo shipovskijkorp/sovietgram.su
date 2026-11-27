@@ -25,6 +25,9 @@
   const compressRow = document.getElementById("mediaComposeCompressRow");
   const spoilerRow = document.getElementById("mediaComposeSpoilerRow");
   const spoilerToggle = document.getElementById("mediaComposeSpoiler");
+  const scheduleToggle = document.getElementById("mediaComposeSchedule"), scheduleDate = document.getElementById("mediaComposeDate");
+  const scheduleDateRow = document.getElementById("mediaComposeDateRow");
+  const scheduleEndpoint = document.getElementById("messageStage")?.dataset.scheduledUrl;
   const abortButton = document.getElementById("mediaComposeAbort");
   const dropOverlay = document.getElementById("chatDropOverlay");
   const accountId = document.getElementById("messageStage")?.dataset.accountId || document.body.dataset.accountId || "";
@@ -87,6 +90,7 @@
       group:groupToggle?.checked!==false,silent:Boolean(silentToggle?.checked),
       compress:Boolean(compressToggle?.checked),spoiler:Boolean(spoilerToggle?.checked),
       reply:draftReply,quote:draftQuote,originalDraft:draftOriginalText,
+      schedule:Boolean(scheduleToggle?.checked),scheduleDate:scheduleDate?.value||"",
       plan:retryPlan?{...retryPlan,batches:retryPlan.batches.map(b=>({...b,files:[...b.files]}))}:null};
   }
   function persistenceError(error){
@@ -141,6 +145,9 @@
     if(silentToggle)silentToggle.checked=Boolean(data.silent);
     if(compressToggle)compressToggle.checked=Boolean(data.compress);
     if(spoilerToggle)spoilerToggle.checked=Boolean(data.spoiler);
+    if(scheduleToggle)scheduleToggle.checked=Boolean(data.schedule||retryPlan?.scheduledFor);
+    if(scheduleDate)scheduleDate.value=data.scheduleDate||"";
+    syncSchedule();
     updateDraftUI();
   }
   const initDraft=(async()=>{
@@ -185,6 +192,22 @@
   });
   for(const toggle of [groupToggle,silentToggle,compressToggle,spoilerToggle])
     toggle?.addEventListener("change",()=>void persistCurrent());
+  function syncSchedule(){
+    if(!scheduleToggle||!scheduleDate)return;
+    const enabled=scheduleToggle.checked;
+    scheduleDateRow.hidden=!enabled;
+    scheduleDate.disabled=!enabled||busy||Boolean(retryPlan);
+    const api=window.SovietgramSchedule;
+    if(enabled&&api&&!retryPlan){
+      scheduleDate.min=api.localDateValue(Date.now()+60000);
+      scheduleDate.max=api.localDateValue(Date.now()+365*86400000-60000);
+      if(!scheduleDate.value)scheduleDate.value=api.localDateValue(Date.now()+300000);
+    }
+    if(!busy&&!retryPlan&&sendButton)sendButton.textContent=enabled?"Запланировать":"Отправить";
+  }
+  scheduleToggle?.addEventListener("change",()=>{syncSchedule();void persistCurrent();});
+  scheduleDate?.addEventListener("input",schedulePersist);
+  scheduleDate?.addEventListener("change",()=>void persistCurrent());
   captionNode?.addEventListener("input",schedulePersist);
   document.addEventListener("visibilitychange",()=>{
     if(document.hidden&&saveTimer&&!retryPlan)void persistCurrent();
@@ -262,6 +285,8 @@
     if (silentToggle) silentToggle.disabled = active || Boolean(retryPlan);
     if (compressToggle) compressToggle.disabled = active || Boolean(retryPlan);
     if (spoilerToggle) spoilerToggle.disabled = active || Boolean(retryPlan);
+    if (scheduleToggle) scheduleToggle.disabled = active || Boolean(retryPlan);
+    syncSchedule();
     if (groupToggle) groupToggle.disabled = active || Boolean(retryPlan);
     if (captionNode) captionNode.readOnly = active || Boolean(retryPlan);
     if (addButton) addButton.disabled = active || Boolean(retryPlan);
@@ -454,6 +479,8 @@
     if (silentToggle && !preserveCaption) silentToggle.checked = false;
     if (compressToggle && !preserveCaption) compressToggle.checked = false;
     if (spoilerToggle && !preserveCaption) spoilerToggle.checked = false;
+    if (!preserveCaption && scheduleToggle) {scheduleToggle.checked=false;scheduleDate.value="";}
+    syncSchedule();
     if (captionNode) {
       captionNode.value = preserveCaption
         ? previousCaption
@@ -508,7 +535,7 @@
     openComposer(next, mode, preserveCaption);
   }
 
-  function upload(files, text, mode, replyTo, onProgress, clientId, silent = false, attempt = 0, compress = false, quote = "", spoiler = false) {
+  function upload(files, text, mode, replyTo, onProgress, clientId, silent = false, attempt = 0, compress = false, quote = "", spoiler = false, scheduledFor = "") {
     return new Promise((resolve, reject) => {
       const data = new FormData();
       data.append("csrfmiddlewaretoken", csrfToken);
@@ -519,6 +546,7 @@
       data.append("preserve_draft", "1");
       if (compress) data.append("compress_images", "1");
       if (spoiler) data.append("media_spoiler", "1");
+      if (scheduledFor) data.append("scheduled_for", scheduledFor);
       if (silent) data.append("silent", "1");
       if (replyTo) data.append("reply_to", replyTo);
       if (replyTo && quote) data.append("reply_quote", quote);
@@ -527,7 +555,7 @@
       if (cancelled) { reject(new Error("Загрузка отменена.")); return; }
       const xhr = new XMLHttpRequest();
       activeUpload = xhr;
-      xhr.open("POST", form.action);
+      xhr.open("POST", scheduledFor ? scheduleEndpoint : form.action);
       const uploadBytes = files.reduce((sum, file) => sum + file.size, 0);
       xhr.timeout = Math.max(180000, Math.ceil(uploadBytes / (128 * 1024)) * 1000 + 60000);
       xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
@@ -540,11 +568,12 @@
       xhr.addEventListener("load", () => {
         const payload = xhr.response || {};
         if (xhr.status >= 200 && xhr.status < 300 && payload.ok) {
+          if (scheduledFor && (!payload.item || payload.item.status === "canceled")) {reject(new Error("Эта отложенная отправка уже отменена."));return;}
           resolve(payload);
           return;
         }
         if (!attempt && [502, 503, 504].includes(xhr.status)) {
-          upload(files, text, mode, replyTo, onProgress, clientId, silent, 1, compress, quote, spoiler).then(resolve, reject);
+          upload(files, text, mode, replyTo, onProgress, clientId, silent, 1, compress, quote, spoiler, scheduledFor).then(resolve, reject);
           return;
         }
         if (xhr.status === 413) {
@@ -555,11 +584,11 @@
         reject(new Error(payload.error || firstError || "Не удалось отправить файлы."));
       });
       xhr.addEventListener("error", () => {
-        if (!attempt) upload(files, text, mode, replyTo, onProgress, clientId, silent, 1, compress, quote, spoiler).then(resolve, reject);
+        if (!attempt) upload(files, text, mode, replyTo, onProgress, clientId, silent, 1, compress, quote, spoiler, scheduledFor).then(resolve, reject);
         else reject(new Error("Не удалось загрузить файлы. Повторите отправку."));
       });
       xhr.addEventListener("timeout", () => {
-        if (!attempt && !cancelled) upload(files, text, mode, replyTo, onProgress, clientId, silent, 1, compress, quote, spoiler).then(resolve, reject);
+        if (!attempt && !cancelled) upload(files, text, mode, replyTo, onProgress, clientId, silent, 1, compress, quote, spoiler, scheduledFor).then(resolve, reject);
         else reject(new Error("Сервер не ответил вовремя. Можно повторить загрузку."));
       });
       xhr.addEventListener("abort", () => reject(new Error("Загрузка отменена. Сервер мог уже принять файл.")));
@@ -587,15 +616,18 @@
     const silent = Boolean(silentToggle?.checked);
     const compress = selectedMode === "media" && Boolean(compressToggle?.checked);
     const spoiler = selectedMode === "media" && Boolean(spoilerToggle?.checked);
+    const scheduledFor = scheduleToggle?.checked ? window.SovietgramSchedule.toScheduledISO(scheduleDate.value) : "";
+    if(scheduledFor&&!scheduleEndpoint)throw Error("Планирование недоступно.");
     const separate = selectedMode === "media" && files.length > 1 && groupToggle && !groupToggle.checked;
     const signature = [files.map(window.SovietgramSendRetry.fileIdentity), caption, selectedMode, replyTo, silent, compress, Boolean(separate)];
     if (quote) signature.push(quote);
     if (spoiler) signature.push("spoiler");
+    if (scheduledFor) signature.push(["schedule",scheduledFor]);
     const batches = separate ? files.map((file, index) => ({
       files: [file], caption: index === files.length - 1 ? caption : "", reply: index === 0 ? replyTo : "",
       quote: index === 0 ? quote : "", id: sendKeys.key(index, signature),
     })) : [{files, caption, reply:replyTo, quote, id:sendKeys.key("album", signature)}];
-    return {batches, mode:selectedMode, silent, compress, spoiler, completed:0,
+    return {batches, mode:selectedMode, silent, compress, spoiler, scheduledFor, completed:0,
             originalDraft:draftOriginalText, originalReply:replyTo, originalQuote:quote};
   }
 
@@ -604,6 +636,10 @@
     if (!selectedFiles.length || busy || editingPhoto || discarding || corrupt) return;
     const error = validate(selectedFiles, selectedMode);
     if (error) { notify(error); return; }
+    if(!retryPlan&&scheduleToggle?.checked){
+      try{window.SovietgramSchedule.toScheduledISO(scheduleDate.value);if(!scheduleEndpoint)throw Error("Планирование недоступно.");}
+      catch(e){notify(e.message);return;}
+    }
     const plan = retryPlan || buildPlan();
     retryPlan = plan;
     cancelled = false;
@@ -632,11 +668,13 @@
         const payload = await upload(
           batch.files, batch.caption, plan.mode, batch.reply,
           (loaded, total) => setProgress(true, (sentBytes + bytes(batch) * (total ? loaded / total : 0)) / totalBytes * 100),
-          batch.id, plan.silent, 0, plan.compress, batch.quote, plan.spoiler,
+          batch.id, plan.silent, 0, plan.compress, batch.quote, plan.spoiler, plan.scheduledFor || "",
         );
         plan.completed++;
         sentBytes += bytes(batch);
-        renderSent(payload.message);
+        if (plan.scheduledFor) {
+          if(payload.item.status==="sent")void window.SovietgramChat?.syncNow?.();
+        } else renderSent(payload.message);
         if (!volatile && !await persistCurrent())
           throw Error("Сервер принял файл, но не удалось сохранить прогресс. Повтор безопасен с тем же идентификатором.");
       }
@@ -654,6 +692,7 @@
       setProgress(false, 100);
       void window.SovietgramSidebar?.refresh?.();
       window.SovietgramChat?.focusComposer?.();
+      if(plan.scheduledFor)notify("Вложения запланированы.");
     } catch (uploadError) {
       setProgress(false, 0);
       if (sendButton) sendButton.textContent = "Повторить отправку";

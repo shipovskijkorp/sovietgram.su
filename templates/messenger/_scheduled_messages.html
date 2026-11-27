@@ -25,6 +25,7 @@
   <form id="scheduledEditor" hidden>
     <label id="scheduledTextRow">Текст сообщения<textarea id="scheduledText" rows="5" maxlength="4096" required></textarea></label>
     <section id="scheduledSpecialFields" class="scheduled-special-fields" hidden></section>
+    <p id="scheduledFileSummary" class="scheduled-hint" hidden></p>
     <label>Дата и время (ваш часовой пояс)<input id="scheduledDate" type="datetime-local" required></label>
     <label class="scheduled-checkbox"><input id="scheduledSilent" type="checkbox"> Отправить без звука</label>
     <label class="scheduled-checkbox" id="scheduledReplyRow" hidden><input id="scheduledRemoveReply" type="checkbox"> Убрать ответ на сообщение</label>
@@ -34,4 +35,16 @@
     </div>
   </form>
   <p class="scheduled-error" id="scheduledError" role="status" hidden></p>
+</dialog>
+
+<dialog id="scheduleRecordingDialog" class="scheduled-dialog" aria-labelledby="scheduleRecordingTitle">
+  <header><h2 id="scheduleRecordingTitle">Отправить запись позже</h2></header>
+  <form id="scheduleRecordingForm">
+    <label>Дата и время (ваш часовой пояс)<input type="datetime-local" id="scheduleRecordingDate" required></label>
+    <p id="scheduleRecordingError" role="alert" hidden></p>
+    <div class="scheduled-editor-actions">
+      <button type="button" id="scheduleRecordingCancel">Отмена</button>
+      <button class="scheduled-primary" type="submit">Запланировать</button>
+    </div>
+  </form>
 </dialog>

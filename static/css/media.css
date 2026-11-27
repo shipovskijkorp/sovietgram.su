@@ -1289,3 +1289,11 @@ button[data-media-spoiler]:not([data-spoiler-revealed])::after {
 .media-draft-reply{display:flex;align-items:center;gap:8px;padding:5px 16px;font-size:12px;}
 .media-draft-status{font-size:11px;color:var(--muted);padding:4px 16px;margin:0;}
 @media(max-height:650px){.media-compose-group{min-height:44px;padding:6px 12px;}.media-compose-preview{min-height:80px;}}
+
+.media-compose-date{display:grid;gap:6px;padding:8px 16px;font-size:12px;border-top:1px solid var(--line);}
+.media-compose-date[hidden],.video-note-schedule[hidden]{display:none!important;}
+.media-compose-date input,#scheduleRecordingDate{box-sizing:border-box;width:100%;font:inherit;background:var(--panel,#fffaf1);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px;}
+#scheduleRecordingForm{display:grid;gap:14px;}
+#scheduleRecordingForm label{display:grid;gap:6px;font-size:13px;}
+#scheduleRecordingError{color:var(--red);font-size:12px;}
+.video-note-schedule{display:block;margin:6px auto;border:1px solid #fff4;color:inherit;background:transparent;border-radius:10px;padding:8px 12px;font:inherit;cursor:pointer;}
