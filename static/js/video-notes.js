@@ -18,64 +18,180 @@
     const dot = root.querySelector("[data-note-unread]");
     if (dot) dot.hidden = true;
   }
+  let activePlayer = null;
+  const selecting = root => Boolean(root.closest(".conversation.is-message-selection"));
   function hydrate(root) {
     if (!root || root.dataset.noteHydrated) return;
-    const video = root.querySelector("video"), button = root.querySelector("[data-note-play]");
-    const seek = root.querySelector("[data-note-seek]"), badge = root.querySelector("[data-note-time]");
-    const ring = root.querySelector(".video-note-player__ring"), error = root.querySelector("[data-note-error]");
-    if (!video || !button || !seek || !ring || !badge) return;
-    root.dataset.noteHydrated = "true";
-    let marking = false;
-    const duration = () => Number.isFinite(video.duration) && video.duration > 0
-      ? video.duration : Math.max(0, Number(root.dataset.durationMs || 0)/1000);
-    function update() {
-      const total = duration();
-      const elapsed = Number.isFinite(video.currentTime) ? video.currentTime : 0;
-      const ratio = total ? Math.min(1,Math.max(0,elapsed/total)) : 0;
-      ring.style.setProperty("--note-progress", (ratio*100)+"%");
-      seek.value = String(Math.round(ratio*1000));
-      seek.disabled = !total;
-      badge.textContent = time(video.paused && elapsed === 0 ? total : elapsed) + (video.paused && elapsed === 0 ? "" : " / "+time(total));
+    const video=root.querySelector("video"), button=root.querySelector("[data-note-play]");
+    const seek=root.querySelector("[data-note-seek]"), badge=root.querySelector("[data-note-time]");
+    const arc=root.querySelector("[data-note-arc]"), thumb=root.querySelector("[data-note-thumb]");
+    const ring=root.querySelector(".video-note-player__ring"), error=root.querySelector("[data-note-error]");
+    const mute=root.querySelector("[data-note-mute]"), collapse=root.querySelector("[data-note-collapse]");
+    if(!video||!button||!seek||!ring||!badge||!arc||!thumb||!mute||!collapse)return;
+    root.dataset.noteHydrated="true";
+    const article=()=>root.closest(".message");
+    let marking=false, dragging=null, animation=0, playToken=0, wantsPlay=false;
+    const expanded=()=>root.classList.contains("is-expanded");
+    const duration=()=>Number.isFinite(video.duration)&&video.duration>0
+      ?video.duration:Math.max(0,Number(root.dataset.durationMs||0)/1000);
+    function update(){
+      const total=duration(),elapsed=Number.isFinite(video.currentTime)?video.currentTime:0;
+      const ratio=total?Math.min(1,Math.max(0,elapsed/total)):0;
+      const progress=ratio*100,angle=ratio*2*Math.PI;
+      arc.setAttribute("stroke-dasharray",progress+" "+(100-progress));
+      thumb.setAttribute("cx",String(50+47.5*Math.sin(angle)));
+      thumb.setAttribute("cy",String(50-47.5*Math.cos(angle)));
+      seek.setAttribute("aria-valuenow",String(Math.round(progress)));
+      seek.setAttribute("aria-valuetext",time(elapsed)+" / "+time(total));
+      seek.setAttribute("aria-disabled",String(!total||video.readyState<1));
+      badge.textContent=time(expanded()?Math.ceil(Math.max(0,total-elapsed)):Math.ceil(total));
     }
-    function state() {
-      const playing = !video.paused && !video.ended;
+    function tick(){
+      animation=0;
+      update();
+      if(!video.paused&&!video.ended&&root.isConnected)animation=requestAnimationFrame(tick);
+    }
+    function state(){
+      const playing=!video.paused&&!video.ended;
       root.classList.toggle("is-playing",playing);
-      button.textContent = playing ? "Ⅱ" : "▶";
-      button.setAttribute("aria-label", playing ? "Приостановить видеокружок" : "Воспроизвести видеокружок");
+      button.setAttribute("aria-label",playing?"Приостановить видеокружок":"Воспроизвести видеокружок");
+      button.setAttribute("aria-pressed",String(playing));
+      if(!playing&&animation){cancelAnimationFrame(animation);animation=0;}
+      if(playing&&!animation)animation=requestAnimationFrame(tick);
       update();
     }
-    async function mark() {
-      if (marking || root.dataset.listened === "true" || !root.dataset.markPlayedUrl) return;
-      marking = true;
-      try {
-        const csrf = (form?.querySelector("[name=csrfmiddlewaretoken]") ||
-          $("settingsAjaxForm")?.querySelector("[name=csrfmiddlewaretoken]"))?.value;
-        if (!csrf) return;
-        const response = await fetch(root.dataset.markPlayedUrl, {
-          method:"POST", credentials:"same-origin", headers:{"X-Requested-With":"XMLHttpRequest"},
-          body:new URLSearchParams({csrfmiddlewaretoken:csrf,account_id:stage?.dataset.accountId || ""}),
+    function setExpanded(value, reveal=false){
+      if(expanded()===value)return;
+      const before=stage?.getBoundingClientRect(),atBottom=stage&&stage.scrollHeight-stage.scrollTop-stage.clientHeight<45;
+      const old=ring.getBoundingClientRect();
+      root.classList.toggle("is-expanded",value);
+      article()?.classList.toggle("has-expanded-video-note",value);
+      seek.setAttribute("tabindex",value?"0":"-1");
+      mute.hidden=collapse.hidden=!value;
+      update();
+      if(stage&&before&&root.isConnected){
+        // Keep the viewport anchored; only reveal a note the user clicked.
+        requestAnimationFrame(()=>{
+          if(!root.isConnected)return;
+          if(atBottom){stage.scrollTop=stage.scrollHeight;return;}
+          if(!value||!reveal)return;
+          const rect=ring.getBoundingClientRect(),viewport=stage.getBoundingClientRect();
+          if(old.top>=before.top-4&&old.bottom<=before.bottom+4&&rect.bottom>viewport.bottom-12)
+            stage.scrollTop+=rect.bottom-viewport.bottom+12;
         });
-        if (response.ok && (await response.json()).ok) setListened(root);
-      } catch (_) {} finally { marking = false; }
+      }
     }
-    async function toggle() {
-      if (!video.paused) { video.pause(); return; }
-      if (error) error.hidden = true;
-      try { await video.play(); }
-      catch (_) { if(error){error.textContent="Не удалось воспроизвести видео.";error.hidden=false;} }
+    function deactivate({reset=false}={}){
+      ++playToken;wantsPlay=false;dragging=null;video.pause();
+      if(reset){try{video.currentTime=0;}catch(_){}}
+      if(activePlayer===controller)activePlayer=null;
+      setExpanded(false);state();
     }
-    button.addEventListener("click", toggle);
-    video.addEventListener("click", toggle);
-    for(const name of ["loadedmetadata","durationchange","timeupdate"]) video.addEventListener(name,update);
-    video.addEventListener("playing",()=>{state();void mark();});
-    video.addEventListener("pause",state);
-    video.addEventListener("ended",state);
-    video.addEventListener("error",()=>{if(error){error.textContent="Видео недоступно или формат не поддерживается.";error.hidden=false;}});
-    seek.addEventListener("input",()=>{
-      const total = duration();
-      if(total && video.readyState > 0) { try{ video.currentTime=total*Number(seek.value)/1000; }catch(_){} }
+    const controller={root,video,deactivate};
+    async function mark(){
+      if(marking||root.dataset.listened==="true"||!root.dataset.markPlayedUrl)return;
+      marking=true;
+      try{
+        const csrf=(form?.querySelector("[name=csrfmiddlewaretoken]")||
+          $("settingsAjaxForm")?.querySelector("[name=csrfmiddlewaretoken]")||
+          document.querySelector("[name=csrfmiddlewaretoken]"))?.value;
+        const account=stage?.dataset.accountId||document.body.dataset.accountId;
+        if(!csrf||!account)return;
+        const response=await fetch(root.dataset.markPlayedUrl,{
+          method:"POST",credentials:"same-origin",headers:{"X-Requested-With":"XMLHttpRequest"},
+          body:new URLSearchParams({csrfmiddlewaretoken:csrf,account_id:account}),
+        });
+        if(response.ok&&(await response.json()).ok)setListened(root);
+      }catch(_){}finally{marking=false;}
+    }
+    function updateMute(){
+      mute.setAttribute("aria-pressed",String(video.muted));
+      mute.setAttribute("aria-label",video.muted?"Включить звук":"Выключить звук");
+      mute.title=video.muted?"Включить звук":"Выключить звук";
+      root.classList.toggle("is-muted",video.muted);
+    }
+    async function play(){
+      if(!root.isConnected||selecting(root))return;
+      if(activePlayer&&activePlayer!==controller)activePlayer.deactivate();
+      activePlayer=controller;
+      setExpanded(true,true);
+      if(video.ended){try{video.currentTime=0;}catch(_){}}
+      if(error)error.hidden=true;
+      const token=++playToken;wantsPlay=true;
+      try{
+        await video.play();
+        if(token!==playToken)return;
+        state();
+      }catch(_){
+        if(token!==playToken)return;
+        wantsPlay=false;state();
+        if(error){error.textContent="Не удалось воспроизвести видео. Нажмите ещё раз.";error.hidden=false;}
+      }
+    }
+    button.addEventListener("click",()=>{
+      if(selecting(root))return;
+      if(wantsPlay||!video.paused){++playToken;wantsPlay=false;video.pause();state();}
+      else void play();
     });
-    state();
+    collapse.addEventListener("click",()=>{if(!selecting(root)){deactivate();button.focus({preventScroll:true});}});
+    mute.addEventListener("click",()=>{if(!selecting(root)){video.muted=!video.muted;updateMute();}});
+    function seekTo(ratio){
+      const total=duration();
+      if(!total||video.readyState<1)return;
+      try{video.currentTime=Math.max(0,Math.min(total-0.01,total*ratio));update();}catch(_){}
+    }
+    function seekAt(event){
+      const rect=seek.getBoundingClientRect();
+      const dx=event.clientX-(rect.left+rect.width/2),dy=event.clientY-(rect.top+rect.height/2);
+      if(!rect.width||!rect.height)return;
+      const angle=Math.atan2(dx,-dy);
+      seekTo((angle+2*Math.PI)%(2*Math.PI)/(2*Math.PI));
+    }
+    seek.addEventListener("pointerdown",event=>{
+      if(!expanded()||selecting(root)||event.button!==0||video.readyState<1)return;
+      event.preventDefault();event.stopPropagation();
+      seek.focus({preventScroll:true});
+      dragging={id:event.pointerId,resume:!video.paused};
+      if(dragging.resume){++playToken;wantsPlay=false;video.pause();}
+      try{seek.setPointerCapture(event.pointerId);}catch(_){}
+      seekAt(event);
+    });
+    seek.addEventListener("pointermove",event=>{
+      if(dragging?.id!==event.pointerId)return;
+      event.preventDefault();seekAt(event);
+    });
+    function endSeek(event,canceled=false){
+      if(dragging?.id!==event.pointerId)return;
+      const resume=dragging.resume;dragging=null;
+      if(!canceled)seekAt(event);
+      if(resume&&activePlayer===controller&&expanded())void play();
+    }
+    seek.addEventListener("pointerup",event=>endSeek(event));
+    seek.addEventListener("pointercancel",event=>endSeek(event,true));
+    seek.addEventListener("lostpointercapture",event=>endSeek(event,true));
+    seek.addEventListener("keydown",event=>{
+      if(!expanded()||selecting(root))return;
+      const total=duration();if(!total)return;
+      let target=video.currentTime||0;
+      switch(event.key){
+        case "ArrowLeft":case "ArrowDown":target-=5;break;
+        case "ArrowRight":case "ArrowUp":target+=5;break;
+        case "Home":target=0;break;case "End":target=total;break;
+        default:return;
+      }
+      event.preventDefault();seekTo(target/total);
+    });
+    for(const name of ["loadedmetadata","loadeddata","durationchange","timeupdate","seeked"])
+      video.addEventListener(name,update);
+    video.addEventListener("playing",()=>{wantsPlay=false;state();void mark();});
+    video.addEventListener("pause",()=>{wantsPlay=false;state();});
+    video.addEventListener("ended",()=>deactivate({reset:true}));
+    video.addEventListener("volumechange",updateMute);
+    video.addEventListener("error",()=>{
+      wantsPlay=false;state();
+      if(error){error.textContent="Видео недоступно или формат не поддерживается.";error.hidden=false;}
+    });
+    updateMute();state();
   }
   function buildPlayer(attachment) {
     const root = template.content.firstElementChild.cloneNode(true);
@@ -96,15 +212,17 @@
   }
   hydrateTree(document);
   const flow = $("messageFlow");
-  if(flow) new MutationObserver(records=>records.forEach(record=>record.addedNodes.forEach(node=>{
-    if(node.nodeType===1)hydrateTree(node);
-  }))).observe(flow,{childList:true,subtree:true});
+  if(flow)new MutationObserver(records=>{
+    for(const record of records)for(const node of record.addedNodes)if(node.nodeType===1)hydrateTree(node);
+    if(activePlayer&&!activePlayer.root.isConnected)activePlayer.deactivate();
+  }).observe(flow,{childList:true,subtree:true});
   // Pause another player, including the existing voice player, when a
   // received video note or other audio/video starts. Preview camera is silent.
   document.addEventListener("play",event=>{
     const player=event.target;
     if(!["AUDIO","VIDEO"].includes(player.tagName))return;
     if(player.id==="videoNotePreview" && player.srcObject)return;
+    if(activePlayer&&activePlayer.video!==player)activePlayer.deactivate();
     for(const other of document.querySelectorAll("audio,video"))
       if(other!==player && !other.paused && !(other.id==="videoNotePreview"&&other.srcObject))other.pause();
   },true);
