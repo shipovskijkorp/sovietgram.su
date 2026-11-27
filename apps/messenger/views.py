@@ -1594,11 +1594,14 @@ def create_community(request):
 @login_required
 @require_POST
 def join_public_chat(request, username):
+    if request.POST.get("account_id", str(request.user.pk)) != str(request.user.pk):
+        return JsonResponse({"ok": False, "error": "Аккаунт изменился. Обновите страницу."}, status=409)
     with transaction.atomic():
         chat = get_object_or_404(
             Chat.objects.select_for_update(),
             username__iexact=username,
             type__in=(Chat.Type.GROUP, Chat.Type.CHANNEL),
+            platform_public_restricted=False,
         )
         if is_banned(chat, request.user.pk):
             messages.error(request, "Вы заблокированы в этом сообществе.")

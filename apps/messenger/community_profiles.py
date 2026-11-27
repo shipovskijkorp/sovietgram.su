@@ -2,6 +2,8 @@ import secrets
 from datetime import datetime, time, timedelta
 import json
 
+import unicodedata
+
 from django import forms
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -244,6 +246,8 @@ def _member_payload(actor, membership):
         "presence": _presence_text(user, actor.user),
         "role": membership.role,
         "role_label": membership.get_role_display(),
+        "admin_title": membership.admin_title if membership.role in {ChatParticipant.Role.OWNER, ChatParticipant.Role.ADMIN} else "",
+        "can_edit_admin_title": actor_is_owner and membership.role in {ChatParticipant.Role.OWNER, ChatParticipant.Role.ADMIN},
         "profile_url": reverse("accounts:public_profile", args=[user.username]),
         "is_self": user.pk == actor.user_id,
         "can_remove": removable,
@@ -1024,6 +1028,8 @@ def community_member_action(request, chat_id):
     chat = Chat.objects.select_for_update().get(pk=chat.pk)
     actor = get_object_or_404(ChatParticipant.objects.select_for_update(), chat=chat, user=request.user, is_hidden=False)
     action = request.POST.get("action", "").strip()
+    if request.POST.get("account_id", str(request.user.pk)) != str(request.user.pk):
+        return _json_error("Аккаунт изменился. Обновите страницу.", status=409)
 
     if action == "add":
         if not _can_add_members(chat, actor):
@@ -1093,6 +1099,21 @@ def community_member_action(request, chat_id):
             f"Удалён участник {target_user.display_name}.",
             target_user=target_user,
         )
+    elif action == "admin_title":
+        if actor.role != ChatParticipant.Role.OWNER:
+            return _json_error("Назначать титулы может только владелец.", status=403)
+        if target is None or target.role not in {ChatParticipant.Role.OWNER, ChatParticipant.Role.ADMIN}:
+            return _json_error("Титул доступен только владельцу и администраторам.", status=400)
+        raw_title = request.POST.get("title", "")
+        if len(raw_title) > 32 or any(unicodedata.category(char).startswith("C") for char in raw_title):
+            return _json_error("Титул: до 32 символов, без управляющих символов.")
+        title = " ".join(raw_title.split())
+        if target.admin_title != title:
+            target.admin_title = title
+            target.save(update_fields=("admin_title",))
+            _log(chat, request.user, "admin_title",
+                 f"Изменён титул {target_user.display_name}: {title or 'сброшен'}.",
+                 target_user=target_user)
     elif action == "transfer_owner":
         if actor.role != ChatParticipant.Role.OWNER:
             return _json_error("Передать права владельца может только владелец.", status=403)
@@ -1113,10 +1134,12 @@ def community_member_action(request, chat_id):
 
             locked_target.role = ChatParticipant.Role.OWNER
             locked_target.admin_permissions = None
-            locked_target.save(update_fields=("role", "admin_permissions"))
+            locked_target.admin_title = ""
+            locked_target.save(update_fields=("role", "admin_permissions", "admin_title"))
             locked_actor.role = ChatParticipant.Role.ADMIN
             locked_actor.admin_permissions = None
-            locked_actor.save(update_fields=("role", "admin_permissions"))
+            locked_actor.admin_title = ""
+            locked_actor.save(update_fields=("role", "admin_permissions", "admin_title"))
             ChatMemberModeration.objects.filter(chat=chat, user=target_user).delete()
             _log(
                 chat,
@@ -1140,7 +1163,8 @@ def community_member_action(request, chat_id):
         if target.role != new_role:
             target.role = new_role
             target.admin_permissions = None
-            target.save(update_fields=("role", "admin_permissions"))
+            target.admin_title = ""
+            target.save(update_fields=("role", "admin_permissions", "admin_title"))
         if new_role == ChatParticipant.Role.ADMIN:
             ChatMemberModeration.objects.filter(chat=chat, user=target_user).delete()
         _log(

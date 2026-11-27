@@ -558,6 +558,9 @@ def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=No
         "sender_id": message.sender_id,
         "sender_name": message.sender.display_name,
         "sender_username": message.sender.username,
+        "show_group_author": message.chat.type == Chat.Type.GROUP and not message.is_deleted,
+        "sender_title": (message.sender_title if not message.is_deleted and
+                         (message.chat.type == Chat.Type.GROUP or message.signature_name) else ""),
         "is_own": is_own,
         "silent": message.silent,
         "is_deleted": message.is_deleted,

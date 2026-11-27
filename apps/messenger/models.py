@@ -1,5 +1,6 @@
 from datetime import timedelta
 from pathlib import Path
+import unicodedata
 from uuid import uuid4
 
 from django.conf import settings
@@ -55,6 +56,10 @@ class Contact(models.Model):
         return f"{self.owner} -> {self.user}"
 
 
+def community_search_key(*values):
+    return unicodedata.normalize("NFKC", " ".join(str(value or "") for value in values)).casefold()
+
+
 class Chat(models.Model):
     class Type(models.TextChoices):
         PRIVATE = "private", "Личный чат"
@@ -76,6 +81,7 @@ class Chat(models.Model):
     title = models.CharField(max_length=120, blank=True, default="")
     username = models.CharField(max_length=64, unique=True, null=True, blank=True)
     description = models.TextField(max_length=500, blank=True, default="")
+    directory_search_key = models.TextField(blank=True, default="", editable=False)
     avatar = models.ImageField(upload_to=chat_avatar_path, blank=True)
     history_visible_to_new_members = models.BooleanField(default=True)
     protect_content = models.BooleanField(default=False)
@@ -102,6 +108,14 @@ class Chat(models.Model):
             models.CheckConstraint(condition=models.Q(platform_public_restricted=False) | models.Q(username__isnull=True), name="sg_chat_public_restriction"),
         ]
 
+    def save(self, *args, **kwargs):
+        fields = kwargs.get("update_fields")
+        if fields is None or {"title", "username", "description"}.intersection(fields):
+            self.directory_search_key = community_search_key(self.title, self.username, self.description)
+            if fields is not None:
+                kwargs["update_fields"] = set(fields) | {"directory_search_key"}
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"Chat {self.pk}"
 
@@ -126,6 +140,7 @@ class ChatParticipant(models.Model):
     )
     # None preserves full privileges for existing administrators; [] is explicitly no privileges.
     admin_permissions = models.JSONField(default=None, null=True, blank=True)
+    admin_title = models.CharField(max_length=32, blank=True, default="")
     can_see_pre_join_history = models.BooleanField(default=True)
     joined_at = models.DateTimeField(auto_now_add=True)
     last_read_message = models.ForeignKey(
@@ -156,6 +171,7 @@ class ChatParticipant(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=("chat", "user"), name="unique_chat_participant"),
+            models.CheckConstraint(condition=models.Q(role__in=("owner", "admin")) | models.Q(admin_title=""), name="sg_admin_title_role"),
         ]
 
     @property
@@ -203,6 +219,7 @@ class Message(models.Model):
     forwarded_from_name = models.CharField(max_length=300, blank=True, default="")
     forwarded_from_username = models.CharField(max_length=150, blank=True, default="")
     signature_name = models.CharField(max_length=300, blank=True, default="")
+    sender_title = models.CharField(max_length=32, blank=True, default="", editable=False)
     special_type = models.CharField(
         max_length=16,
         choices=SpecialType.choices,
@@ -222,6 +239,14 @@ class Message(models.Model):
     expires_at = models.DateTimeField(null=True, blank=True, db_index=True)
 
     def save(self, *args, **kwargs):
+        if self._state.adding and self.chat_id and self.sender_id:
+            if self.chat.type == Chat.Type.GROUP or (self.chat.type == Chat.Type.CHANNEL and self.signature_name):
+                self.sender_title = ChatParticipant.objects.filter(
+                    chat_id=self.chat_id, user_id=self.sender_id, is_hidden=False,
+                    role__in=(ChatParticipant.Role.OWNER, ChatParticipant.Role.ADMIN),
+                ).values_list("admin_title", flat=True).first() or ""
+            else:
+                self.sender_title = ""
         if self._state.adding and self.expires_at is None and self.chat_id:
             seconds = int(getattr(self.chat, "auto_delete_seconds", 0) or 0)
             if seconds > 0:

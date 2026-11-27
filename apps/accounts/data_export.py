@@ -179,14 +179,14 @@ def build_export(user, include_files=False):
                 "id", "name", "position", "categories", "included_chat_ids", "excluded_chat_ids",
                 "pinned_chat_ids", "exclude_muted", "exclude_read", "exclude_archived"))
             writer.jsonl("memberships.jsonl", rows(memberships,
-                "chat_id", "chat__type", "chat__title", "chat__username", "role", "joined_at",
+                "chat_id", "chat__type", "chat__title", "chat__username", "role", "admin_title", "joined_at",
                 "read_through_id", "is_pinned", "pin_order", "is_archived", "is_muted",
                 "muted_until", "marked_unread_at"))
             writer.jsonl("drafts.jsonl", rows(memberships.filter(chat__protect_content=False)
                 .filter(Q(draft_text__gt="") | Q(draft_reply_id__isnull=False)),
                 "chat_id", "draft_text", "draft_reply_id", "draft_updated_at"))
             writer.jsonl("messages.jsonl", (safe_special(row) for row in rows(own,
-                "id", "chat_id", "text", "special_type", "special_data", "silent", "created_at", "edited_at")))
+                "id", "chat_id", "text", "special_type", "special_data", "silent", "sender_title", "signature_name", "created_at", "edited_at")))
             writer.jsonl("reactions.jsonl", rows(MessageReaction.objects.filter(user=user, message__in=visible),
                 "message_id", "emoji", "created_at"))
             writer.jsonl("channel_comments.jsonl", rows(ChannelComment.objects.filter(

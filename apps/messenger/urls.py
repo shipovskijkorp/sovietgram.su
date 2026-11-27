@@ -1,7 +1,7 @@
 from django.urls import path
 
 from apps.accounts import share_qr
-from . import gifs, sticker_discovery
+from . import community_directory, gifs, sticker_discovery
 
 from . import archive_controls, community_profiles, views, scheduled, notifications, folders, stickers, shared_stickers, link_previews, moderation, discussions
 
@@ -11,6 +11,7 @@ urlpatterns = [
     path("", views.home, name="home"),
     path("contacts/", views.contacts, name="contacts"),
     path("search/", views.global_search, name="global_search"),
+    path("communities/", community_directory.community_directory, name="community_directory"),
     path("sidebar/", views.sidebar_snapshot, name="sidebar_snapshot"),
     path("notifications/poll/", notifications.poll_sound_notifications, name="poll_sound_notifications"),
     path("chats/mark-all-read/", views.mark_all_chats_read, name="mark_all_chats_read"),
