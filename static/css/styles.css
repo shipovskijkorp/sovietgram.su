@@ -374,8 +374,8 @@ a { color: var(--red); }
 }
 .sidebar__footer .footer-star svg {
   display: block;
-  width: 26px;
-  height: 26px;
+  width: calc(26px * 2 / 3);
+  height: calc(26px * 2 / 3);
   fill: currentColor;
   stroke: none;
   flex: 0 0 auto;
