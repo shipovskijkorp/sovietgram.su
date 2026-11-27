@@ -84,10 +84,13 @@ def _special_fields(post):
         if post.get("payload"):
             raise OutboxError("Для вложения укажите его тип.")
         return "", {}, None
-    if kind not in {Message.SpecialType.POLL, Message.SpecialType.TODO, Message.SpecialType.LOCATION}:
+    if kind not in Message.SpecialType.values:
         raise OutboxError("Планирование этого типа вложения пока недоступно.")
     raw = post.get("payload", "")
-    if len(raw) > 16384:
+    # A Markdown article permits 40,000 characters. JSON escapes can take
+    # up to six characters per code unit; other structured payloads stay small.
+    limit = 250000 if kind == Message.SpecialType.ARTICLE else 16384
+    if len(raw) > limit:
         raise OutboxError("Слишком большой объём данных вложения.")
     try:
         payload = json.loads(raw)
@@ -172,6 +175,7 @@ def _serialize(item):
     return {
         "id": item.pk,
         "text": item.text,
+        "display_text": item.special_data.get("title", item.text) if item.special_type == Message.SpecialType.ARTICLE else item.text,
         "special_type": item.special_type,
         "attachment_type": "sticker" if item.sticker_source_id is not None else "",
         "silent": item.silent,

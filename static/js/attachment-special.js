@@ -232,7 +232,7 @@
     activeType = type;
     resetType(type);
     if (scheduleControls) scheduleControls.hidden = !stage?.dataset.scheduledUrl ||
-      !window.SovietgramSchedule?.toScheduledISO || !["poll","todo","location"].includes(type);
+      !window.SovietgramSchedule?.toScheduledISO || !["poll","todo","location","article"].includes(type);
     if (scheduleToggle) scheduleToggle.checked = false;
     if (scheduleSilent) scheduleSilent.checked = false;
     if (scheduleDate && window.SovietgramSchedule?.localDateValue) {
@@ -261,7 +261,7 @@
   }
 
   function closeSpecial() {
-    if (busy) return;
+    if (busy || modal?.dataset.articleSending === "true") return;
     activeType = "";
     if (modal) modal.hidden = true;
   }

@@ -293,6 +293,36 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.page.reload(wait_until="domcontentloaded")
         self.expect(self.page.locator(selector + ' [data-message-reaction][aria-pressed="true"]')).to_have_count(2)
 
+    def test_schedule_article_and_sticker_from_real_controls(self):
+        from PIL import Image
+        from .models import ScheduledMessage, Sticker, StickerPack
+        buffer = BytesIO()
+        Image.new("RGBA", (8, 8), "red").save(buffer, format="WEBP")
+        pack = StickerPack.objects.create(owner=self.owner, name="Schedule pack")
+        sticker = Sticker.objects.create(pack=pack, image=buffer.getvalue())
+        self.go(self.direct)
+        self.click("#attachmentButton")
+        self.click('[data-attach-special="article"]')
+        self.visible('[data-special-panel="article"]')
+        self.page.locator("#attachArticleTitle").fill("Future article")
+        self.page.locator("#attachArticleBody").fill("**Scheduled body**")
+        self.page.locator("#attachSpecialSchedule").check()
+        self.expect(self.page.locator("#attachSpecialSend")).to_have_text("Запланировать")
+        self.click("#attachSpecialSend")
+        self.hidden("#attachSpecialBackdrop")
+        self.assertTrue(ScheduledMessage.objects.filter(sender=self.owner, special_type="article",
+                                                        special_data__title="Future article").exists())
+        self.click('[data-open-stickers][data-sticker-send="true"]')
+        self.visible("#stickerDialog")
+        self.page.locator(f'.sticker-tile[data-sticker-id="{sticker.pk}"]').click(button="right")
+        self.page.locator("#stickerItemMenu").get_by_role("button", name="Отправить позже", exact=True).click()
+        self.visible("#scheduledDialog")
+        self.expect(self.page.locator("#scheduledTitle")).to_have_text("Запланировать стикер")
+        self.click("#scheduledSave")
+        self.visible("#scheduledListPane")
+        self.expect(self.page.locator("#scheduledList")).to_contain_text("Стикер")
+        self.assertTrue(ScheduledMessage.objects.filter(sender=self.owner, sticker_source_id=sticker.pk).exists())
+
     def test_group_message_readers_dialog(self):
         ChatParticipant.objects.filter(chat=self.group, user=self.peer).update(read_through_id=self.message.pk)
         self.go(self.group)

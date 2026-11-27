@@ -135,10 +135,38 @@ class ScheduledMessageTests(TestCase):
         import json
         for kind, payload in (("poll", {"question":"Q","options":["A"]}),
                               ("location", {"latitude":100,"longitude":0}),
-                              ("article", {"title":"T","body":"Text"})):
+                              ("article", {"title":"T","body":""})):
             response = self.client.post(self.url(), self.data(text="", special_type=kind, payload=json.dumps(payload)))
             self.assertEqual(response.status_code, 400)
         self.assertFalse(ScheduledMessage.objects.exists())
+
+    def test_scheduled_article_preserves_full_markdown_and_checks_late_links(self):
+        import json
+        group = Chat.objects.create(type=Chat.Type.GROUP, title="Group")
+        ChatParticipant.objects.create(chat=group, user=self.alice)
+        ChatParticipant.objects.create(chat=group, user=self.bob, role="owner")
+        body = "**Long article**\n" + "x" * 20000 + "\nhttps://example.org"
+        payload = {"title":"Article","subtitle":"Subtitle","body":body}
+        item = self.schedule(group, text="", special_type="article", payload=json.dumps(payload))
+        self.assertEqual(item.special_data["body"], body)
+        self.assertLess(len(item.text), len(body))
+        self.assertEqual(self.client.get(self.url(group)).json()["items"][0]["display_text"], "Article")
+        self.assertEqual(self.peer.get(self.url(group)).json()["items"], [])
+        Chat.objects.filter(pk=group.pk).update(members_can_send_links=False)
+        self.make_due(item)
+        self.assertEqual(deliver_due_messages(), 0)
+        item.refresh_from_db()
+        self.assertEqual(item.status, ScheduledMessage.Status.FAILED)
+        Chat.objects.filter(pk=group.pk).update(members_can_send_links=True)
+        response = self.action(item, "send_now")
+        self.assertEqual(response.status_code, 200, response.content)
+        item.refresh_from_db()
+        self.assertEqual(item.status, ScheduledMessage.Status.SENT)
+        self.assertEqual(item.special_data, {})
+        message = item.delivered_message
+        self.assertEqual(message.special_type, "article")
+        self.assertEqual(message.special_data["body"], body)
+        self.assertEqual(message.special_data["subtitle"], "Subtitle")
 
     def test_scheduled_sticker_snapshot_survives_pack_deletion(self):
         from io import BytesIO

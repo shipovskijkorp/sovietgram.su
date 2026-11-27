@@ -12,6 +12,12 @@
   const sendButton = document.getElementById("attachSpecialSend");
   const modalTitle = document.getElementById("attachSpecialTitle");
   const hint = document.getElementById("attachSpecialHint");
+  const stage = document.getElementById("messageStage");
+  const scheduleControls = document.getElementById("attachSpecialScheduleControls");
+  const scheduleToggle = document.getElementById("attachSpecialSchedule");
+  const scheduleDate = document.getElementById("attachSpecialScheduleDate");
+  const scheduleSilent = document.getElementById("attachSpecialScheduleSilent");
+  const modalClose = document.getElementById("attachSpecialClose");
   const csrfToken = document.querySelector("#messageForm [name='csrfmiddlewaretoken']")?.value || "";
 
   const viewer = document.getElementById("articleViewerBackdrop");
@@ -608,8 +614,16 @@
     viewer.hidden = false;
   }
 
+  function scheduledArticle() {
+    return Boolean(!editState && scheduleToggle?.checked && scheduleControls && !scheduleControls.hidden);
+  }
+
   function configureEditor(initial = null, edit = null) {
     editState = edit;
+    if (edit && scheduleControls) {
+      scheduleControls.hidden = true;
+      if (scheduleToggle) scheduleToggle.checked = false;
+    }
     titleInput.value = initial?.title || "";
     if (subtitleInput) subtitleInput.value = initial?.subtitle || "";
     bodyInput.value = initial?.body || "";
@@ -617,7 +631,7 @@
     updateCounter();
     resetHistory();
     if (modalTitle) modalTitle.textContent = edit ? "Редактирование статьи" : "Новая статья";
-    if (sendButton) sendButton.textContent = edit ? "Сохранить" : "Отправить";
+    if (sendButton) sendButton.textContent = edit ? "Сохранить" : scheduledArticle() ? "Запланировать" : "Отправить";
     if (hint) hint.textContent = "Форматирование, ссылки, код, цитаты, списки, задачи, таблицы и предпросмотр.";
   }
 
@@ -724,9 +738,20 @@
     if (!payload.body) return notify("Введите текст статьи.");
     if (payload.body.length > 40000) return notify("Текст статьи превышает 40 000 символов.");
 
+    const scheduled = scheduledArticle();
+    let scheduledFor = "";
+    if (scheduled) {
+      try { scheduledFor = window.SovietgramSchedule.toScheduledISO(scheduleDate.value); }
+      catch (error) { notify(error.message); return; }
+    }
+    const replyInput = document.getElementById("replyToInput");
+    const reply = replyInput?.value || "";
+    const quote = reply ? window.SovietgramChat?.currentQuote?.() || "" : "";
     busy = true;
-    sendButton.disabled = true;
-    sendButton.textContent = editState ? "Сохранение…" : "Отправка…";
+    modal.dataset.articleSending = "true";
+    for (const control of [sendButton,modalClose,scheduleToggle,scheduleDate,scheduleSilent])
+      if (control) control.disabled = true;
+    sendButton.textContent = editState ? "Сохранение…" : scheduled ? "Планирование…" : "Отправка…";
 
     const data = new FormData();
     data.append("csrfmiddlewaretoken", csrfToken);
@@ -737,11 +762,19 @@
       url = editState.actionUrl;
       data.append("action", "edit");
     } else {
-      url = conversation.dataset.specialSendUrl;
+      url = scheduled ? stage?.dataset.scheduledUrl : conversation.dataset.specialSendUrl;
       data.append("special_type", "article");
-      const reply = document.getElementById("replyToInput")?.value;
       if (reply) data.append("reply_to", reply);
-      data.append("client_message_id", articleSendKeys.key("article", [payload, reply || ""]));
+      if (quote) data.append("reply_quote", quote);
+      const signature = [payload, reply];
+      if (quote) signature.push(quote);
+      if (scheduled) {
+        data.append("account_id", stage.dataset.accountId);
+        data.append("scheduled_for", scheduledFor);
+        data.append("silent", scheduleSilent?.checked ? "1" : "0");
+        signature.push(scheduledFor, Boolean(scheduleSilent?.checked));
+      }
+      data.append("client_message_id", articleSendKeys.key(scheduled ? "scheduled-article" : "article", signature));
     }
 
     try {
@@ -759,11 +792,18 @@
         window.updateSovietgramChatMessage?.(result.message);
         notify("Статья обновлена.");
       } else {
-        window.renderSovietgramChatMessage?.(result.message);
-        const replyInput = document.getElementById("replyToInput");
-        const replyBox = document.getElementById("composerReply");
-        if (replyInput) replyInput.value = "";
-        if (replyBox) replyBox.hidden = true;
+        if (scheduled) {
+          if (result.item?.status === "canceled") throw new Error("Эта отправка уже отменена.");
+          notify(result.item?.status === "sent" ? "Статья уже отправлена." : "Статья запланирована.");
+        } else window.renderSovietgramChatMessage?.(result.message);
+        if ((replyInput?.value || "") === reply && (window.SovietgramChat?.currentQuote?.() || "") === quote) {
+          if (window.SovietgramChat?.clearReplyState) window.SovietgramChat.clearReplyState();
+          else {
+            const replyBox = document.getElementById("composerReply");
+            if (replyInput) replyInput.value = "";
+            if (replyBox) replyBox.hidden = true;
+          }
+        }
       }
 
       modal.hidden = true;
@@ -773,8 +813,10 @@
       notify(error.message);
     } finally {
       busy = false;
-      sendButton.disabled = false;
-      sendButton.textContent = editState ? "Сохранить" : "Отправить";
+      delete modal.dataset.articleSending;
+      for (const control of [sendButton,modalClose,scheduleToggle,scheduleDate,scheduleSilent])
+        if (control) control.disabled = false;
+      sendButton.textContent = editState ? "Сохранить" : scheduledArticle() ? "Запланировать" : "Отправить";
     }
   }
 
