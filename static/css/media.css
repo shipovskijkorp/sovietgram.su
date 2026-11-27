@@ -1252,3 +1252,26 @@ button[data-media-spoiler]:not([data-spoiler-revealed])::after {
 }
 .media-spoiler-reveal { position:absolute; inset:0; z-index:2; width:100%; height:100%; border:0; background:transparent; color:#fff; font:inherit; font-size:13px; font-weight:600; cursor:pointer; }
 [data-spoiler-revealed] > .media-spoiler-reveal { display:none !important; }
+
+.media-preview-edit {position:absolute;top:7px;left:7px;display:grid;place-items:center;width:34px;height:34px;border:0;border-radius:50%;background:#181411bf;color:#fff;cursor:pointer;font-size:21px;}
+.media-preview-edit:disabled{opacity:.5;cursor:default;}
+.photo-editor{width:min(560px,calc(100vw - 20px));max-height:calc(100dvh - 20px);padding:16px;box-sizing:border-box;overflow:auto;background:var(--panel,#fffaf1);color:var(--ink);border:1px solid var(--line);border-radius:16px;}
+.photo-editor::backdrop{background:#0009;}
+.photo-editor header,.photo-editor footer,.photo-editor-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.photo-editor header{justify-content:space-between;margin-bottom:12px;}
+.photo-editor h2{margin:0;font-size:17px;}
+.photo-editor button{font:inherit;font-size:13px;border:1px solid var(--line);background:transparent;color:inherit;padding:8px 12px;border-radius:8px;cursor:pointer;}
+.photo-editor button[aria-pressed=true]{background:color-mix(in srgb,var(--red) 15%,transparent);}
+.photo-editor button:disabled{opacity:.5;cursor:wait;}
+.photo-editor-preview{display:grid;place-items:center;min-height:80px;background:#28252a;border-radius:10px;overflow:hidden;}
+.photo-editor-preview canvas{display:block;max-width:100%;max-height:min(42dvh,360px);object-fit:contain;}
+.photo-editor-size{text-align:center;font-size:12px;margin:6px 0 10px;color:var(--muted);}
+.photo-editor fieldset{margin:12px 0;padding:10px;min-width:0;border:1px solid var(--line);border-radius:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+.photo-editor fieldset[hidden],.photo-editor [hidden]{display:none!important;}
+.photo-editor legend,.photo-editor label{font-size:12px;}
+.photo-editor label{display:grid;gap:4px;}
+.photo-editor input[type=range]{width:100%;accent-color:var(--red);}
+.photo-editor footer{justify-content:flex-end;margin-top:12px;}
+#photoEditorApply{background:var(--red,#b00000);color:#fff;border-color:transparent;}
+#photoEditorError{color:var(--red-soft,#b00000);font-size:13px;}
+@media(max-height:620px){.photo-editor-preview canvas{max-height:30dvh;}}

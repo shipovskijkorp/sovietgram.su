@@ -1,0 +1,25 @@
+<dialog id="photoEditor" class="photo-editor" aria-labelledby="photoEditorTitle">
+  <header><h2 id="photoEditorTitle">Редактирование фото</h2><button id="photoEditorCancel" type="button" aria-label="Закрыть">×</button></header>
+  <div class="photo-editor-preview"><canvas id="photoEditorCanvas" aria-label="Предпросмотр изображения"></canvas></div>
+  <p id="photoEditorSize" class="photo-editor-size"></p>
+  <div class="photo-editor-tools">
+    <button type="button" id="photoRotateLeft" title="Повернуть влево" aria-label="Повернуть влево">↶ 90°</button>
+    <button type="button" id="photoRotateRight" title="Повернуть вправо" aria-label="Повернуть вправо">↷ 90°</button>
+    <button type="button" id="photoFlip" aria-pressed="false">Отразить</button>
+    <button type="button" id="photoEditorReset">Сбросить</button>
+  </div>
+  <fieldset class="photo-editor-crop"><legend>Обрезка</legend>
+    <label>Слева <input id="photoCropLeft" type="range" min="0" max="90" value="0"></label>
+    <label>Справа <input id="photoCropRight" type="range" min="0" max="90" value="0"></label>
+    <label>Сверху <input id="photoCropTop" type="range" min="0" max="90" value="0"></label>
+    <label>Снизу <input id="photoCropBottom" type="range" min="0" max="90" value="0"></label>
+    <button type="button" id="photoCropSquare">Квадрат 1:1</button>
+    <button type="button" id="photoCropClear">Без обрезки</button>
+  </fieldset>
+  <fieldset id="photoEditorFilters" class="photo-editor-filters"><legend>Коррекция</legend>
+    <label>Яркость <input id="photoBrightness" type="range" min="50" max="150" value="100"></label>
+    <label>Контраст <input id="photoContrast" type="range" min="50" max="150" value="100"></label>
+  </fieldset>
+  <p id="photoEditorError" role="alert" hidden></p>
+  <footer><button type="button" id="photoEditorDiscard">Отмена</button><button type="button" id="photoEditorApply">Применить</button></footer>
+</dialog>

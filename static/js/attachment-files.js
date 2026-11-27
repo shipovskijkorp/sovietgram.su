@@ -49,6 +49,7 @@
   let objectUrls = [];
   let busy = false, activeUpload = null, cancelled = false, dragDepth = 0;
   let retryPlan = null;
+  let editingPhoto = false;
   const sendKeys = window.SovietgramSendRetry.batch();
 
   function notify(text) {
@@ -130,13 +131,13 @@
     if (captionNode) captionNode.readOnly = active || Boolean(retryPlan);
     if (addButton) addButton.disabled = active || Boolean(retryPlan);
     if (abortButton) abortButton.hidden = !active;
-    for (const button of previewNode?.querySelectorAll(".media-preview-remove") || []) button.disabled = active || Boolean(retryPlan);
+    for (const button of previewNode?.querySelectorAll(".media-preview-remove, .media-preview-edit") || []) button.disabled = active || Boolean(retryPlan);
     if (progressNode) progressNode.hidden = !active;
     if (progressBar) progressBar.style.width = Math.max(0, Math.min(100, percent)) + "%";
   }
 
   function closeComposer() {
-    if (busy) return;
+    if (busy || editingPhoto) return;
     if (retryPlan && !window.confirm("Прекратить отправку? Уже принятые сервером файлы останутся в переписке.")) return;
     retryPlan = null;
     releaseUrls();
@@ -149,13 +150,31 @@
   }
 
   function removeFile(index) {
-    if (busy || retryPlan) return;
+    if (busy || retryPlan || editingPhoto) return;
     selectedFiles.splice(index, 1);
     if (!selectedFiles.length) {
       closeComposer();
       return;
     }
     renderSelection();
+  }
+
+  async function editPhoto(index) {
+    if (busy || retryPlan || editingPhoto || !window.SovietgramPhotoEditor?.edit) return;
+    const original = selectedFiles[index];
+    if (!original) return;
+    editingPhoto = true;
+    try {
+      const result = await window.SovietgramPhotoEditor.edit(original);
+      if (!result || selectedFiles[index] !== original) return;
+      const next = [...selectedFiles]; next[index] = result;
+      const issue = validate(next, selectedMode);
+      if (issue) { notify(issue); return; }
+      selectedFiles = next;
+      sendKeys.clear();
+      renderSelection();
+    } catch (e) { notify(e.message || "Не удалось открыть редактор."); }
+    finally { editingPhoto = false; }
   }
 
   function renderSelection() {
@@ -220,6 +239,15 @@
           card.appendChild(image);
         }
 
+        if (window.SovietgramPhotoEditor?.canEdit(file)) {
+          const edit = document.createElement("button");
+          edit.type = "button"; edit.className = "media-preview-edit";
+          edit.textContent = "✎"; edit.title = "Редактировать фото";
+          edit.setAttribute("aria-label", "Редактировать фото");
+          edit.disabled = busy || Boolean(retryPlan);
+          edit.addEventListener("click", () => void editPhoto(index));
+          card.appendChild(edit);
+        }
         const remove = document.createElement("button");
         remove.type = "button";
         remove.className = "media-preview-remove";
@@ -266,7 +294,7 @@
   }
 
   function openComposer(files, mode, preserveCaption = false) {
-    if (busy || retryPlan) {
+    if (busy || retryPlan || editingPhoto) {
       notify("Сначала завершите или отмените текущую отправку файлов.");
       return;
     }
@@ -303,7 +331,7 @@
   }
 
   function pick(mode, append = false) {
-    if (busy || retryPlan) return;
+    if (busy || retryPlan || editingPhoto) return;
     const input = inputs[mode];
     if (!input) {
       notify("Поле выбора файлов не найдено.");
@@ -432,7 +460,7 @@
   }
 
   async function sendSelected() {
-    if (!selectedFiles.length || busy) return;
+    if (!selectedFiles.length || busy || editingPhoto) return;
     const error = validate(selectedFiles, selectedMode);
     if (error) { notify(error); return; }
     const plan = retryPlan || buildPlan();
@@ -493,7 +521,7 @@
   }
   function openTransfer(files) {
     if (!files.length) return;
-    if (busy || retryPlan) { notify("Сначала завершите текущую отправку."); return; }
+    if (busy || retryPlan || editingPhoto) { notify("Сначала завершите текущую отправку или редактирование."); return; }
     const mode = files.every(isMedia) ? "media" : files.every(isAudio) ? "audio" : "file";
     const append = backdrop && !backdrop.hidden && selectedMode === mode;
     openComposer(append ? [...selectedFiles, ...files] : files, mode, append);

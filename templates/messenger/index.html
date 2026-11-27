@@ -827,6 +827,8 @@
   </section>
 </div>
 
+{% include 'messenger/_photo_editor.html' %}
+
 <div class="attach-special-backdrop" id="attachSpecialBackdrop" hidden>
   <section class="attach-special-dialog" role="dialog" aria-modal="true" aria-labelledby="attachSpecialTitle">
     <header class="attach-special-header">
@@ -1365,6 +1367,7 @@
 <script src="{% static 'js/message-social.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/composer-tools.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/attachment-menu.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/photo-editor.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/attachment-files.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/read-ack.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/channel-discussions.js' %}?v={{ static_version }}"></script>

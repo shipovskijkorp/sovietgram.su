@@ -755,6 +755,46 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.click("#chatFoldersClose")
         self.hidden("#chatFoldersDialog")
 
+    def test_photo_editor_and_media_spoiler_from_real_controls(self):
+        from PIL import Image
+
+        storage = self.enterContext(TemporaryDirectory())
+        self.enterContext(override_settings(MEDIA_ROOT=storage))
+        picture = BytesIO()
+        Image.new("RGB", (80, 40), "red").save(picture, format="PNG")
+        self.go(self.direct)
+        self.page.locator("#mediaAttachmentsInput").set_input_files({
+            "name":"before.png", "mimeType":"image/png", "buffer":picture.getvalue(),
+        })
+        self.visible("#mediaComposeBackdrop")
+        self.click(".media-preview-edit")
+        self.visible("#photoEditor")
+        self.expect(self.page.locator("#photoEditorSize")).to_have_text("80 × 40 px")
+        self.click("#photoRotateRight")
+        self.expect(self.page.locator("#photoEditorSize")).to_have_text("40 × 80 px")
+        self.click("#photoEditorApply")
+        self.hidden("#photoEditor")
+        self.page.locator("#mediaComposeSpoiler").check()
+        self.click("#mediaComposeSend")
+        self.hidden("#mediaComposeBackdrop")
+        attachment = MessageAttachment.objects.filter(message__chat=self.direct).latest("pk")
+        self.assertTrue(attachment.is_spoiler)
+        with attachment.file.open("rb") as stream, Image.open(stream) as result:
+            self.assertEqual(result.size, (40, 80))
+        selector = f'#message-{attachment.message_id} [data-media-spoiler="{attachment.pk}"]'
+        self.visible(selector)
+        self.hidden(selector + " img")
+        self.click(selector)
+        self.expect(self.page.locator(selector)).to_have_attribute("data-spoiler-revealed", "")
+        self.visible(selector + " img")
+        self.hidden("#imageViewer")
+        self.click(selector)
+        self.visible("#imageViewer")
+        self.click("#imageViewerClose")
+        self.page.reload(wait_until="domcontentloaded")
+        self.visible(selector)
+        self.hidden(selector + " img")
+
     def test_gallery_filters_navigation_and_protected_download(self):
         from PIL import Image
 
