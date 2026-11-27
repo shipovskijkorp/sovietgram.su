@@ -138,7 +138,10 @@
     function seekTo(ratio){
       const total=duration();
       if(!total||video.readyState<1)return;
-      try{video.currentTime=Math.max(0,Math.min(total-0.01,total*ratio));update();}catch(_){}
+      // Recorded WebM often reports an infinite duration before the browser
+      // reaches its end. The saved duration is the timeline in that case.
+      const end=Math.max(0,total-0.01);
+      try{video.currentTime=Math.max(0,Math.min(end,total*ratio));update();}catch(_){}
     }
     function seekAt(event){
       const rect=seek.getBoundingClientRect();
@@ -188,7 +191,7 @@
     video.addEventListener("ended",()=>deactivate({reset:true}));
     video.addEventListener("volumechange",updateMute);
     video.addEventListener("error",()=>{
-      wantsPlay=false;state();
+      ++playToken;wantsPlay=false;state();
       if(error){error.textContent="Видео недоступно или формат не поддерживается.";error.hidden=false;}
     });
     updateMute();state();

@@ -39,7 +39,7 @@
 .video-note-player__play:focus-visible { outline:2px solid #fff; outline-offset:-5px; }
 .video-note-player__progress { position:absolute; inset:0; width:100%; height:100%; color:#fff; z-index:2;
   overflow:visible; pointer-events:none; visibility:hidden; }
-.video-note-player.is-expanded .video-note-player__progress { visibility:visible; }
+.video-note-player.is-expanded .video-note-player__progress { visibility:visible; touch-action:none; }
 .video-note-player__track { stroke:rgba(0,0,0,.27); stroke-width:1.5; }
 .video-note-player__arc { stroke:currentColor; stroke-width:1.6; stroke-linecap:round; }
 .video-note-player__thumb { filter:drop-shadow(0 1px 1px #0008); }

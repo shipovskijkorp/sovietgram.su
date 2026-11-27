@@ -367,7 +367,8 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.assertAlmostEqual(initial["width"], initial["height"], delta=3)
         self.expect(player.locator('input[type="range"]')).to_have_count(0)
         self.expect(player.locator("[data-note-seek]")).to_have_css("visibility", "hidden")
-        self.expect(player.locator("..").locator("..")).to_have_css("background-color", "rgba(0, 0, 0, 0)")
+        note_article = self.page.locator(f'#message-{attachment.message_id}')
+        self.expect(note_article).to_have_css("background-color", "rgba(0, 0, 0, 0)")
         self.click("[data-video-note-player] [data-note-play]")
         self.expect(player).to_have_class(re.compile("is-expanded"))
         self.expect(player).to_have_class(re.compile("is-playing"))
@@ -383,9 +384,35 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.page.mouse.click(ring["x"] + ring["width"]/2, ring["y"] + ring["height"]*.95)
         self.page.wait_for_function("Number(document.querySelector('[data-note-seek]').getAttribute('aria-valuenow')) >= 40")
         self.expect(player).to_have_attribute("data-note-id", note_id)
+        from .services import serialize_message
+        self.page.evaluate("""() => {
+            window.noteBeforeUpdate = document.querySelector('[data-video-note-player] video');
+            window.notePositionBeforeUpdate = window.noteBeforeUpdate.currentTime;
+        }""")
+        payload = serialize_message(attachment.message, self.owner, other_last_read_id=attachment.message_id)
+        self.page.evaluate("(payload) => window.updateSovietgramChatMessage(payload)", payload)
+        self.assertTrue(self.page.evaluate("""() => {
+            const video = document.querySelector('[data-video-note-player] video');
+            return video === window.noteBeforeUpdate &&
+                Math.abs(video.currentTime-window.notePositionBeforeUpdate)<0.05;
+        }"""))
+        self.expect(note_article.locator(".message-check")).to_have_attribute("data-read-state", "read")
         self.click("[data-video-note-player] [data-note-collapse]")
         self.expect(player).not_to_have_class(re.compile("is-expanded"))
         self.assertAlmostEqual(player.bounding_box()["width"], initial["width"], delta=3)
+        self.page.set_viewport_size({"width":390, "height":844})
+        mobile_compact = player.bounding_box()
+        self.assertAlmostEqual(mobile_compact["width"],mobile_compact["height"],delta=3)
+        self.assertLessEqual(mobile_compact["width"],190)
+        self.click("[data-video-note-player] [data-note-play]")
+        self.expect(player).to_have_class(re.compile("is-expanded"))
+        mobile_expanded = player.bounding_box()
+        self.assertGreater(mobile_expanded["width"],mobile_compact["width"])
+        self.assertGreaterEqual(mobile_expanded["x"],0)
+        self.assertLessEqual(mobile_expanded["x"]+mobile_expanded["width"],390)
+        self.click("[data-video-note-player] [data-note-collapse]")
+        self.expect(player).not_to_have_class(re.compile("is-expanded"))
+        self.page.set_viewport_size({"width":1360, "height":900})
         self.expect(action).to_have_attribute("data-composer-action", "video_note")
         box = action.bounding_box()
         x, y = box["x"] + box["width"]/2, box["y"] + box["height"]/2
