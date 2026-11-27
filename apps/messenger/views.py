@@ -2264,6 +2264,7 @@ def send_message(request, chat_id):
                 original_name=Path(uploaded.name).name[:255],
                 mime_type=(getattr(uploaded, "content_type", "") or "")[:127],
                 size=uploaded.size,
+                is_spoiler=bool(attachment_mode == MessageForm.MODE_MEDIA and form.cleaned_data["media_spoiler"]),
                 duration_ms=(
                     int(form.cleaned_data.get("video_note_duration_ms") or 0)
                     if send_as_video_note

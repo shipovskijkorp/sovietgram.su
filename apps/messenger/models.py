@@ -327,6 +327,7 @@ class MessageAttachment(models.Model):
     size = models.PositiveBigIntegerField(default=0)
     duration_ms = models.PositiveIntegerField(default=0)
     waveform = models.JSONField(default=list, blank=True)
+    is_spoiler = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

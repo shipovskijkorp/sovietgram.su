@@ -573,11 +573,11 @@
                           </button>
                         </div>
                       {% elif attachment.kind == 'image' %}
-                        <a class="message-media__item" href="{% url 'messenger:view_attachment' attachment.pk %}" target="_blank" rel="noopener" data-lightbox-image="{% url 'messenger:view_attachment' attachment.pk %}" data-media-name="{{ attachment.original_name }}" data-media-download="{% if not selected_chat.protect_content %}{% url 'messenger:download_attachment' attachment.pk %}{% endif %}">
+                        <a class="message-media__item"{% if attachment.is_spoiler %} data-media-spoiler="{{ attachment.pk }}" aria-label="Показать скрытое медиа"{% endif %} href="{% url 'messenger:view_attachment' attachment.pk %}" target="_blank" rel="noopener" data-lightbox-image="{% url 'messenger:view_attachment' attachment.pk %}" data-media-name="{{ attachment.original_name }}" data-media-download="{% if not selected_chat.protect_content %}{% url 'messenger:download_attachment' attachment.pk %}{% endif %}">
                           <img class="message-media__image" src="{% url 'messenger:view_attachment' attachment.pk %}" alt="{{ attachment.original_name }}" loading="lazy">
                         </a>
                       {% elif attachment.kind == 'video' %}
-                        <div class="message-video-wrap"><video class="message-media__video" controls preload="{% if request.user.media_preload %}metadata{% else %}none{% endif %}" src="{% url 'messenger:view_attachment' attachment.pk %}"></video><button type="button" class="message-video-expand" data-lightbox-video="{% url 'messenger:view_attachment' attachment.pk %}" data-media-name="{{ attachment.original_name }}" data-media-download="{% if not selected_chat.protect_content %}{% url 'messenger:download_attachment' attachment.pk %}{% endif %}" aria-label="Открыть видео" title="Открыть видео"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3h7v7M10 21H3v-7M21 3l-7 7M3 21l7-7"/></svg></button></div>
+                        <div class="message-video-wrap"{% if attachment.is_spoiler %} data-media-spoiler="{{ attachment.pk }}"{% endif %}>{% if attachment.is_spoiler %}<button type="button" class="media-spoiler-reveal">Показать медиа</button>{% endif %}<video class="message-media__video" controls preload="{% if request.user.media_preload %}metadata{% else %}none{% endif %}" src="{% url 'messenger:view_attachment' attachment.pk %}"></video><button type="button" class="message-video-expand" data-lightbox-video="{% url 'messenger:view_attachment' attachment.pk %}" data-media-name="{{ attachment.original_name }}" data-media-download="{% if not selected_chat.protect_content %}{% url 'messenger:download_attachment' attachment.pk %}{% endif %}" aria-label="Открыть видео" title="Открыть видео"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3h7v7M10 21H3v-7M21 3l-7 7M3 21l7-7"/></svg></button></div>
                       {% elif attachment.kind == 'video_note' %}
                         {% include 'messenger/_video_note_player.html' with note=attachment %}
                       {% elif attachment.kind == 'voice' %}
@@ -812,6 +812,10 @@
     <label class="media-compose-group" id="mediaComposeCompressRow" hidden>
       <span><strong>Сжать фотографии</strong><small>Уменьшить размер до 1920 px и объём хранения; анимированные изображения и видео не изменяются</small></span>
       <span class="media-compose-switch"><input id="mediaComposeCompress" type="checkbox"><span><i></i></span></span>
+    </label>
+    <label class="media-compose-group" id="mediaComposeSpoilerRow" hidden>
+      <span>Скрыть под спойлером</span>
+      <span class="media-compose-switch"><input id="mediaComposeSpoiler" type="checkbox"><span><i></i></span></span>
     </label>
     <div class="media-compose-caption"><textarea id="mediaComposeCaption" rows="1" maxlength="4096" placeholder="Добавить подпись…"></textarea>{% if can_send_text %}{% include 'messenger/_composer_tools.html' with editor_id="mediaComposeCaption" %}{% endif %}</div>
     <label class="media-compose-group media-compose-silent">
@@ -1108,9 +1112,9 @@
       <div class="shared-media-grid">
         {% for attachment in shared_attachments %}
           {% if attachment.kind == 'image' %}
-            <a class="shared-media-item shared-media-item--image" href="{% url 'messenger:view_attachment' attachment.pk %}" target="_blank" rel="noopener" data-lightbox-image="{% url 'messenger:view_attachment' attachment.pk %}" data-media-name="{{ attachment.original_name }}" data-media-download="{% if not selected_chat.protect_content %}{% url 'messenger:download_attachment' attachment.pk %}{% endif %}"><img src="{% url 'messenger:thumbnail_attachment' attachment.pk %}" alt="{{ attachment.original_name }}" loading="lazy"></a>
+            <a class="shared-media-item shared-media-item--image"{% if attachment.is_spoiler %} data-media-spoiler="{{ attachment.pk }}" aria-label="Показать скрытое медиа"{% endif %} href="{% url 'messenger:view_attachment' attachment.pk %}" target="_blank" rel="noopener" data-lightbox-image="{% url 'messenger:view_attachment' attachment.pk %}" data-media-name="{{ attachment.original_name }}" data-media-download="{% if not selected_chat.protect_content %}{% url 'messenger:download_attachment' attachment.pk %}{% endif %}"><img src="{% url 'messenger:thumbnail_attachment' attachment.pk %}" alt="{{ attachment.original_name }}" loading="lazy"></a>
           {% elif attachment.kind == 'video' or attachment.kind == 'video_note' %}
-            <a class="shared-media-item shared-media-item--video" href="{% url 'messenger:view_attachment' attachment.pk %}" target="_blank" rel="noopener" data-lightbox-video="{% url 'messenger:view_attachment' attachment.pk %}" data-media-name="{{ attachment.original_name }}" data-media-download="{% if not selected_chat.protect_content %}{% url 'messenger:download_attachment' attachment.pk %}{% endif %}"><span>▶</span><small>{{ attachment.original_name }}</small></a>
+            <a class="shared-media-item shared-media-item--video"{% if attachment.is_spoiler %} data-media-spoiler="{{ attachment.pk }}" aria-label="Показать скрытое медиа"{% endif %} href="{% url 'messenger:view_attachment' attachment.pk %}" target="_blank" rel="noopener" data-lightbox-video="{% url 'messenger:view_attachment' attachment.pk %}" data-media-name="{{ attachment.original_name }}" data-media-download="{% if not selected_chat.protect_content %}{% url 'messenger:download_attachment' attachment.pk %}{% endif %}"><span>▶</span><small>{{ attachment.original_name }}</small></a>
           {% else %}
             <a class="shared-file-item" href="{% if selected_chat.protect_content and attachment.kind == 'file' %}{% url 'messenger:chat' selected_chat.pk %}?message={{ attachment.message_id }}#message-{{ attachment.message_id }}{% else %}{{ attachment.ui_url }}{% endif %}"><span>↓</span><span><strong>{{ attachment.original_name }}</strong><small>{{ attachment.size|filesizeformat }}</small></span></a>
           {% endif %}
@@ -1366,6 +1370,7 @@
 <script src="{% static 'js/channel-discussions.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/channel-views.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/video-notes.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/media-spoilers.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/chat.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/media-gallery.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/scheduled-messages.js' %}?v={{ static_version }}"></script>

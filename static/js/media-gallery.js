@@ -56,7 +56,7 @@
   }
   function openViewer(trigger) {
     const scope = trigger.closest(".message-media, .shared-media-grid, .community-profile-media-grid, .chat-gallery-items");
-    const links = scope ? [...scope.querySelectorAll(mediaSelector)].filter(el => mediaData(el).url) : [trigger];
+    const links = scope ? [...scope.querySelectorAll(mediaSelector)].filter(el => mediaData(el).url && !window.SovietgramMediaSpoilers?.isHidden(el)) : [trigger];
     viewing = links.map(mediaData);
     position = Math.max(0, links.indexOf(trigger));
     source = trigger;
@@ -111,6 +111,7 @@
         button.append(thumbnail);
       }
       button.setAttribute("aria-label", "Открыть " + item.name);
+      if (item.is_spoiler) window.SovietgramMediaSpoilers?.mark(button, item.id);
       root.append(button);
     }
     root.append(node("strong", item.name, "chat-gallery-name"), node("small", item.created_at + " · " + formatSize(item.size)));
@@ -195,7 +196,7 @@
     const entry = event.target.closest?.("[data-open-gallery]");
     if (entry) { event.preventDefault(); openGallery(entry.dataset.openGallery); return; }
     const trigger = event.target.closest?.(mediaSelector);
-    if (!trigger || !mediaData(trigger).url || event.defaultPrevented) return;
+    if (!trigger || !mediaData(trigger).url || event.defaultPrevented || window.SovietgramMediaSpoilers?.isHidden(trigger)) return;
     event.preventDefault(); openViewer(trigger);
   });
 })();

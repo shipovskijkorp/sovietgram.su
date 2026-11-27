@@ -1237,3 +1237,18 @@ body[data-theme="dark"] .message-todo__due.is-overdue { color:#ff9898; }
 .message-todo__deadline input, .message-todo__deadline button { max-width:100%; min-width:0; color:inherit; font:inherit; background:transparent; border:1px solid currentColor; border-radius:6px; padding:4px 6px; }
 .message-todo__deadline button { cursor:pointer; }
 .message-todo__adder input[type="date"] { max-width:145px; }
+
+/* Do not show actual pixels or inline player controls until explicitly revealed. */
+[data-media-spoiler]:not([data-spoiler-revealed]) {
+  position:relative; isolation:isolate; overflow:hidden; min-height:84px;
+  background:radial-gradient(circle at 30% 20%, #5d5a60 0, #343238 38%, #252328 100%) !important;
+  color:#fff; cursor:pointer;
+}
+[data-media-spoiler]:not([data-spoiler-revealed]) > :not(.media-spoiler-reveal) { visibility:hidden !important; }
+a[data-media-spoiler]:not([data-spoiler-revealed])::after,
+button[data-media-spoiler]:not([data-spoiler-revealed])::after {
+  content:"Показать медиа"; position:absolute; inset:0; display:grid; place-items:center;
+  text-align:center; font-size:12px; font-weight:600; color:#fff; padding:6px; white-space:normal;
+}
+.media-spoiler-reveal { position:absolute; inset:0; z-index:2; width:100%; height:100%; border:0; background:transparent; color:#fff; font:inherit; font-size:13px; font-weight:600; cursor:pointer; }
+[data-spoiler-revealed] > .media-spoiler-reveal { display:none !important; }

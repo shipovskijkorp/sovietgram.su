@@ -23,6 +23,8 @@
   const silentToggle = document.getElementById("mediaComposeSilent");
   const compressToggle = document.getElementById("mediaComposeCompress");
   const compressRow = document.getElementById("mediaComposeCompressRow");
+  const spoilerRow = document.getElementById("mediaComposeSpoilerRow");
+  const spoilerToggle = document.getElementById("mediaComposeSpoiler");
   const abortButton = document.getElementById("mediaComposeAbort");
   const dropOverlay = document.getElementById("chatDropOverlay");
   const accountId = document.getElementById("messageStage")?.dataset.accountId || document.body.dataset.accountId || "";
@@ -123,6 +125,7 @@
     if (closeButton) closeButton.disabled = active;
     if (silentToggle) silentToggle.disabled = active || Boolean(retryPlan);
     if (compressToggle) compressToggle.disabled = active || Boolean(retryPlan);
+    if (spoilerToggle) spoilerToggle.disabled = active || Boolean(retryPlan);
     if (groupToggle) groupToggle.disabled = active || Boolean(retryPlan);
     if (captionNode) captionNode.readOnly = active || Boolean(retryPlan);
     if (addButton) addButton.disabled = active || Boolean(retryPlan);
@@ -184,6 +187,7 @@
     }
 
     if (groupRow) groupRow.hidden = selectedMode !== "media" || selectedFiles.length < 2;
+    if (spoilerRow) spoilerRow.hidden = selectedMode !== "media";
     if (compressRow) compressRow.hidden = selectedMode !== "media" || !selectedFiles.some(file => ["jpg","jpeg","png","webp"].includes(extension(file)));
 
     if (selectedMode === "media") {
@@ -284,6 +288,7 @@
     if (groupToggle && !preserveCaption) groupToggle.checked = true;
     if (silentToggle && !preserveCaption) silentToggle.checked = false;
     if (compressToggle && !preserveCaption) compressToggle.checked = false;
+    if (spoilerToggle && !preserveCaption) spoilerToggle.checked = false;
     if (captionNode) {
       captionNode.value = preserveCaption
         ? previousCaption
@@ -335,7 +340,7 @@
     openComposer(next, mode, preserveCaption);
   }
 
-  function upload(files, text, mode, replyTo, onProgress, clientId, silent = false, attempt = 0, compress = false, quote = "") {
+  function upload(files, text, mode, replyTo, onProgress, clientId, silent = false, attempt = 0, compress = false, quote = "", spoiler = false) {
     return new Promise((resolve, reject) => {
       const data = new FormData();
       data.append("csrfmiddlewaretoken", csrfToken);
@@ -345,6 +350,7 @@
       data.append("account_id", accountId);
       data.append("preserve_draft", "1");
       if (compress) data.append("compress_images", "1");
+      if (spoiler) data.append("media_spoiler", "1");
       if (silent) data.append("silent", "1");
       if (replyTo) data.append("reply_to", replyTo);
       if (replyTo && quote) data.append("reply_quote", quote);
@@ -370,7 +376,7 @@
           return;
         }
         if (!attempt && [502, 503, 504].includes(xhr.status)) {
-          upload(files, text, mode, replyTo, onProgress, clientId, silent, 1, compress, quote).then(resolve, reject);
+          upload(files, text, mode, replyTo, onProgress, clientId, silent, 1, compress, quote, spoiler).then(resolve, reject);
           return;
         }
         if (xhr.status === 413) {
@@ -381,11 +387,11 @@
         reject(new Error(payload.error || firstError || "Не удалось отправить файлы."));
       });
       xhr.addEventListener("error", () => {
-        if (!attempt) upload(files, text, mode, replyTo, onProgress, clientId, silent, 1, compress, quote).then(resolve, reject);
+        if (!attempt) upload(files, text, mode, replyTo, onProgress, clientId, silent, 1, compress, quote, spoiler).then(resolve, reject);
         else reject(new Error("Не удалось загрузить файлы. Повторите отправку."));
       });
       xhr.addEventListener("timeout", () => {
-        if (!attempt && !cancelled) upload(files, text, mode, replyTo, onProgress, clientId, silent, 1, compress, quote).then(resolve, reject);
+        if (!attempt && !cancelled) upload(files, text, mode, replyTo, onProgress, clientId, silent, 1, compress, quote, spoiler).then(resolve, reject);
         else reject(new Error("Сервер не ответил вовремя. Можно повторить загрузку."));
       });
       xhr.addEventListener("abort", () => reject(new Error("Загрузка отменена. Сервер мог уже принять файл.")));
@@ -412,14 +418,16 @@
     const quote = replyTo ? window.SovietgramChat?.currentQuote?.() || "" : "";
     const silent = Boolean(silentToggle?.checked);
     const compress = selectedMode === "media" && Boolean(compressToggle?.checked);
+    const spoiler = selectedMode === "media" && Boolean(spoilerToggle?.checked);
     const separate = selectedMode === "media" && files.length > 1 && groupToggle && !groupToggle.checked;
     const signature = [files.map(window.SovietgramSendRetry.fileIdentity), caption, selectedMode, replyTo, silent, compress, Boolean(separate)];
     if (quote) signature.push(quote);
+    if (spoiler) signature.push("spoiler");
     const batches = separate ? files.map((file, index) => ({
       files: [file], caption: index === files.length - 1 ? caption : "", reply: index === 0 ? replyTo : "",
       quote: index === 0 ? quote : "", id: sendKeys.key(index, signature),
     })) : [{files, caption, reply:replyTo, quote, id:sendKeys.key("album", signature)}];
-    return {batches, mode:selectedMode, silent, compress, completed:0,
+    return {batches, mode:selectedMode, silent, compress, spoiler, completed:0,
             originalDraft:messageInput?.value || "", originalReply:replyTo, originalQuote:quote};
   }
 
@@ -441,7 +449,7 @@
         const payload = await upload(
           batch.files, batch.caption, plan.mode, batch.reply,
           (loaded, total) => setProgress(true, (sentBytes + bytes(batch) * (total ? loaded / total : 0)) / totalBytes * 100),
-          batch.id, plan.silent, 0, plan.compress, batch.quote,
+          batch.id, plan.silent, 0, plan.compress, batch.quote, plan.spoiler,
         );
         plan.completed++;
         sentBytes += bytes(batch);

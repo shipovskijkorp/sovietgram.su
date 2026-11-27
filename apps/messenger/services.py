@@ -221,6 +221,7 @@ def clone_attachments(source_message, target_message):
                 size=attachment.size,
                 duration_ms=attachment.duration_ms,
                 waveform=list(attachment.waveform or []),
+                is_spoiler=attachment.is_spoiler,
             )
             clone.file.save(
                 Path(attachment.original_name).name or "file",
@@ -283,6 +284,7 @@ def shared_attachment_payload(attachment, chat):
     return {
         "id": attachment.pk,
         "kind": attachment.kind,
+        "is_spoiler": attachment.is_spoiler,
         "name": attachment.original_name,
         "size": attachment.size,
         "url": attachment_url(attachment),
@@ -523,6 +525,7 @@ def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=No
             {
                 "id": attachment.pk,
                 "kind": attachment.kind,
+                "is_spoiler": attachment.is_spoiler,
                 "name": attachment.original_name,
                 "url": attachment_url(attachment),
                 "size": attachment.size,

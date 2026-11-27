@@ -177,6 +177,7 @@
         label.textContent = item.name;
         link.append(mark, label);
       }
+      if (item.is_spoiler) window.SovietgramMediaSpoilers?.mark(link, item.id);
       mediaGrid.appendChild(link);
     });
 

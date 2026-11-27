@@ -158,6 +158,7 @@ class MessageForm(forms.Form):
     text = forms.CharField(required=False, max_length=4096, strip=False)
     silent = forms.BooleanField(required=False)
     compress_images = forms.BooleanField(required=False)
+    media_spoiler = forms.BooleanField(required=False)
     sticker_id = forms.IntegerField(required=False, min_value=1, max_value=9223372036854775807)
     reply_to = forms.IntegerField(required=False, min_value=1, max_value=9223372036854775807)
     reply_quote = forms.CharField(required=False, max_length=1024, strip=False)
@@ -291,6 +292,9 @@ class MessageForm(forms.Form):
         cleaned = super().clean()
         mode = cleaned.get("attachment_mode") or self.MODE_MEDIA
         attachments = cleaned.get("attachments") or []
+
+        if cleaned.get("media_spoiler") and (mode != self.MODE_MEDIA or not attachments or cleaned.get("sticker_id")):
+            raise forms.ValidationError("Спойлер доступен только для фотографий и видео.")
 
         if cleaned.get("sticker_id"):
             if mode != self.MODE_MEDIA or attachments or cleaned.get("text"):

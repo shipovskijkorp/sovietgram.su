@@ -351,6 +351,7 @@ function makeMedia(attachment, isOwn = false) {
     image.loading = "lazy";
     image.addEventListener("load", () => scrollToBottom());
     link.appendChild(image);
+    if (attachment.is_spoiler) window.SovietgramMediaSpoilers?.mark(link, attachment.id);
     return link;
   }
 
@@ -372,6 +373,7 @@ function makeMedia(attachment, isOwn = false) {
     expand.title = "Открыть видео";
     expand.textContent = "⤢";
     wrap.append(video, expand);
+    if (attachment.is_spoiler) window.SovietgramMediaSpoilers?.mark(wrap, attachment.id);
     return wrap;
   }
 

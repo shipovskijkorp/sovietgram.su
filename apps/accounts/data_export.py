@@ -263,7 +263,7 @@ def build_export(user, include_files=False):
 
             def attachment_rows():
                 for row in rows(attachments, "id", "message_id", "kind", "original_name", "mime_type",
-                                "size", "duration_ms", "created_at"):
+                                "size", "duration_ms", "is_spoiler", "created_at"):
                     path = f"media/attachment-{row['id']}.bin"
                     row["archive_path"] = path if include_files and path in bundle.NameToInfo else None
                     yield row
