@@ -2,7 +2,8 @@ from io import BytesIO
 from tempfile import TemporaryDirectory
 from uuid import uuid4
 
-from django.core.cache import cache
+from django.core.cache import cache, caches
+from unittest.mock import patch
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, SimpleTestCase, override_settings
 from django.urls import reverse
@@ -115,6 +116,27 @@ class ThumbnailTests(TestCase):
             original_name=original.name, mime_type="image/png", size=original.size,
         )
         self.url = reverse("messenger:thumbnail_attachment", args=[self.attachment.pk])
+
+    def test_cache_reuses_bytes_but_rechecks_access_and_source(self):
+        thumbnail_cache = caches["thumbnails"]
+        thumbnail_cache.clear()
+        self.addCleanup(thumbnail_cache.clear)
+        with patch("apps.messenger.media_processing.make_thumbnail", wraps=make_thumbnail) as transform:
+            first = self.client.get(self.url)
+            second = self.client.get(self.url)
+            self.assertEqual(first.status_code, 200)
+            self.assertEqual(second.content, first.content)
+            self.assertEqual(transform.call_count, 1)
+            self.client.force_login(self.other)
+            self.assertEqual(self.client.get(self.url).status_code, 404)
+            self.assertEqual(transform.call_count, 1)
+            self.client.force_login(self.alice)
+            thumbnail_cache.clear()
+            self.assertEqual(self.client.get(self.url).status_code, 200)
+            self.assertEqual(transform.call_count, 2)
+            self.attachment.file.storage.delete(self.attachment.file.name)
+            self.assertEqual(self.client.get(self.url).status_code, 404)
+            self.assertEqual(transform.call_count, 2)
 
     def test_thumbnail_is_small_and_original_is_unchanged(self):
         response = self.client.get(self.url)

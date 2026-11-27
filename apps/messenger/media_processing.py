@@ -3,6 +3,7 @@ from io import BytesIO
 from pathlib import Path
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.cache import caches
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from .forms import MAX_IMAGE_DIMENSION, MAX_IMAGE_PIXELS
@@ -66,6 +67,28 @@ def compress_image_upload(uploaded):
 
 THUMBNAIL_EDGE = 384
 THUMBNAIL_VERSION = "v1"
+THUMBNAIL_CACHE_BYTES = 256 * 1024
+THUMBNAIL_CACHE_SECONDS = 900
+
+
+def cached_thumbnail(attachment, version):
+    """Call only after access and source existence checks.
+
+    Attachments use immutable storage names. The supplied version includes
+    the attachment identity, stored filename, size and transformation version.
+    A cache entry is never an authorization decision.
+    """
+    cache = caches["thumbnails"]
+    key = "thumb:" + version
+    content = cache.get(key)
+    if isinstance(content, bytes):
+        return content
+    with attachment.file.open("rb") as source:
+        content = make_thumbnail(source)
+    if len(content) <= THUMBNAIL_CACHE_BYTES:
+        cache.set(key, content, timeout=THUMBNAIL_CACHE_SECONDS)
+    return content
+
 
 
 def make_thumbnail(source):

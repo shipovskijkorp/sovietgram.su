@@ -67,7 +67,7 @@ from apps.accounts.privacy import (
 )
 
 from .forms import CommunityForm, EditMessageForm, MessageForm
-from .media_processing import THUMBNAIL_VERSION, compress_image_upload, make_thumbnail
+from .media_processing import THUMBNAIL_VERSION, compress_image_upload, cached_thumbnail
 from PIL import Image
 from .community_permissions import (
     MEDIA_KINDS, MEDIA_LABELS, group_media_kinds, permission_media_kind,
@@ -4079,8 +4079,7 @@ def thumbnail_attachment(request, attachment_id):
         response = HttpResponseNotModified()
     else:
         try:
-            with attachment.file.open("rb") as source:
-                content = make_thumbnail(source)
+            content = cached_thumbnail(attachment, version)
         except (OSError, ValueError, EOFError, SyntaxError, Image.DecompressionBombError):
             raise Http404("Миниатюра недоступна.") from None
         response = HttpResponse(content, content_type="image/webp")

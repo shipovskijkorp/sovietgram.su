@@ -38,6 +38,14 @@ CACHES = {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         "LOCATION": "sovietgram-local",
     },
+    # Isolate private derived images from shared throttling/session data.
+    # Bounded per worker even when the default cache is Redis.
+    "thumbnails": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "sovietgram-private-thumbnails",
+        "TIMEOUT": 900,
+        "OPTIONS": {"MAX_ENTRIES": 128, "CULL_FREQUENCY": 4},
+    },
 }
 
 # Enable only after the maintenance timer is installed and verified.
