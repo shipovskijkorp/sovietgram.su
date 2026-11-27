@@ -280,6 +280,19 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.click("#messageReactorsClose")
         self.hidden("#messageReactorsDialog")
 
+    def test_multiple_reactions_in_message_picker(self):
+        self.go(self.direct)
+        selector = '.message[data-message-id="' + str(self.direct_message.pk) + '"]'
+        for emoji in ("👍", "🔥", "❤️"):
+            self.page.locator(selector).click(button="right")
+            self.click('#messageReactionPicker [data-pick-reaction="' + emoji + '"]')
+            self.expect(self.page.locator(selector + ' [data-message-reaction="' + emoji + '"]')).to_have_attribute("aria-pressed", "true")
+        self.expect(self.page.locator(selector + ' [data-message-reaction][aria-pressed="true"]')).to_have_count(3)
+        self.click(selector + ' [data-message-reaction="🔥"]')
+        self.expect(self.page.locator(selector + ' [data-message-reaction][aria-pressed="true"]')).to_have_count(2)
+        self.page.reload(wait_until="domcontentloaded")
+        self.expect(self.page.locator(selector + ' [data-message-reaction][aria-pressed="true"]')).to_have_count(2)
+
     def test_group_message_readers_dialog(self):
         ChatParticipant.objects.filter(chat=self.group, user=self.peer).update(read_through_id=self.message.pk)
         self.go(self.group)

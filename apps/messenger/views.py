@@ -3063,8 +3063,14 @@ def message_reaction(request, chat_id, message_id):
         return JsonResponse({"ok": False, "error": "Аккаунт изменился."}, status=409)
     chat = _chat_for_user(request.user, chat_id)
     emoji = request.POST.get("emoji")
-    if emoji is None or (emoji and emoji not in MessageReaction.Emoji.values):
-        return JsonResponse({"ok": False, "error": "Неизвестная реакция."}, status=400)
+    action = request.POST.get("action", "replace")
+    # Older clients use replace/clear. New clients send explicit, idempotent
+    # add/remove operations rather than a toggle that would invert on retry.
+    if (action not in {"replace", "add", "remove"} or emoji is None
+            or (emoji and emoji not in MessageReaction.Emoji.values)
+            or (action != "replace" and not emoji)):
+        return JsonResponse({"ok": False, "error": "Неизвестная реакция или действие."}, status=400)
+    adding = bool(emoji) and action != "remove"
     with transaction.atomic():
         # Serialize permission changes with reaction writes, using the same
         # lock order as community moderation (chat, membership, message).
@@ -3074,9 +3080,9 @@ def message_reaction(request, chat_id, message_id):
         ).first()
         if membership is None:
             raise Http404
-        if emoji and emoji not in member_reaction_emojis(chat, membership):
+        if adding and emoji not in member_reaction_emojis(chat, membership):
             return JsonResponse({"ok": False, "error": "Эта реакция недоступна в сообществе."}, status=403)
-        if emoji and chat.type == Chat.Type.PRIVATE and not _posting_capabilities(
+        if adding and chat.type == Chat.Type.PRIVATE and not _posting_capabilities(
             chat, membership, request.user,
         )["text"]:
             return JsonResponse({"ok": False, "error": "Нельзя реагировать в этой переписке."}, status=403)
@@ -3088,19 +3094,28 @@ def message_reaction(request, chat_id, message_id):
         message = get_object_or_404(
             Message.objects.select_for_update(), pk=message_id, chat=chat, is_deleted=False,
         )
-        previous = MessageReaction.objects.filter(message=message, user=request.user).first()
+        own = MessageReaction.objects.filter(message=message, user=request.user)
+        selected = set(own.values_list("emoji", flat=True))
         changed = False
-        if not emoji:
-            if previous:
-                previous.delete()
+        if action == "remove":
+            if emoji in selected:
+                own.filter(emoji=emoji).delete()
                 changed = True
-        elif previous is None:
-            MessageReaction.objects.create(message=message, user=request.user, emoji=emoji)
-            changed = True
-        elif previous.emoji != emoji:
-            previous.emoji = emoji
-            previous.save(update_fields=["emoji"])
-            changed = True
+        elif action == "add":
+            if emoji not in selected:
+                if len(selected) >= MessageReaction.MAX_PER_USER:
+                    return JsonResponse({
+                        "ok": False, "error": "Можно поставить не больше трёх реакций. Снимите одну из выбранных.",
+                    }, status=409)
+                MessageReaction.objects.create(message=message, user=request.user, emoji=emoji)
+                changed = True
+        else:
+            desired = {emoji} if emoji else set()
+            if selected != desired:
+                own.exclude(emoji__in=desired).delete()
+                if emoji and emoji not in selected:
+                    MessageReaction.objects.create(message=message, user=request.user, emoji=emoji)
+                changed = True
         if changed:
             message.reaction_version += 1
             message.reaction_changed_at = timezone.now()

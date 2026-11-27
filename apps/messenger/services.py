@@ -460,13 +460,13 @@ def serialize_reactions(message, current_user):
     if message.is_deleted:
         return []
     counts = {}
-    selected = None
+    selected = set()
     for reaction in message.reactions.all():
         counts[reaction.emoji] = counts.get(reaction.emoji, 0) + 1
         if reaction.user_id == current_user.pk:
-            selected = reaction.emoji
+            selected.add(reaction.emoji)
     return [
-        {"emoji": emoji, "count": counts[emoji], "selected": emoji == selected}
+        {"emoji": emoji, "count": counts[emoji], "selected": emoji in selected}
         for emoji in MessageReaction.Emoji.values if emoji in counts
     ]
 

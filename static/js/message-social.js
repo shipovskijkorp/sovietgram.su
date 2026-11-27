@@ -106,8 +106,9 @@
     article.dataset.reactionVersion = String(version);
   }
 
-  function selectedReaction(article) {
-    return article.querySelector('[data-message-reaction][aria-pressed="true"]')?.dataset.messageReaction || "";
+  function selectedReactions(article) {
+    return new Set(Array.from(article.querySelectorAll('[data-message-reaction][aria-pressed="true"]'),
+      button => button.dataset.messageReaction));
   }
 
   function allowedReactions() {
@@ -128,14 +129,14 @@
   function preparePicker(article) {
     const picker = document.getElementById("messageReactionPicker");
     if (!picker) return;
-    const selected = selectedReaction(article);
+    const selected = selectedReactions(article);
     const allowed = allowedReactions();
     let visible = 0;
     picker.querySelectorAll("[data-pick-reaction]").forEach(button => {
       const emoji = button.dataset.pickReaction;
       // Keep an existing selected reaction removable even if it is now forbidden.
-      button.hidden = emoji !== selected && allowed !== null && !allowed.has(emoji);
-      button.setAttribute("aria-pressed", String(emoji === selected));
+      button.hidden = !selected.has(emoji) && allowed !== null && !allowed.has(emoji);
+      button.setAttribute("aria-pressed", String(selected.has(emoji)));
       if (!button.hidden) visible++;
     });
     picker.hidden = !article.dataset.reactionUrl || !visible;
@@ -144,16 +145,22 @@
   const pending = new WeakSet();
   async function toggleReaction(article, emoji) {
     if (!article?.dataset.reactionUrl || pending.has(article)) return;
-    const desired = selectedReaction(article) === emoji ? "" : emoji;
+    const selected = selectedReactions(article);
+    const removing = selected.has(emoji);
     const allowed = allowedReactions();
-    if (desired && allowed !== null && !allowed.has(desired)) {
+    if (!removing && allowed !== null && !allowed.has(emoji)) {
       window.showToast?.("Эта реакция недоступна в переписке.");
+      return;
+    }
+    if (!removing && selected.size >= 3) {
+      window.showToast?.("Можно поставить не больше трёх реакций. Снимите одну из выбранных.");
       return;
     }
     pending.add(article);
     try {
       const body = new FormData();
-      body.append("emoji", desired);
+      body.append("emoji", emoji);
+      body.append("action", removing ? "remove" : "add");
       if (document.body.dataset.accountId) body.append("account_id", document.body.dataset.accountId);
       const csrf = document.querySelector("[name='csrfmiddlewaretoken']")?.value || "";
       body.append("csrfmiddlewaretoken", csrf);

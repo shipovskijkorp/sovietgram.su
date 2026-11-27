@@ -141,7 +141,7 @@
         row.append(name, username);
         reactorsList.append(row);
       }
-      reactorsStatus.textContent = data.anonymous ? "Реакции в каналах анонимны." : "Участники: " + data.visible_total;
+      reactorsStatus.textContent = data.anonymous ? "Реакции в каналах анонимны." : "Реакции участников: " + data.visible_total;
       reactorsAfter = data.next_after || 0;
       reactorsMore.textContent = "Показать ещё";
       reactorsMore.hidden = !reactorsAfter;

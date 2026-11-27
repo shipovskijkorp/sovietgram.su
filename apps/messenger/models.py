@@ -455,7 +455,9 @@ class MessageSendReceipt(models.Model):
 
 
 class MessageReaction(models.Model):
-    """One emoji reaction per user and message."""
+    """Distinct emoji reactions; posting is capped per user and message."""
+
+    MAX_PER_USER = 3
 
     class Emoji(models.TextChoices):
         THUMBS_UP = "👍", "Нравится"
@@ -494,7 +496,7 @@ class MessageReaction(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=("message", "user"), name="unique_message_reaction_user"),
+            models.UniqueConstraint(fields=("message", "user", "emoji"), name="sg_unique_message_user_emoji"),
         ]
 
 

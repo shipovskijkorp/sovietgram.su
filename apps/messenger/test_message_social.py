@@ -45,6 +45,28 @@ class MessageSocialTests(TestCase):
         self.assertEqual(self.react("invalid").status_code, 400)
         self.assertEqual(self.client.post(self.url).status_code, 400)
 
+    def test_multiple_reactions_are_independent_and_capped(self):
+        def change(emoji, action="add"):
+            return self.client.post(self.url, {"emoji": emoji, "action": action})
+        first = change("👍").json()
+        self.assertEqual(change("👍").json(), first)
+        self.assertEqual(change("🔥").status_code, 200)
+        third = change("❤️").json()
+        self.assertEqual(third["reaction_version"], 3)
+        self.assertEqual({r["emoji"] for r in third["reactions"] if r["selected"]}, {"👍", "🔥", "❤️"})
+        self.assertEqual(change("😂").status_code, 409)
+        self.assertEqual(change("❤️").json(), third)
+        removed = change("🔥", "remove").json()
+        self.assertEqual(removed["reaction_version"], 4)
+        self.assertEqual(change("🔥", "remove").json(), removed)
+        self.assertEqual(change("😂").status_code, 200)
+        self.assertEqual(MessageReaction.objects.filter(message=self.message, user=self.alice).count(), 3)
+        UserBlock.objects.create(blocker=self.bob, blocked=self.alice)
+        self.assertEqual(change("❤️", "remove").status_code, 200)
+        self.assertEqual(change("🔥").status_code, 403)
+        self.assertEqual(change("", "remove").status_code, 400)
+        self.assertEqual(change("👍", "toggle").status_code, 400)
+
     def test_extended_reaction_catalog(self):
         self.assertEqual(len(MessageReaction.Emoji.values), 24)
         for emoji in ("🎉", "👏", "🫡", "💯", "🚀"):
