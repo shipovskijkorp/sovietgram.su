@@ -10,6 +10,7 @@ from django.db import transaction
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods
 from PIL import Image, ImageOps, UnidentifiedImageError
 
@@ -127,6 +128,7 @@ def pack_payload(pack):
             "share_url": reverse("messenger:shared_sticker_pack", args=[pack.share_token]) if pack.share_token else "",
             "source_url": reverse("messenger:shared_sticker_pack", args=[pack.source_share_token]) if pack.source_share_token else "",
             "installed_copy": pack.source_pack_id is not None,
+            "catalog_published": pack.catalog_published_at is not None,
             "stickers": [
         sticker_payload(item) for item in pack.stickers.defer("image").all()
     ]}
@@ -153,7 +155,7 @@ def sticker_packs(request):
     if request.POST.get("account_id") != str(request.user.pk):
         return error("Аккаунт изменился. Обновите страницу.", 409)
     action = request.POST.get("action", "")
-    if action not in {"create", "rename", "delete", "add", "remove", "save_message", "favorite", "forget_recent", "clear_recent", "share", "unshare"}:
+    if action not in {"create", "rename", "delete", "add", "remove", "save_message", "favorite", "forget_recent", "clear_recent", "share", "unshare", "publish", "unpublish"}:
         return error("Неизвестное действие.")
     image = None
     emoji = request.POST.get("emoji", "").strip()
@@ -236,10 +238,25 @@ def sticker_packs(request):
             if pack.share_token is None:
                 pack.share_token = uuid4()
                 pack.save(update_fields=["share_token"])
+        elif action == "publish":
+            if pack.source_pack_id is not None:
+                return error("В каталог можно публиковать только собственные наборы.")
+            if not pack.stickers.exists():
+                return error("Добавьте хотя бы один стикер перед публикацией.")
+            if pack.share_token is None:
+                pack.share_token = uuid4()
+            if pack.catalog_published_at is None:
+                pack.catalog_published_at = timezone.now()
+            pack.save(update_fields=["share_token", "catalog_published_at"])
+        elif action == "unpublish":
+            if pack.catalog_published_at is not None:
+                pack.catalog_published_at = None
+                pack.save(update_fields=["catalog_published_at"])
         elif action == "unshare":
-            if pack.share_token is not None:
+            if pack.share_token is not None or pack.catalog_published_at is not None:
                 pack.share_token = None
-                pack.save(update_fields=["share_token"])
+                pack.catalog_published_at = None
+                pack.save(update_fields=["share_token", "catalog_published_at"])
         elif action == "delete":
             pack.delete()
             return JsonResponse({"ok": True})
@@ -255,6 +272,9 @@ def sticker_packs(request):
             except (ValueError, TypeError, OverflowError):
                 return error("Некорректный стикер.")
             get_object_or_404(pack.stickers, pk=sticker_id).delete()
+            if pack.catalog_published_at is not None and not pack.stickers.exists():
+                pack.catalog_published_at = None
+                pack.save(update_fields=["catalog_published_at"])
         return JsonResponse({"ok": True, "pack": pack_payload(pack)})
 
 

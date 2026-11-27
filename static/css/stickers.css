@@ -116,3 +116,19 @@
   .sticker-dialog, .sticker-dialog.is-picker { max-height:var(--sg-mobile-height,100dvh); }
   .sticker-dialog .sticker-tile:active { background:var(--sticker-selected); }
 }
+
+/* Account-private suggestions are part of the composer, not a blocking modal. */
+.sticker-suggestions { grid-column:1/-1; width:100%; min-width:0; display:flex; gap:5px; padding:4px 8px; overflow-x:auto; }
+.sticker-suggestions[hidden] { display:none !important; }
+.sticker-suggestions .sticker-suggestion { width:58px; height:58px; flex:0 0 58px; border:0; border-radius:9px; background:transparent; color:var(--ink); cursor:pointer; padding:3px; }
+.sticker-suggestion img { width:100%; height:100%; object-fit:contain; }
+.sticker-suggestion:hover,.sticker-suggestion:focus-visible { background:color-mix(in srgb,var(--ink) 9%,transparent); }
+.sticker-catalog-list { display:grid; gap:6px; margin:16px 0; }
+.sticker-catalog-entry { display:flex; align-items:center; gap:12px; padding:10px; border:1px solid var(--line); border-radius:10px; text-decoration:none; color:var(--ink); }
+.sticker-catalog-entry:hover { background:color-mix(in srgb,var(--ink) 6%,transparent); }
+.sticker-catalog-entry img { width:64px; height:64px; object-fit:contain; flex:0 0 64px; }
+.sticker-catalog-entry > span:nth-child(2) { flex:1; min-width:0; overflow-wrap:anywhere; }
+.sticker-catalog-entry strong,.sticker-catalog-entry small { display:block; }
+.sticker-catalog-entry small { color:var(--muted); margin-top:4px; font-size:12px; }
+.sticker-catalog-pagination { display:flex; justify-content:center; gap:14px; align-items:center; }
+.sticker-catalog-page select { font:inherit; border:1px solid var(--line); border-radius:8px; background:var(--panel-strong); color:var(--ink); padding:9px; }

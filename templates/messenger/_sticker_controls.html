@@ -28,6 +28,7 @@
       <button type="button" id="stickerRename">Переименовать</button>
       <button type="button" id="stickerShare">Поделиться набором</button>
       <button type="button" id="stickerUnshare" hidden>Отозвать ссылку</button>
+      <button type="button" id="stickerCatalogPublish" hidden>Опубликовать в каталоге</button>
           <button type="button" id="stickerSourceUpdate" hidden>Обновить из исходного набора</button>
       <button type="button" id="stickerEditMode" aria-pressed="false">Удалить стикеры</button>
       <button type="button" id="stickerDeletePack" class="sticker-danger">Удалить набор</button>
@@ -48,6 +49,7 @@
     </form>
   </div>
   <div id="stickerManagerActions" class="sticker-manager-actions" hidden>
+    <button type="button" id="stickerCatalogOpen" class="sticker-list-action" data-url="{% url 'messenger:sticker_catalog' %}"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>Каталог стикеров</button>
     <button type="button" id="stickerCreatePack" class="sticker-list-action"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Создать набор</button>
     <button type="button" id="stickerInstallLink" class="sticker-list-action"><svg viewBox="0 0 24 24"><path d="M10 13a4 4 0 0 0 6 0l4-4a4 4 0 0 0-6-6l-2 2m2 6a4 4 0 0 0-6 0l-4 4a4 4 0 0 0 6 6l2-2"/></svg>Установить по ссылке</button>
   </div>

@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Каталог стикеров — Sovietgram{% endblock %}
+{% block body_class %}auth-body{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/stickers.css' %}?v={{ static_version }}">{% endblock %}
+{% block content %}
+<main class="auth-shell">
+  <section class="auth-card auth-card--wide sticker-catalog-page">
+    <a class="auth-brand" href="{% url 'messenger:home' %}"><span class="brand__mark">★</span><span>SOVIETGRAM</span></a>
+    <div class="auth-heading"><p class="eyebrow">Стикеры</p><h1>Каталог наборов</h1><p>Наборы, добровольно опубликованные их владельцами.</p></div>
+    <form method="get" class="auth-form">
+      <label for="catalogQuery">Поиск по названию</label>
+      <input id="catalogQuery" name="q" value="{{ query }}" maxlength="80" placeholder="Название набора" type="search">
+      <label for="catalogSort">Сортировка</label>
+      <select id="catalogSort" name="sort">
+        <option value="popular"{% if sort == 'popular' %} selected{% endif %}>Популярные</option>
+        <option value="new"{% if sort == 'new' %} selected{% endif %}>Новые</option>
+      </select>
+      <button class="primary-button" type="submit">Найти</button>
+    </form>
+    <div class="sticker-catalog-list">
+      {% for pack in page %}
+      <a class="sticker-catalog-entry" href="{% url 'messenger:shared_sticker_pack' pack.share_token %}">
+        <img src="{% url 'messenger:shared_sticker_image' pack.share_token pack.cover_id %}" alt="" loading="lazy">
+        <span><strong>{{ pack.name }}</strong><small>Стикеров: {{ pack.sticker_count }} · Установок: {{ pack.install_count }}</small></span>
+        <span aria-hidden="true">›</span>
+      </a>
+      {% empty %}<p class="micro-copy">Наборы не найдены.</p>{% endfor %}
+    </div>
+    {% if page.paginator.num_pages > 1 %}
+    <nav class="sticker-catalog-pagination" aria-label="Страницы каталога">
+      {% if page.has_previous %}<a href="?q={{ query|urlencode }}&amp;sort={{ sort }}&amp;page={{ page.previous_page_number }}">Назад</a>{% endif %}
+      <span>{{ page.number }} / {{ page.paginator.num_pages }}</span>
+      {% if page.has_next %}<a href="?q={{ query|urlencode }}&amp;sort={{ sort }}&amp;page={{ page.next_page_number }}">Далее</a>{% endif %}
+    </nav>
+    {% endif %}
+    <p class="auth-switch"><a href="{% url 'messenger:home' %}?manage_stickers=1">Мои наборы</a> · <a href="{% url 'messenger:home' %}">В мессенджер</a></p>
+  </section>
+</main>
+{% endblock %}

@@ -660,6 +660,7 @@
           <span class="composer-reply__copy"><strong id="composerReplyName">{% if composer_draft_reply.quote %}Цитата · {% endif %}{{ composer_draft_reply.name|default:"Ответ" }}</strong><small id="composerReplyPreview">{{ composer_draft_reply.preview }}</small></span>
           <button id="composerReplyClose" type="button" aria-label="Отменить ответ"><span class="tg-native-icon tg-native-icon--close tg-native-icon--compact" aria-hidden="true"></span></button>
         </div>
+        {% if can_send_text and can_send_sticker %}<section id="stickerSuggestions" class="sticker-suggestions" data-url="{% url 'messenger:sticker_suggestions' %}" aria-label="Подходящие стикеры" hidden></section>{% endif %}
         <input id="replyToInput" type="hidden" name="reply_to" value="{{ composer_draft_reply.id|default:'' }}">
         <input id="replyQuoteInput" type="hidden" name="reply_quote" value="{{ composer_draft_reply.quote|default:'' }}">
         <div class="voice-retry-row" id="voiceRetryRow" hidden>

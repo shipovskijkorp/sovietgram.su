@@ -312,6 +312,13 @@
     $("stickerShare").textContent=shared?"Открыть ссылку":"Поделиться набором";
     $("stickerShare").disabled=busy||!current||(!shared&&!current.stickers.length);
     $("stickerUnshare").hidden=!shared;
+    const publish=$("stickerCatalogPublish");
+    if(publish){
+      publish.hidden=!detail||!current||Boolean(current.installed_copy);
+      publish.disabled=busy||!current||( !current.catalog_published&&!current.stickers.length);
+      publish.textContent=current?.catalog_published?"Убрать из каталога":"Опубликовать в каталоге";
+    }
+    $("stickerCatalogOpen").hidden=!library;
     const sourceUpdate=$("stickerSourceUpdate");
     if(sourceUpdate){
       sourceUpdate.hidden=!detail||!current?.installed_copy;
@@ -417,12 +424,77 @@
     finally{setBusy(false);}
     if(message){pickerSelection=selected;dialog.close();showSentSticker(message,sentReply,quote);}
   }
+  // A single emoji draft can suggest stickers; never send without a click.
+  const suggestionBar=$("stickerSuggestions"),editor=$("messageInput");
+  let suggestionTimer=null,suggestionAbort=null,suggestionVersion=0;
+  function emojiDraft(value){
+    const text=String(value||"").trim();
+    if(!text||[...text].length>24)return "";
+    // Support emoji sequences, flags, modifiers and keycaps, not normal text.
+    if(!/^(?:\p{Regional_Indicator}{2}|[0-9#*]\uFE0F?\u20E3|\p{Extended_Pictographic}\uFE0F?\p{Emoji_Modifier}?(?:\u200D\p{Extended_Pictographic}\uFE0F?\p{Emoji_Modifier}?)*)(?:\uFE0E)?$/u.test(text))return "";
+    return text;
+  }
+  function hideSuggestions(){
+    suggestionBar?.replaceChildren();
+    if(suggestionBar)suggestionBar.hidden=true;
+  }
+  function refreshSuggestions(){
+    if(!suggestionBar||!editor)return;
+    clearTimeout(suggestionTimer);suggestionAbort?.abort();hideSuggestions();
+    const version=++suggestionVersion,query=emojiDraft(editor.value);
+    if(!query||editor.readOnly||editor.disabled||busy||dialog.open)return;
+    suggestionTimer=setTimeout(async()=>{
+      const controller=new AbortController();suggestionAbort=controller;
+      try{
+        const url=new URL(suggestionBar.dataset.url,window.location.origin);
+        url.searchParams.set("emoji",query);
+        url.searchParams.set("account_id",dialog.dataset.accountId);
+        const response=await fetch(url,{credentials:"same-origin",cache:"no-store",signal:controller.signal});
+        const data=await response.json();
+        if(!response.ok||!data.ok||String(data.account_id)!==dialog.dataset.accountId||
+           version!==suggestionVersion||emojiDraft(editor.value)!==query||busy||dialog.open)return;
+        for(const item of (data.items||[]).slice(0,8)){
+          const tile=button("",()=>void sendSuggested(item,query));
+          tile.className="sticker-suggestion";
+          tile.title="Отправить стикер "+(item.emoji||query);
+          tile.setAttribute("aria-label",tile.title);
+          tile.append(image(item,item.emoji||query));suggestionBar.append(tile);
+        }
+        suggestionBar.hidden=!suggestionBar.childElementCount;
+      }catch(_){if(version===suggestionVersion)hideSuggestions();}
+    },250);
+  }
+  async function sendSuggested(item,query){
+    if(busy||dialog.open||!editor||editor.readOnly||emojiDraft(editor.value)!==query)return;
+    const original=editor.value,reply=$("replyToInput")?.value||"";
+    const quote=reply?window.SovietgramChat?.currentQuote?.()||"":"";
+    hideSuggestions();setBusy(true);
+    let message;
+    try{message=await currentSender()(item.id,reply,false,quote);}
+    catch(e){window.showToast?.(e.message||"Не удалось отправить стикер.");}
+    finally{setBusy(false);}
+    if(message){
+      // Only consume the emoji draft when the same draft/reply is still present.
+      if(editor.value===original&&($("replyToInput")?.value||"")===reply&&
+         (window.SovietgramChat?.currentQuote?.()||"")===quote){
+        editor.value="";editor.dispatchEvent(new Event("input",{bubbles:true}));
+      }
+      showSentSticker(message,reply,quote);
+    }
+    refreshSuggestions();
+  }
+  if(suggestionBar&&editor){
+    editor.addEventListener("input",refreshSuggestions);
+    dialog.addEventListener("close",refreshSuggestions);
+    refreshSuggestions();
+  }
   function incomingAllowed(){
     const conversation=document.querySelector(".conversation--chat");
     return Boolean(conversation&&conversation.dataset.chatProtected!=="true"&&!conversation.classList.contains("is-message-selection"));
   }
   async function open(nextMode,id=null,source=null,trigger=null){
     if(busy)return;
+    ++suggestionVersion;clearTimeout(suggestionTimer);suggestionAbort?.abort();hideSuggestions();
     mode=nextMode;attachmentId=id;anchor=trigger;
     if(mode==="save"&&!incomingAllowed())return;
     screen=mode==="send"?"picker":mode==="save"?"save":"library";
@@ -553,9 +625,21 @@
       $("stickerInstallLink").click();
     }
   });
+  $("stickerCatalogOpen")?.addEventListener("click",()=>{
+    if(!busy)window.open($("stickerCatalogOpen").dataset.url,"_blank","noopener,noreferrer");
+  });
+  $("stickerCatalogPublish")?.addEventListener("click",()=>{
+    const current=pack();if(!current||busy||current.installed_copy)return;
+    if(current.catalog_published)
+      confirmAction("Убрать набор из каталога?","Он исчезнет из каталога, но действующая ссылка и установленные копии сохранятся.","Убрать",
+        ()=>mutate("unpublish",{pack_id:current.id},"pack"));
+    else
+      confirmAction("Опубликовать набор?","Название и стикеры станут доступны всем авторизованным пользователям в каталоге.","Опубликовать",
+        ()=>mutate("publish",{pack_id:current.id},"pack"));
+  });
   $("stickerUnshare").addEventListener("click",()=>{
     const current=pack();if(!current?.share_url||busy)return;
-    confirmAction("Отозвать ссылку?","Старую ссылку больше нельзя будет использовать. Установленные копии сохранятся.","Отозвать",
+    confirmAction("Отозвать ссылку?","Старую ссылку больше нельзя будет использовать, набор исчезнет из каталога. Установленные копии сохранятся.","Отозвать",
       ()=>mutate("unshare",{pack_id:current.id},"pack"));
   });
   $("stickerCopyLink").addEventListener("click",async ()=>{
