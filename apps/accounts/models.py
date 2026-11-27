@@ -35,6 +35,7 @@ class User(AbstractUser):
     )
     enter_to_send = models.BooleanField("отправка по Enter", default=True)
     media_preload = models.BooleanField("предзагрузка аудио и видео", default=True)
+    notification_preferences = models.JSONField(default=dict, blank=True)
     keep_archived_chats = models.BooleanField(
         "всегда оставлять чаты в архиве",
         default=False,

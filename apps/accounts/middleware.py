@@ -43,7 +43,10 @@ class UserActivityMiddleware:
 
             previous = request.session.get("sovietgram_activity_touch", 0)
             # Background notification polling must not keep the user online.
-            if request.path_info != "/notifications/poll/" and now.timestamp() - previous >= 45:
+            background = request.path_info == "/notifications/poll/" or (
+                request.path_info == "/settings/notification-preferences/" and request.method == "GET"
+            )
+            if not background and now.timestamp() - previous >= 45:
                 get_user_model().objects.filter(pk=request.user.pk).update(last_seen_at=now)
                 request.user.last_seen_at = now
                 request.session["sovietgram_activity_touch"] = int(now.timestamp())

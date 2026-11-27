@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import account_security, data_export, security_events, storage_views, two_factor_views
+from . import account_security, data_export, notification_preferences, security_events, storage_views, two_factor_views
 
 from .views import (
     SovietgramLoginView,
@@ -43,6 +43,7 @@ urlpatterns = [
     path("settings/", settings_view, name="settings"),
     path("settings/export/", data_export.account_export, name="account_export"),
     path("settings/storage/", storage_views.storage_settings, name="storage"),
+    path("settings/notification-preferences/", notification_preferences.notification_preferences, name="notification_preferences"),
     path("settings/security-history/", security_events.security_history, name="security_history"),
     path("profile/avatar/remove/", remove_avatar, name="remove_avatar"),
     path(

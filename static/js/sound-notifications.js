@@ -1,4 +1,4 @@
-/* Content-free notification polling, with browser-local sound preferences. */
+/* Content-free notification polling with account preferences and device-local desktop permission. */
 (() => {
   function newIds(ids, seen) {
     const fresh = [];
@@ -29,16 +29,95 @@
   const preferenceControls = [...document.querySelectorAll("[data-notification-preference]")];
   const preferenceStatus = document.getElementById("notificationPreferencesStatus");
   const originalTitle = document.title;
-  const defaults = {message:true, mention:true, reply:true, badge:true};
-  let preferences = {...defaults};
+  const defaults = {sound:true, message:true, mention:true, reply:true, badge:true};
+  const normalize = value => Object.fromEntries(Object.keys(defaults).map(key => [key,value?.[key] !== false]));
+  let initialPreferences = {};
+  try { initialPreferences = JSON.parse(document.getElementById("notificationAccountPreferences")?.textContent || "{}") || {}; } catch (_) {}
+  let serverPreferences = normalize(initialPreferences);
+  let preferences = {...serverPreferences};
   let unreadCount = 0, desktopBusy = false;
-  function readPreferences() {
-    try {
-      const value = JSON.parse(localStorage.getItem(preferenceKey) || "{}");
-      preferences = Object.fromEntries(Object.keys(defaults).map(key => [key,value?.[key] !== false]));
-    } catch (_) { preferences = {...defaults}; }
+  const pending = new Map();
+  let saving = false, initializing = false, refreshing = false, generation = 0, saveError = "";
+  const preferencesUrl = button.dataset.preferencesUrl;
+  const accountId = button.dataset.accountId;
+  enabled = preferences.sound;
+  function applyPreferences() {
+    preferences = {...serverPreferences, ...Object.fromEntries(pending)};
+    enabled = preferences.sound;
+    sync();
   }
-  readPreferences();
+  async function requestPreferences(data = null) {
+    const url = new URL(preferencesUrl, window.location.origin);
+    const options = {credentials:"same-origin",cache:"no-store"};
+    if (data) {
+      options.method = "POST";
+      options.body = new URLSearchParams({...data, account_id: accountId});
+      const csrf = document.querySelector("#settingsAjaxForm [name='csrfmiddlewaretoken']")?.value;
+      if (!csrf) throw new Error("CSRF");
+      options.headers = {"X-CSRFToken":csrf};
+      options.keepalive = true;
+    } else url.searchParams.set("account_id",accountId);
+    const response = await fetch(url, options);
+    const result = await response.json();
+    if (!response.ok || !result.ok || String(result.account_id) !== accountId) throw new Error("Preferences");
+    return normalize(result.preferences);
+  }
+  async function refreshPreferences() {
+    if (!preferencesUrl || refreshing || saving || initializing || pending.size) return;
+    refreshing = true;
+    const version = generation;
+    try {
+      const value = await requestPreferences();
+      if (version !== generation || saving || initializing || pending.size) return;
+      serverPreferences = value; applyPreferences();
+      void poll();
+    } catch (_) {}
+    finally { refreshing = false; }
+  }
+  async function flushPreferences() {
+    if (saving || initializing || !preferencesUrl || !pending.size) return;
+    saving = true; syncPreferences();
+    try {
+      while (pending.size) {
+        const [name,value] = pending.entries().next().value;
+        try {
+          serverPreferences = await requestPreferences({key:name,value:value?"1":"0"});
+        } catch (_) {
+          saveError = "Не удалось сохранить настройки. Проверьте соединение и повторите.";
+        }
+        if (pending.get(name) === value) pending.delete(name);
+        applyPreferences();
+      }
+    } finally { saving = false; syncPreferences(); void poll(); }
+  }
+  function changePreference(name,value) {
+    if (!preferencesUrl || !Object.hasOwn(defaults,name)) return;
+    generation++; saveError = "";
+    pending.set(name,Boolean(value)); applyPreferences();
+    void flushPreferences();
+  }
+  async function importLegacyPreferences() {
+    if (!preferencesUrl || Object.keys(initialPreferences).length) return;
+    let legacy;
+    try {
+      const raw = localStorage.getItem(preferenceKey);
+      const sound = localStorage.getItem(key);
+      if (raw === null && sound === null) return;
+      legacy = normalize({...JSON.parse(raw || "{}"),sound:sound !== "false"});
+    } catch (_) { return; }
+    initializing = true; generation++;
+    serverPreferences = legacy; applyPreferences();
+    try {
+      const data = {initialize:"1"};
+      for (const name of Object.keys(defaults)) data[name] = legacy[name]?"1":"0";
+      serverPreferences = await requestPreferences(data);
+      try { localStorage.removeItem(key); localStorage.removeItem(preferenceKey); } catch (_) {}
+    } catch (_) {
+      serverPreferences = normalize(initialPreferences);
+      saveError = "Не удалось перенести прежние настройки. Обновите страницу после восстановления связи.";
+    }
+    finally { initializing = false; applyPreferences(); void flushPreferences(); }
+  }
   function updateBadge() {
     document.title = preferences.badge && unreadCount > 0 ? "(" + (unreadCount > 999 ? "999+" : unreadCount) + ") " + originalTitle : originalTitle;
   }
@@ -48,11 +127,13 @@
       control.checked = name === "sound" ? enabled : name === "desktop" ? desktopActive() : preferences[name] !== false;
       if (name === "desktop") control.disabled = !hasDesktop || desktopBusy;
     }
-    if (preferenceStatus) preferenceStatus.textContent = !hasDesktop
-      ? "Системные уведомления не поддерживаются или недоступны без HTTPS."
-      : Notification.permission === "denied"
-        ? "Системные уведомления запрещены в настройках браузера."
-        : "Настройки хранятся в этом браузере. Заглушённые чаты и тихая отправка учитываются.";
+    if (preferenceStatus) preferenceStatus.textContent = saveError || (saving || initializing
+      ? "Сохранение настроек…"
+      : !hasDesktop
+        ? "Настройки синхронизируются. Системные уведомления недоступны в этом браузере."
+        : Notification.permission === "denied"
+          ? "Настройки синхронизируются. Системные уведомления запрещены в браузере."
+          : "Настройки синхронизируются между устройствами. Разрешение системных уведомлений задаётся отдельно в каждом браузере.");
     updateBadge();
   }
   try { desktopEnabled = localStorage.getItem(desktopKey) === "true"; } catch (_) {}
@@ -145,7 +226,6 @@
     } else claim();
   }
   const seen=new Set();
-  try { enabled=localStorage.getItem(key)!=="false"; } catch(_error) {}
   function sync() {
     button.setAttribute("aria-pressed",String(enabled));
     const label=enabled?"Выключить звуковые уведомления":"Включить звуковые уведомления";
@@ -207,8 +287,7 @@
     }
   }
   function setSound(value) {
-    enabled=Boolean(value);sync();
-    try{localStorage.setItem(key,String(enabled));}catch(_error){}
+    changePreference("sound",value);
     if(enabled){void unlock();void poll();}
   }
   button.addEventListener("click",()=>setSound(!enabled));
@@ -217,21 +296,19 @@
     if(name==="sound"){setSound(control.checked);return;}
     if(name==="desktop"){void setDesktop(control.checked);return;}
     if(!Object.hasOwn(defaults,name))return;
-    preferences[name]=control.checked;
-    try{localStorage.setItem(preferenceKey,JSON.stringify(preferences));}catch(_error){}
-    syncPreferences();void poll();
+    changePreference(name,control.checked);
   });
   document.addEventListener("pointerdown",()=>void unlock(),{passive:true});
   document.addEventListener("keydown",()=>void unlock());
   window.addEventListener("storage",event=>{
-    if(event.key===key){enabled=event.newValue!=="false";sync();}
     if(event.key===desktopKey){desktopEnabled=event.newValue==="true";syncDesktop();void poll();}
-    if(event.key===preferenceKey){readPreferences();syncPreferences();void poll();}
   });
-  window.addEventListener("focus",()=>{focusState();syncDesktop();void poll();});
+  window.addEventListener("focus",()=>{focusState();syncDesktop();void refreshPreferences();void poll();});
   window.addEventListener("blur",()=>{focusState(true);void poll();});
   window.addEventListener("pagehide",()=>focusState(true));
   document.addEventListener("visibilitychange",()=>{focusState();void poll();});
   window.setInterval(poll,5000);
+  window.setInterval(refreshPreferences,15000);
+  void importLegacyPreferences();
   void poll();
 })();
