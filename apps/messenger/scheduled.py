@@ -158,7 +158,8 @@ def _validate(chat, sender, text, reply_id, *, check_slow_mode, special_type="",
         raise OutboxError(capabilities["reason"] or "Отправка сообщения запрещена.", 403)
     restriction = views._posting_restriction(
         chat, membership, text=views._special_restriction_text(special_type, special_data, text),
-        has_attachments=has_sticker, check_slow_mode=check_slow_mode,
+        attachment_kinds=[MessageAttachment.Kind.STICKER] if has_sticker else [],
+        check_slow_mode=check_slow_mode,
     )
     if restriction:
         reason, retry_after = restriction

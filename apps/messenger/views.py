@@ -70,6 +70,7 @@ from .forms import CommunityForm, EditMessageForm, MessageForm
 from .media_processing import THUMBNAIL_VERSION, compress_image_upload, make_thumbnail
 from PIL import Image
 from .community_permissions import (
+    MEDIA_KINDS, MEDIA_LABELS, group_media_kinds,
     can_pin_messages, has_admin_right, is_banned, member_denials, member_reaction_emojis,
 )
 from .folder_rules import decorate_folder_categories, matching_chats, requested_folder
@@ -496,7 +497,9 @@ def _posting_restriction(
     text="",
     has_attachments=False,
     check_slow_mode=True,
+    attachment_kinds=(),
 ):
+    has_attachments = has_attachments or bool(attachment_kinds)
     if has_admin_right(membership, "post_messages"):
         return None
 
@@ -518,6 +521,10 @@ def _posting_restriction(
         return ("Администраторы запретили участникам отправлять текстовые сообщения.", 0)
     if has_attachments and not chat.members_can_send_media:
         return ("Администраторы запретили участникам отправлять медиа и файлы.", 0)
+    forbidden = set(attachment_kinds) - set(group_media_kinds(chat))
+    if forbidden:
+        labels = ", ".join(MEDIA_LABELS[kind] for kind in MEDIA_KINDS if kind in forbidden)
+        return ("Этот тип вложения запрещён в группе: " + (labels or "неизвестный тип") + ".", 0)
     if text and not chat.members_can_send_links and _LINK_RE.search(text):
         return ("Администраторы запретили участникам отправлять ссылки.", 0)
 
@@ -765,7 +772,20 @@ def _prepare_sidebar_chats(user, archived=False):
     return chats
 
 
+def _upload_kinds(form, sticker):
+    if sticker:
+        return [MessageAttachment.Kind.STICKER]
+    mode = form.cleaned_data.get("attachment_mode") or MessageForm.MODE_MEDIA
+    override = {
+        MessageForm.MODE_FILE: MessageAttachment.Kind.FILE,
+        MessageForm.MODE_AUDIO: MessageAttachment.Kind.AUDIO,
+        MessageForm.MODE_VOICE: MessageAttachment.Kind.VOICE,
+    }.get(mode)
+    return [override or attachment_kind(upload) for upload in form.cleaned_data["attachments"]]
+
+
 def _posting_capabilities(chat, membership, user):
+    media_kinds = list(MEDIA_KINDS)
     can_text = True
     can_media = True
     can_voice = True
@@ -777,8 +797,9 @@ def _posting_capabilities(chat, membership, user):
             reason = "Публиковать в канале могут только администраторы."
         elif chat.type == Chat.Type.GROUP:
             can_text = bool(chat.members_can_send_messages)
-            can_media = bool(chat.members_can_send_media)
-            can_voice = can_media
+            media_kinds = group_media_kinds(chat)
+            can_media = bool(chat.members_can_send_media and media_kinds)
+            can_voice = can_media and MessageAttachment.Kind.VOICE in media_kinds
             if not can_text and not can_media:
                 reason = "Администраторы запретили отправлять сообщения и медиа."
             denied = member_denials(chat, membership)
@@ -807,9 +828,15 @@ def _posting_capabilities(chat, membership, user):
                 "voice_messages",
             )
 
+    if not can_media:
+        media_kinds = []
+    elif not can_voice:
+        media_kinds = [kind for kind in media_kinds if kind != MessageAttachment.Kind.VOICE]
+    can_media = bool(media_kinds)
     return {
         "text": can_text,
         "media": can_media,
+        "media_kinds": media_kinds,
         "voice": can_voice,
         "reason": reason,
     }
@@ -1066,6 +1093,16 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
             "can_moderate_messages": has_admin_right(membership, "delete_messages"),
             "can_send_text": can_send_text,
             "can_send_media": can_send_media,
+            "can_send_visual": bool({"image", "video"}.intersection(capabilities["media_kinds"])),
+            "can_send_file": "file" in capabilities["media_kinds"],
+            "can_send_audio": "audio" in capabilities["media_kinds"],
+            "can_send_sticker": "sticker" in capabilities["media_kinds"],
+            "media_accept": ",".join(
+                types for kind, types in (
+                    ("image", "image/png,image/jpeg,image/webp,image/gif"),
+                    ("video", "video/mp4,video/webm,video/quicktime,video/x-m4v"),
+                ) if kind in capabilities["media_kinds"]
+            ),
             "can_record_voice": can_record_voice,
             "post_restriction_ui": capabilities["reason"],
             "composer_draft_text": membership.draft_text if can_send_text else "",
@@ -2083,7 +2120,7 @@ def send_message(request, chat_id):
         chat,
         membership,
         text=form.cleaned_data["text"],
-        has_attachments=bool(form.cleaned_data["attachments"] or sticker),
+        attachment_kinds=_upload_kinds(form, sticker),
     )
     if restriction:
         error, retry_after = restriction
@@ -2122,7 +2159,7 @@ def send_message(request, chat_id):
         if membership is None:
             raise Http404
         restriction = _posting_restriction(chat, membership, text=form.cleaned_data["text"],
-                                           has_attachments=bool(form.cleaned_data["attachments"] or sticker))
+                                           attachment_kinds=_upload_kinds(form, sticker))
         if restriction:
             if wants_json:
                 response = JsonResponse({"ok": False, "error": restriction[0]}, status=403)
@@ -2654,7 +2691,7 @@ def edit_message(request, chat_id, message_id):
         chat,
         _membership(chat, request.user),
         text=text,
-        has_attachments=message.attachments.exists(),
+        attachment_kinds=list(message.attachments.values_list("kind", flat=True)),
         check_slow_mode=False,
     )
     if edit_restriction:
@@ -2857,7 +2894,7 @@ def forward_message(request, chat_id, message_id):
         text=_special_restriction_text(
             source.special_type, source.special_data, source.text,
         ),
-        has_attachments=source.attachments.exists(),
+        attachment_kinds=list(source.attachments.values_list("kind", flat=True)),
     )
     if restriction:
         response = JsonResponse({"ok": False, "error": restriction[0]}, status=403)
@@ -2892,7 +2929,7 @@ def forward_message(request, chat_id, message_id):
             raise Http404
         restriction = _posting_restriction(target_chat, target_membership,
             text=_special_restriction_text(source.special_type, source.special_data, source.text),
-            has_attachments=source.attachments.exists())
+            attachment_kinds=list(source.attachments.values_list("kind", flat=True)))
         if restriction:
             response = JsonResponse({"ok": False, "error": restriction[0]}, status=403)
             if restriction[1]:

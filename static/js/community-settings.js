@@ -307,6 +307,10 @@
       const input = permissionsForm.elements[name];
       if (input) input.checked = Boolean(value);
     });
+    permissionsForm.querySelectorAll("[data-media-kind]").forEach(input => {
+      input.checked = (p.media_kinds || ["image","video","audio","voice","sticker","file"]).includes(input.dataset.mediaKind);
+      input.disabled = !permissionsForm.elements.send_media.checked;
+    });
     if (slowMode) slowMode.value = String(p.slow_mode_seconds || 0);
     permissionsError.hidden = true;
   }
@@ -842,6 +846,11 @@
     }
   });
 
+  permissionsForm?.elements.send_media?.addEventListener("change", () => {
+    permissionsForm.querySelectorAll("[data-media-kind]").forEach(input => {
+      input.disabled = !permissionsForm.elements.send_media.checked;
+    });
+  });
   permissionsForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     permissionsError.hidden = true;
@@ -852,6 +861,8 @@
     ["send_messages", "send_media", "send_links", "add_members", "pin_messages", "history_visible"].forEach((name) => {
       values[name] = permissionsForm.elements[name]?.checked ? "1" : "0";
     });
+    values.media_kinds = JSON.stringify(Array.from(permissionsForm.querySelectorAll("[data-media-kind]:checked"),
+      input => input.dataset.mediaKind));
     try {
       await applySettings(values);
       setView("overview");

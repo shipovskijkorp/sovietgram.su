@@ -2,7 +2,19 @@
 from django.db.models import Q
 from django.utils import timezone
 
-from .models import Chat, ChatMemberModeration, ChatParticipant, MessageReaction
+from .models import Chat, ChatMemberModeration, ChatParticipant, MessageAttachment, MessageReaction
+
+MEDIA_KINDS = tuple(MessageAttachment.Kind.values)
+MEDIA_LABELS = dict(MessageAttachment.Kind.choices)
+
+
+def group_media_kinds(chat):
+    configured = chat.members_allowed_media
+    if configured is None:
+        return list(MEDIA_KINDS)
+    if not isinstance(configured, list):
+        return []
+    return [kind for kind in MEDIA_KINDS if kind in configured]
 
 ADMIN_RIGHTS = {
     "change_info": "Изменение информации и адреса",

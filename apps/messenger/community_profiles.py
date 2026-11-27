@@ -33,7 +33,7 @@ from .models import (
 from .services import visible_chat_attachments, shared_attachment_payload, invited_membership_defaults, set_membership_archived
 from .ratelimit import rate_limit
 from .community_permissions import (
-    ADMIN_RIGHTS, MEMBER_DENIALS, active_sanctions, admin_rights,
+    ADMIN_RIGHTS, MEMBER_DENIALS, MEDIA_KINDS, group_media_kinds, active_sanctions, admin_rights,
     can_add_members, can_moderate, has_admin_right, is_banned, allowed_reaction_emojis, available_member_denials,
 )
 
@@ -429,6 +429,7 @@ def _settings_payload(request, chat):
         "permissions": {
             "send_messages": chat.members_can_send_messages,
             "send_media": chat.members_can_send_media,
+            "media_kinds": group_media_kinds(chat),
             "send_links": chat.members_can_send_links,
             "add_members": chat.members_can_add_members,
             "pin_messages": chat.members_can_pin_messages,
@@ -675,6 +676,15 @@ def community_settings(request, chat_id):
             return _json_error("Некорректное значение медленного режима.")
         if slow_mode not in SLOW_MODE_VALUES:
             return _json_error("Некорректное значение медленного режима.")
+        if "media_kinds" in request.POST:
+            try:
+                kinds = json.loads(request.POST["media_kinds"])
+                if not isinstance(kinds, list) or any(type(kind) is not str or kind not in MEDIA_KINDS for kind in kinds):
+                    raise ValueError
+            except (TypeError, ValueError):
+                return _json_error("Некорректные типы медиа.")
+            selected = [kind for kind in MEDIA_KINDS if kind in kinds]
+            chat.members_allowed_media = None if selected == list(MEDIA_KINDS) else selected
         chat.members_can_send_messages = _post_bool(request, "send_messages")
         chat.members_can_send_media = _post_bool(request, "send_media")
         chat.members_can_send_links = _post_bool(request, "send_links")
@@ -685,6 +695,7 @@ def community_settings(request, chat_id):
         chat.save(update_fields=(
             "members_can_send_messages",
             "members_can_send_media",
+            "members_allowed_media",
             "members_can_send_links",
             "members_can_add_members",
             "members_can_pin_messages",

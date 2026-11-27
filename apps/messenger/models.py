@@ -68,6 +68,8 @@ class Chat(models.Model):
     protect_content = models.BooleanField(default=False)
     members_can_send_messages = models.BooleanField(default=True)
     members_can_send_media = models.BooleanField(default=True)
+    # None preserves the legacy "all media kinds" permission.
+    members_allowed_media = models.JSONField(null=True, blank=True, default=None)
     members_can_send_links = models.BooleanField(default=True)
     members_can_add_members = models.BooleanField(default=False)
     members_can_pin_messages = models.BooleanField(default=False)
