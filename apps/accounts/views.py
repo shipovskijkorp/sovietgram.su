@@ -594,6 +594,7 @@ def settings_view(request):
                     {"ok": False, "error": "Сеанс уже завершён или не найден."},
                     status=404,
                 )
+            record_event(request, request.user, SecurityEvent.Kind.SESSION_REVOKE)
             return JsonResponse(
                 {
                     "ok": True,
@@ -605,11 +606,13 @@ def settings_view(request):
             )
 
         if action == "terminate_other_sessions":
-            terminate_sessions(
+            deleted = terminate_sessions(
                 request.user,
                 request.session.session_key or "",
                 others=True,
             )
+            if deleted:
+                record_event(request, request.user, SecurityEvent.Kind.SESSIONS_REVOKE)
             return JsonResponse(
                 {
                     "ok": True,
@@ -730,10 +733,18 @@ def profile_avatar(request, username):
     )
     viewer = request.user if request.user.is_authenticated else None
     account_slots = request.session.get("sovietgram_accounts_v1", [])
-    slot_authorized = any(
-        isinstance(item, dict)
-        and str(item.get("user_id", "")) == str(profile_user.pk)
-        for item in account_slots
+    # A saved account's ID alone is not proof of an active authorization.
+    # Password and security-version changes must revoke access to its private photo.
+    slot_authorized = (
+        viewer is not None
+        and not profile_user.platform_suspended_at
+        and isinstance(account_slots, list)
+        and any(
+            isinstance(item, dict)
+            and str(item.get("user_id", "")) == str(profile_user.pk)
+            and constant_time_compare(str(item.get("session_hash", "")), profile_user.get_session_auth_hash())
+            for item in account_slots
+        )
     )
     if (
         not profile_user.avatar

@@ -62,6 +62,41 @@ class SecurityEventTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(SecurityEvent.objects.filter(user=self.user, kind="login").exists())
 
+    def test_revocation_is_logged_only_for_actual_other_sessions(self):
+        from apps.accounts.privacy import active_sessions_payload
+        current = Client()
+        current.force_login(self.user)
+        other = Client()
+        other.force_login(self.user)
+        token = next(row["token"] for row in active_sessions_payload(
+            self.user, current.session.session_key) if not row["current"])
+        url = reverse("accounts:settings")
+        ajax = {"HTTP_X_REQUESTED_WITH": "XMLHttpRequest"}
+        self.assertEqual(current.post(url, {"action":"terminate_session", "token":token}, **ajax).status_code, 200)
+        self.assertEqual(SecurityEvent.objects.filter(user=self.user, kind="session_revoke").count(), 1)
+        self.assertEqual(current.post(url, {"action":"terminate_session", "token":token}, **ajax).status_code, 404)
+        self.assertEqual(SecurityEvent.objects.filter(user=self.user, kind="session_revoke").count(), 1)
+        another = Client()
+        another.force_login(self.user)
+        self.assertEqual(current.post(url, {"action":"terminate_other_sessions"}, **ajax).status_code, 200)
+        self.assertEqual(SecurityEvent.objects.filter(user=self.user, kind="sessions_revoke").count(), 1)
+        self.assertEqual(current.post(url, {"action":"terminate_other_sessions"}, **ajax).status_code, 200)
+        self.assertEqual(SecurityEvent.objects.filter(user=self.user, kind="sessions_revoke").count(), 1)
+
+    def test_sign_in_ip_ignores_untrusted_forwarded_prefix(self):
+        from apps.accounts.privacy import remember_session_device
+        request = RequestFactory().get("/", REMOTE_ADDR="127.0.0.1",
+            HTTP_X_REAL_IP="203.0.113.9", HTTP_X_FORWARDED_FOR="198.51.100.7, 203.0.113.9")
+        request.user = self.user
+        class MemorySession(dict):
+            modified = False
+        request.session = MemorySession()
+        remember_session_device(request)
+        self.assertEqual(request.session["sovietgram_session_ip"], "203.0.113.9")
+        request.META["REMOTE_ADDR"] = "192.0.2.4"
+        remember_session_device(request)
+        self.assertEqual(request.session["sovietgram_session_ip"], "192.0.2.4")
+
     def test_wrong_password_is_not_a_successful_login(self):
         with self.captureOnCommitCallbacks(execute=True):
             self.client.post(reverse("accounts:login"), {"username": self.user.username, "password": "wrong"})

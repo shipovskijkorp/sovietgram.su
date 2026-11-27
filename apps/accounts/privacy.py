@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from ipaddress import ip_address
 
 from django.contrib.auth import HASH_SESSION_KEY, SESSION_KEY, get_user_model
 from django.contrib.sessions.models import Session
@@ -381,10 +382,21 @@ def remember_session_device(request):
     request.session["sovietgram_session_user_agent"] = (
         request.META.get("HTTP_USER_AGENT", "") or ""
     )[:240]
-    forwarded = (request.META.get("HTTP_X_FORWARDED_FOR", "") or "").split(",", 1)[0].strip()
-    request.session["sovietgram_session_ip"] = (
-        forwarded or request.META.get("REMOTE_ADDR", "") or ""
-    )[:64]
+    # The bundled reverse proxy overwrites X-Real-IP and Gunicorn is
+    # loopback-only. X-Forwarded-For can contain arbitrary client-supplied
+    # prefixes, so never use its first item as an authenticated address.
+    raw = request.META.get("REMOTE_ADDR", "") or ""
+    try:
+        address = ip_address(raw)
+        if address.is_loopback:
+            try:
+                address = ip_address(request.META.get("HTTP_X_REAL_IP", ""))
+            except ValueError:
+                pass
+        session_ip = str(address)
+    except ValueError:
+        session_ip = ""
+    request.session["sovietgram_session_ip"] = session_ip
     request.session.modified = True
 
 

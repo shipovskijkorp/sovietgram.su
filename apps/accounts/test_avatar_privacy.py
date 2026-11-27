@@ -80,6 +80,23 @@ class ProfileAvatarPrivacyTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Cache-Control"], "private, no-store")
 
+    def test_saved_account_avatar_requires_current_session_hash(self):
+        set_privacy_rule(self.alice, "profile_photo", "nobody")
+        self.client.force_login(self.bob)
+        session = self.client.session
+        session["sovietgram_accounts_v1"] = [{
+            "user_id": str(self.alice.pk), "backend": "django.contrib.auth.backends.ModelBackend",
+            "session_hash": self.alice.get_session_auth_hash(),
+        }]
+        session.save()
+        url = reverse("accounts:profile_avatar", args=[self.alice.username])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        response.close()
+        self.alice.security_version += 1
+        self.alice.save(update_fields=["security_version"])
+        self.assertEqual(self.client.get(url).status_code, 404)
+
     def test_everyone_rule_allows_public_avatar_request(self):
         set_privacy_rule(self.alice, "profile_photo", "everyone")
         response = self.client.get(

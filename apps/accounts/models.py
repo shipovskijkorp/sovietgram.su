@@ -199,6 +199,8 @@ class SecurityEvent(models.Model):
         FACTOR_ENABLE = "factor_enable", "Включение двухфакторной защиты"
         FACTOR_DISABLE = "factor_disable", "Отключение двухфакторной защиты"
         FACTOR_CODES = "factor_codes", "Обновление резервных кодов"
+        SESSION_REVOKE = "session_revoke", "Завершение другого сеанса"
+        SESSIONS_REVOKE = "sessions_revoke", "Завершение остальных сеансов"
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="security_events")
     kind = models.CharField(max_length=20, choices=Kind.choices)
