@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import account_security, avatar_history, data_export, notification_preferences, security_events, storage_views, two_factor_views
+from . import account_security, avatar_history, data_export, notification_preferences, security_events, storage_views, two_factor_views, share_qr
 
 from .views import (
     SovietgramLoginView,
@@ -55,5 +55,6 @@ urlpatterns = [
         name="password_change",
     ),
     path("u/<str:username>/avatar/", profile_avatar, name="profile_avatar"),
+    path("u/<str:username>/qr/", share_qr.profile_qr, name="profile_qr"),
     path("u/<str:username>/", public_profile, name="public_profile"),
 ]

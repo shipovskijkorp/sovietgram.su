@@ -25,6 +25,7 @@ DEFAULT_RATE_LIMITS = {
     "sticker_packs": {"limit": 50, "window": 60},
     "shared_sticker_pack": {"limit": 30, "window": 60},
     "join_invite": {"limit": 40, "window": 60},
+    "share_qr": {"limit": 30, "window": 60},
     "join_request_action": {"limit": 60, "window": 60},
     "community_moderation": {"limit": 60, "window": 60},
     "link_preview": {"limit": 12, "window": 60},

@@ -34,8 +34,10 @@
   const csrfToken = form.querySelector("[name='csrfmiddlewaretoken']")?.value || "";
 
   const MAX_ATTACHMENTS = 10;
-  const MAX_FILE_SIZE = 25 * 1024 * 1024;
-  const MAX_TOTAL_SIZE = 100 * 1024 * 1024;
+  const FILE_MIB = Number(form.dataset.maxFileMib) || 25;
+  const TOTAL_MIB = Number(form.dataset.maxTotalMib) || 100;
+  const MAX_FILE_SIZE = FILE_MIB * 1024 * 1024;
+  const MAX_TOTAL_SIZE = TOTAL_MIB * 1024 * 1024;
   const MEDIA_EXTENSIONS = new Set(["png","jpg","jpeg","webp","gif","mp4","webm","mov","m4v"]);
   const AUDIO_EXTENSIONS = new Set(["mp3","m4a","aac","ogg","oga","wav","flac","opus"]);
 
@@ -99,10 +101,10 @@
       if (mode === "audio" && !isAudio(file)) {
         return "Для «Музыка» выберите MP3, M4A, AAC, OGG, WAV, FLAC или OPUS.";
       }
-      if (file.size > MAX_FILE_SIZE) return file.name + ": файл больше 25 МБ.";
+      if (file.size > MAX_FILE_SIZE) return file.name + ": файл больше " + FILE_MIB + " МБ.";
       total += file.size;
     }
-    if (total > MAX_TOTAL_SIZE) return "Общий размер файлов больше 100 МБ.";
+    if (total > MAX_TOTAL_SIZE) return "Общий размер файлов больше " + TOTAL_MIB + " МБ.";
     return "";
   }
 
@@ -352,7 +354,8 @@
       const xhr = new XMLHttpRequest();
       activeUpload = xhr;
       xhr.open("POST", form.action);
-      xhr.timeout = 180000;
+      const uploadBytes = files.reduce((sum, file) => sum + file.size, 0);
+      xhr.timeout = Math.max(180000, Math.ceil(uploadBytes / (128 * 1024)) * 1000 + 60000);
       xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
       xhr.responseType = "json";
 
@@ -368,6 +371,10 @@
         }
         if (!attempt && [502, 503, 504].includes(xhr.status)) {
           upload(files, text, mode, replyTo, onProgress, clientId, silent, 1, compress, quote).then(resolve, reject);
+          return;
+        }
+        if (xhr.status === 413) {
+          reject(new Error("Размер вложений превышает лимит веб-сервера."));
           return;
         }
         const firstError = Object.values(payload.errors || {}).flat()?.[0]?.message;

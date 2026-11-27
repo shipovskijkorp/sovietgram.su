@@ -1,5 +1,7 @@
 from django.urls import path
 
+from apps.accounts import share_qr
+
 from . import archive_controls, community_profiles, views, scheduled, notifications, folders, stickers, shared_stickers, link_previews, moderation, discussions
 
 app_name = "messenger"
@@ -34,6 +36,7 @@ urlpatterns = [
     path("chat/<int:chat_id>/profile/settings/", community_profiles.community_settings, name="community_settings"),
     path("chat/<int:chat_id>/profile/statistics/", community_profiles.community_statistics, name="community_statistics"),
     path("chat/<int:chat_id>/profile/invites/", community_profiles.community_invite_action, name="community_invite_action"),
+    path("chat/<int:chat_id>/profile/invites/<int:invite_id>/qr/", share_qr.invite_qr, name="invite_qr"),
     path("chat/<int:chat_id>/profile/join-requests/", community_profiles.community_join_request_action, name="community_join_request_action"),
     path("chat/<int:chat_id>/profile/moderation/", moderation.community_moderation, name="community_moderation"),
     path("chat/<int:chat_id>/profile/update/", community_profiles.community_profile_update, name="community_profile_update"),

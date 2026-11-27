@@ -1126,6 +1126,11 @@ userProfileUsernameRow?.addEventListener("click", () => {
   void copyProfileText(absolute, "Ссылка на профиль скопирована");
 });
 
+document.getElementById("userProfileQr")?.addEventListener("click", () => {
+  if (!openedProfile?.username) return;
+  window.open(`/u/${encodeURIComponent(openedProfile.username)}/qr/`, "_blank", "noopener,noreferrer");
+});
+
 userProfileChannelCard?.addEventListener("contextmenu", openProfileChannelContext);
 userProfileChannelContextRemove?.addEventListener("click", async () => {
   closeProfileChannelContext();

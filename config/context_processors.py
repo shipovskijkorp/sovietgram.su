@@ -26,3 +26,9 @@ def static_version(request):
     # per request so a git pull cannot leave the browser on stale JS/CSS.
     version = _static_version() if settings.DEBUG else STATIC_VERSION
     return {"static_version": version}
+
+def upload_limits(request):
+    return {
+        "upload_file_mib": settings.SOVIETGRAM_MAX_FILE_MIB,
+        "upload_total_mib": settings.SOVIETGRAM_MAX_TOTAL_MIB,
+    }

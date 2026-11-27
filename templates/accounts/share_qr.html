@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex,nofollow">
+  <title>QR-код — Sovietgram</title>
+  <style>
+    :root{color-scheme:light dark;font:16px system-ui,sans-serif}
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px;background:#eeeae6;color:#24201e}
+    main{max-width:440px;width:100%;padding:24px;border-radius:20px;background:#fff;text-align:center;box-shadow:0 12px 40px #0001}
+    h1{font-size:1.35rem;overflow-wrap:anywhere;margin:8px 0}
+    p{line-height:1.5}
+    img{display:block;width:min(100%,320px);height:auto;margin:16px auto;image-rendering:pixelated;background:white}
+    .address{overflow-wrap:anywhere;font-size:.85rem;color:#666;user-select:all}
+    .actions{display:flex;flex-wrap:wrap;justify-content:center;gap:12px}
+    .actions a{padding:10px 14px;border:1px solid #aa0000;border-radius:10px;color:#a00000;text-decoration:none}
+    .actions a:first-child{background:#a00000;color:#fff}
+    @media(prefers-color-scheme:dark){body{background:#171412;color:#eee}main{background:#282321}.address{color:#bbb}.actions a{color:#ffb1b1}}
+  </style>
+</head>
+<body>
+  <main>
+    <p>Sovietgram · QR-код</p>
+    <h1>{{ title }}</h1>
+    <img src="{{ qr_png }}" alt="QR-код ссылки">
+    <p>{{ note }}</p>
+    <p class="address">{{ share_url }}</p>
+    <div class="actions">
+      <a href="{{ qr_png }}" download="sovietgram-qr.png">Скачать PNG</a>
+      <a href="{{ share_url }}" rel="noreferrer">Открыть ссылку</a>
+    </div>
+  </main>
+</body>
+</html>

@@ -62,6 +62,7 @@
       </div>
 
       <button class="public-profile-copy" type="button" data-copy-profile data-profile-url="{% url 'accounts:public_profile' profile_user.username %}">Скопировать ссылку</button>
+      <a class="public-profile-copy" href="{% url 'accounts:profile_qr' profile_user.username %}" target="_blank" rel="noopener noreferrer">QR-код профиля</a>
     </div>
 
     {% if profile_user.bio and profile_bio_visible %}

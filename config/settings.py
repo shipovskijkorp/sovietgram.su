@@ -18,6 +18,23 @@ def env_list(name, default=""):
     return [item.strip() for item in os.getenv(name, default).split(",") if item.strip()]
 
 
+# Optional ordinary attachment limits in MiB. Keep recording limits separate.
+def bounded_mib(name, default, maximum):
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError as exc:
+        raise ImproperlyConfigured(f"{name} must be a whole number of MiB.") from exc
+    if not 1 <= value <= maximum:
+        raise ImproperlyConfigured(f"{name} must be between 1 and {maximum} MiB.")
+    return value
+
+
+SOVIETGRAM_MAX_FILE_MIB = bounded_mib("SOVIETGRAM_MAX_FILE_MIB", 25, 512)
+SOVIETGRAM_MAX_TOTAL_MIB = bounded_mib("SOVIETGRAM_MAX_TOTAL_MIB", 100, 1024)
+if SOVIETGRAM_MAX_TOTAL_MIB < SOVIETGRAM_MAX_FILE_MIB:
+    raise ImproperlyConfigured("SOVIETGRAM_MAX_TOTAL_MIB must not be smaller than SOVIETGRAM_MAX_FILE_MIB.")
+
+
 # Preserve old encryption/authentication keys during a deliberate rotation.
 SECRET_KEY_FALLBACKS = env_list("DJANGO_SECRET_KEY_FALLBACKS")
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost")
@@ -109,6 +126,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "config.context_processors.static_version",
+                "config.context_processors.upload_limits",
             ],
         },
     },

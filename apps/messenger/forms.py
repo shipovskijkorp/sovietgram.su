@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from django import forms
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from PIL import Image, UnidentifiedImageError
 
@@ -197,17 +198,20 @@ class MessageForm(forms.Form):
             )
 
         mode = self.cleaned_data.get("attachment_mode") or self.MODE_MEDIA
+        recording = mode in (self.MODE_VOICE, self.MODE_VIDEO_NOTE)
+        file_limit = MAX_FILE_SIZE if recording else settings.SOVIETGRAM_MAX_FILE_MIB * 1024 * 1024
+        total_limit = MAX_TOTAL_SIZE if recording else settings.SOVIETGRAM_MAX_TOTAL_MIB * 1024 * 1024
         total_size = 0
         for uploaded in files:
             extension = Path(uploaded.name).suffix.lower()
             content_type = (getattr(uploaded, "content_type", "") or "").lower()
             # Enforce size limits before decoding untrusted images.
-            if uploaded.size > MAX_FILE_SIZE:
-                raise forms.ValidationError("Один файл должен быть не больше 25 МБ.")
+            if uploaded.size > file_limit:
+                raise forms.ValidationError(f"Один файл должен быть не больше {file_limit // (1024 * 1024)} МБ.")
             total_size += uploaded.size
-            if total_size > MAX_TOTAL_SIZE:
+            if total_size > total_limit:
                 raise forms.ValidationError(
-                    "Общий размер вложений должен быть не больше 100 МБ."
+                    f"Общий размер вложений должен быть не больше {total_limit // (1024 * 1024)} МБ."
                 )
             if extension == ".gif" or content_type == "image/gif":
                 if extension != ".gif":

@@ -484,7 +484,15 @@
         revokeButton.className = "is-danger";
         revokeButton.textContent = "Отозвать";
         revokeButton.addEventListener("click", () => revokeInvite(invite));
-        actions.append(copyButton, revokeButton);
+        actions.appendChild(copyButton);
+        if (invite.qr_url) {
+          const qrButton = document.createElement("button");
+          qrButton.type = "button";
+          qrButton.textContent = "QR-код";
+          qrButton.addEventListener("click", () => window.open(invite.qr_url, "_blank", "noopener,noreferrer"));
+          actions.appendChild(qrButton);
+        }
+        actions.appendChild(revokeButton);
       }
       row.append(icon, copy, actions);
       inviteList.appendChild(row);

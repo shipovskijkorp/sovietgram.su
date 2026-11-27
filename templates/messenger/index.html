@@ -653,7 +653,7 @@
       </div>
 
       {% if can_post %}
-      <form class="composer" id="messageForm" method="post" action="{% url 'messenger:send_message' selected_chat.pk %}" enctype="multipart/form-data">
+      <form class="composer" id="messageForm" data-max-file-mib="{{ upload_file_mib }}" data-max-total-mib="{{ upload_total_mib }}" method="post" action="{% url 'messenger:send_message' selected_chat.pk %}" enctype="multipart/form-data">
         {% csrf_token %}
         <div class="composer-reply" id="composerReply"{% if not composer_draft_reply.id %} hidden{% endif %}>
           <span class="composer-reply__line"></span>

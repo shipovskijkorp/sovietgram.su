@@ -20,3 +20,13 @@ test("retry plan keeps stable batch IDs and only sends unfinished uploads",()=>{
   assert.match(uploader,/data.append\("compress_images", "1"\)/);
   assert.match(read("templates/messenger/index.html"),/id="mediaComposeCompress"/);
 });
+
+test("ordinary uploader receives the configured server limits",()=>{
+  const template=read("templates/messenger/index.html");
+  const uploader=read("static/js/attachment-files.js");
+  assert.match(template,/data-max-file-mib="{{ upload_file_mib }}"/);
+  assert.match(template,/data-max-total-mib="{{ upload_total_mib }}"/);
+  assert.match(uploader,/form\.dataset\.maxFileMib/);
+  assert.match(uploader,/form\.dataset\.maxTotalMib/);
+  assert.match(uploader,/xhr\.status === 413/);
+});

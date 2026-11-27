@@ -337,6 +337,7 @@ def _invite_payload(invite):
         "name": invite.name or "Ссылка-приглашение",
         "token": invite.token,
         "url": reverse("messenger:join_invite", args=[invite.token]),
+        "qr_url": reverse("messenger:invite_qr", args=[invite.chat_id, invite.pk]) if invite.is_active else "",
         "creator": invite.creator.display_name if invite.creator else "",
         "created_at": timezone.localtime(invite.created_at).strftime("%d.%m.%Y %H:%M"),
         "expires_at": timezone.localtime(invite.expires_at).strftime("%d.%m.%Y %H:%M") if invite.expires_at else "",
