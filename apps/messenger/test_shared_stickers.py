@@ -64,6 +64,48 @@ class SharedStickerTests(TestCase):
         self.assertTrue(StickerPack.objects.filter(pk=copy.pk).exists())
         self.assertEqual(self.peer_client.get(reverse("messenger:sticker_image", args=[item.pk])).status_code, 200)
 
+    def test_update_preserves_local_copies_and_respects_revocation(self):
+        link = self.act("share").json()["pack"]["share_url"]
+        self.peer_client.post(link, {"account_id": self.peer.pk})
+        copy = StickerPack.objects.get(owner=self.peer, source_pack_id=self.pack.pk)
+        local = copy.stickers.get()
+        local.is_favorite = True
+        local.save(update_fields=["is_favorite"])
+        own = Sticker.objects.create(pack=copy, image=b"own", emoji="Own")
+        Sticker.objects.create(pack=self.pack, image=b"new", emoji="New")
+        self.assertContains(self.peer_client.get(link), "Обновить набор")
+        for _ in range(2):
+            self.assertEqual(self.peer_client.post(link, {"account_id": self.peer.pk, "action":"update"}).status_code, 302)
+        self.assertEqual(copy.stickers.count(), 3)
+        local.refresh_from_db()
+        self.assertTrue(local.is_favorite)
+        self.assertTrue(copy.stickers.filter(pk=own.pk).exists())
+        self.assertTrue(copy.stickers.filter(emoji="New").exists())
+        self.sticker.delete()
+        self.assertEqual(self.peer_client.post(link, {"account_id":self.peer.pk, "action":"update"}).status_code, 302)
+        self.assertEqual(copy.stickers.count(), 3)
+        self.act("unshare")
+        replacement = self.act("share").json()["pack"]["share_url"]
+        self.assertEqual(self.peer_client.post(link, {"account_id":self.peer.pk, "action":"update"}).status_code, 404)
+        listed = self.peer_client.get(self.endpoint).json()["packs"][0]
+        self.assertEqual(listed["source_url"], link)
+        self.assertNotEqual(listed["source_url"], replacement)
+        self.assertEqual(self.peer_client.post(replacement, {"account_id":self.peer.pk, "action":"update"}).status_code, 302)
+
+    def test_update_capacity_atomic_and_legacy_copy(self):
+        link = self.act("share").json()["pack"]["share_url"]
+        copy = StickerPack.objects.create(owner=self.peer, name="Legacy", source_pack_id=self.pack.pk)
+        Sticker.objects.bulk_create([Sticker(pack=copy, image=b"own", emoji=str(i)) for i in range(40)])
+        self.assertEqual(self.peer_client.post(link, {"account_id":self.peer.pk, "action":"update"}).status_code, 400)
+        self.assertEqual(copy.stickers.count(), 40)
+        copy.refresh_from_db()
+        self.assertIsNone(copy.source_share_token)
+        copy.stickers.first().delete()
+        self.assertEqual(self.peer_client.post(link, {"account_id":self.peer.pk, "action":"update"}).status_code, 302)
+        self.assertEqual(copy.stickers.count(), 40)
+        copy.refresh_from_db()
+        self.assertIsNotNone(copy.source_share_token)
+
     def test_owner_only_and_capacity(self):
         empty = StickerPack.objects.create(owner=self.owner, name="Empty")
         self.assertEqual(self.act("share", pack_id=empty.pk).status_code, 400)

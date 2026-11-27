@@ -17,6 +17,14 @@
     {% if problem %}<p class="form-alert" role="alert">{{ problem }}</p>{% endif %}
     {% if installed %}
       <p class="micro-copy">Этот набор уже есть в вашей библиотеке.</p>
+      {% if can_update %}
+      <form method="post" class="auth-form">
+        {% csrf_token %}
+        <input type="hidden" name="account_id" value="{{ request.user.pk }}">
+        <p class="micro-copy">Добавятся отсутствующие стикеры. Ваши копии, избранное и собственные добавления сохранятся.</p>
+        <button type="submit" class="primary-button" name="action" value="update">Обновить набор</button>
+      </form>
+      {% endif %}
       <a class="primary-button" href="{% url 'messenger:home' %}?manage_stickers=1">Открыть наборы</a>
     {% elif stickers %}
       <form method="post" class="auth-form">

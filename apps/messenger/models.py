@@ -575,6 +575,7 @@ class StickerPack(models.Model):
     # A local snapshot, independent of deletion/revocation of the source.
     # Do not expose the source ID or token to recipients' public profiles.
     source_pack_id = models.PositiveBigIntegerField(null=True, blank=True, editable=False)
+    source_share_token = models.UUIDField(null=True, blank=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

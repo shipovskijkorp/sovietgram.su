@@ -1,4 +1,6 @@
-"""Opt-in link sharing; installed libraries are independent private snapshots."""
+"""Opt-in link sharing and explicit additive updates of private snapshots."""
+import hashlib
+from collections import Counter
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
@@ -19,19 +21,35 @@ def shared_packs():
 
 
 def page(request, pack, *, problem="", status=200):
-    installed = pack.owner_id == request.user.pk or StickerPack.objects.filter(
-        owner=request.user, source_pack_id=pack.pk,
-    ).exists()
+    own_pack = pack.owner_id == request.user.pk
+    installed = StickerPack.objects.filter(owner=request.user, source_pack_id=pack.pk).exists()
     response = render(request, "messenger/shared_sticker_pack.html", {
         "pack": pack,
         "stickers": pack.stickers.defer("image").all()[:MAX_STICKERS],
-        "installed": installed,
+        "installed": own_pack or installed,
+        "can_update": installed and not own_pack,
         "problem": problem,
     }, status=status)
     # The token is an access capability. Avoid sending it as a referrer.
     response["Referrer-Policy"] = "no-referrer"
     response["X-Robots-Tag"] = "noindex, nofollow"
     return response
+
+
+def fingerprint(item):
+    return item.emoji, hashlib.sha256(bytes(item.image)).digest()
+
+
+def missing_stickers(source, local):
+    counts = Counter(fingerprint(item) for item in local)
+    missing = []
+    for item in source:
+        key = fingerprint(item)
+        if counts[key]:
+            counts[key] -= 1
+        else:
+            missing.append(item)
+    return missing
 
 
 def library_name(owner, original):
@@ -58,6 +76,10 @@ def shared_sticker_pack(request, token):
     if request.POST.get("account_id") != str(request.user.pk):
         return page(request, pack, problem="Аккаунт изменился. Откройте ссылку заново.", status=409)
 
+    action = request.POST.get("action", "install")
+    if action not in {"install", "update"}:
+        return page(request, pack, problem="Неизвестное действие.", status=400)
+
     with transaction.atomic():
         # Existing library mutations serialize on the owner's user row.
         # Acquire source and recipient in a fixed order to avoid deadlocks.
@@ -68,10 +90,26 @@ def shared_sticker_pack(request, token):
         if users != user_ids:
             raise Http404
         pack = get_object_or_404(shared_packs(), pk=pack.pk, share_token=token)
-        if pack.owner_id == request.user.pk or StickerPack.objects.filter(
-            owner=request.user, source_pack_id=pack.pk,
-        ).exists():
+        if pack.owner_id == request.user.pk:
             return redirect(reverse("messenger:home") + "?manage_stickers=1")
+        installed = StickerPack.objects.filter(owner=request.user, source_pack_id=pack.pk).first()
+        if installed:
+            if action == "update":
+                source = list(pack.stickers.all()[:MAX_STICKERS + 1])
+                local = list(installed.stickers.all()[:MAX_STICKERS + 1])
+                missing = missing_stickers(source, local)
+                if len(source) > MAX_STICKERS or len(local) + len(missing) > MAX_STICKERS:
+                    return page(request, pack, problem="Недостаточно места в наборе (лимит 40).", status=400)
+                Sticker.objects.bulk_create([
+                    Sticker(pack=installed, emoji=item.emoji, image=bytes(item.image))
+                    for item in missing
+                ])
+            # Never discover a replacement token by source ID alone.
+            installed.source_share_token = pack.share_token
+            installed.save(update_fields=["source_share_token"])
+            return redirect(reverse("messenger:home") + "?manage_stickers=1")
+        if action == "update":
+            return page(request, pack, problem="Сначала установите набор.", status=409)
         if StickerPack.objects.filter(owner=request.user).count() >= MAX_PACKS:
             return page(request, pack, problem="Достигнут лимит: 10 наборов. Удалите ненужный набор.", status=400)
         items = list(pack.stickers.all()[:MAX_STICKERS + 1])
@@ -79,7 +117,7 @@ def shared_sticker_pack(request, token):
             return page(request, pack, problem="Набор пуст или превышает допустимый размер.", status=400)
         copy = StickerPack.objects.create(
             owner=request.user, name=library_name(request.user, pack.name),
-            source_pack_id=pack.pk,
+            source_pack_id=pack.pk, source_share_token=pack.share_token,
         )
         Sticker.objects.bulk_create([
             Sticker(pack=copy, emoji=item.emoji, image=bytes(item.image))

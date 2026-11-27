@@ -125,6 +125,8 @@ def sticker_payload(item):
 def pack_payload(pack):
     return {"id": pack.pk, "name": pack.name,
             "share_url": reverse("messenger:shared_sticker_pack", args=[pack.share_token]) if pack.share_token else "",
+            "source_url": reverse("messenger:shared_sticker_pack", args=[pack.source_share_token]) if pack.source_share_token else "",
+            "installed_copy": pack.source_pack_id is not None,
             "stickers": [
         sticker_payload(item) for item in pack.stickers.defer("image").all()
     ]}

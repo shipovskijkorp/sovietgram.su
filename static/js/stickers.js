@@ -312,6 +312,12 @@
     $("stickerShare").textContent=shared?"Открыть ссылку":"Поделиться набором";
     $("stickerShare").disabled=busy||!current||(!shared&&!current.stickers.length);
     $("stickerUnshare").hidden=!shared;
+    const sourceUpdate=$("stickerSourceUpdate");
+    if(sourceUpdate){
+      sourceUpdate.hidden=!detail||!current?.installed_copy;
+      sourceUpdate.disabled=busy;
+      sourceUpdate.textContent=current?.source_url?"Обновить из исходного набора":"Обновить по ссылке";
+    }
     $("stickerSharePanel").hidden=!shared||editing;
     if(shared)$("stickerShareLink").value=new URL(current.share_url,window.location.origin).href;
     else $("stickerShareLink").value="";
@@ -535,6 +541,17 @@
     if(current.share_url)window.open(new URL(current.share_url,window.location.origin).href,"_blank","noopener,noreferrer");
     else confirmAction("Поделиться набором","Любой авторизованный пользователь со ссылкой сможет установить отдельную копию набора.","Создать ссылку",
       ()=>mutate("share",{pack_id:current.id},"pack"));
+  });
+  $("stickerSourceUpdate")?.addEventListener("click",()=>{
+    const current=pack();if(!current?.installed_copy||busy)return;
+    if(current.source_url){
+      const url=new URL(current.source_url,window.location.origin);
+      if(url.origin===window.location.origin&&/^\/addstickers\/[0-9a-f-]+\/$/i.test(url.pathname))
+        window.location.assign(url.href);
+    }else{
+      switchScreen("library");
+      $("stickerInstallLink").click();
+    }
   });
   $("stickerUnshare").addEventListener("click",()=>{
     const current=pack();if(!current?.share_url||busy)return;
