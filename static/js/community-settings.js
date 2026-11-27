@@ -347,7 +347,7 @@
     const meta = document.createElement("small");
     meta.textContent = member.role === "member"
       ? "@" + member.username
-      : member.role_label + " · @" + member.username;
+      : member.role_label + (member.admin_title ? " · " + member.admin_title : "") + " · @" + member.username;
     copy.append(personName, meta);
     identity.appendChild(copy);
     identity.addEventListener("click", () => openProfile(member));
@@ -366,6 +366,10 @@
       actions.appendChild(roleButton);
     }
 
+    if(member.can_edit_admin_title){
+      const title=document.createElement("button");title.type="button";title.className="community-settings-person__role";
+      title.dataset.adminTitleUser=String(member.user_id);title.textContent="Титул";title.addEventListener("click",()=>openAdminTitle(member));actions.appendChild(title);
+    }
     if(member.can_edit_admin_rights){
       const rights=document.createElement("button");rights.type="button";rights.className="community-settings-person__role";
       rights.textContent="Права";rights.addEventListener("click",()=>openModerationEditor(member,"admin_rights"));actions.appendChild(rights);
@@ -723,6 +727,34 @@
       return false;
     }
   }
+
+  const titleDialog=$("communityAdminTitleDialog"),titleForm=$("communityAdminTitleForm"),titleInput=$("communityAdminTitleInput");
+  let titleMember=null,titleBusy=false;
+  function openAdminTitle(member){
+    if(titleBusy||!titleDialog||!member.can_edit_admin_title)return;
+    titleMember=member;
+    $("communityAdminTitleTarget").textContent=member.display_name+" · @"+member.username;
+    titleInput.value=member.admin_title||"";
+    $("communityAdminTitleError").hidden=true;
+    if(!titleDialog.open)titleDialog.showModal();
+    titleInput.focus();titleInput.select();
+  }
+  titleForm?.addEventListener("submit",async event=>{
+    event.preventDefault();
+    if(titleBusy||!titleMember||!settings?.urls?.member_action)return;
+    titleBusy=true;
+    const controls=[...titleForm.querySelectorAll("button,input")];controls.forEach(node=>node.disabled=true);
+    const errorNode=$("communityAdminTitleError");errorNode.hidden=true;
+    try{
+      const payload=await post(settings.urls.member_action,{action:"admin_title",username:titleMember.username,title:titleInput.value});
+      if(!payload.settings)throw Error("Управление недоступно.");
+      settings=payload.settings;render();titleDialog.close();toast("Титул сохранён.");
+    }catch(error){errorNode.textContent=error.message;errorNode.hidden=false;}
+    finally{titleBusy=false;controls.forEach(node=>node.disabled=false);}
+  });
+  for(const id of ["communityAdminTitleClose","communityAdminTitleCancel"])$(id)?.addEventListener("click",()=>{if(!titleBusy)titleDialog.close();});
+  titleDialog?.addEventListener("cancel",event=>{if(titleBusy)event.preventDefault();});
+  titleDialog?.addEventListener("close",()=>{titleMember=null;titleInput.value="";});
 
   async function changeMemberRole(member) {
     const next = member.role === "admin" ? "member" : "admin";

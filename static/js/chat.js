@@ -440,6 +440,15 @@ function makeForwardedBlock(forwarded) {
   return block;
 }
 
+function makeGroupAuthor(message) {
+  if(!message.show_group_author)return null;
+  const row=document.createElement("div");row.className="message-group-author";
+  const name=document.createElement("span");name.textContent=message.sender_name||"";row.append(name);
+  if(message.sender_title){
+    const title=document.createElement("span");title.className="message-admin-title";title.textContent=message.sender_title;row.append(title);
+  }
+  return row;
+}
 function buildMessageArticle(message) {
   const article = document.createElement("article");
   article.id = `message-${message.id}`;
@@ -460,6 +469,7 @@ function buildMessageArticle(message) {
   article.dataset.reactionUrl = message.urls?.reaction || "";
   article.dataset.reactorsUrl = message.urls?.reactors || "";
 
+  const author=makeGroupAuthor(message);if(author)article.appendChild(author);
   if (message.forwarded) article.appendChild(makeForwardedBlock(message.forwarded));
   if (message.reply) article.appendChild(makeReplyPreview(message.reply));
 
@@ -488,7 +498,7 @@ function buildMessageArticle(message) {
   if (message.signature_name) {
     const signature = document.createElement("span");
     signature.className = "message-channel-signature";
-    signature.textContent = message.signature_name;
+    signature.textContent = message.signature_name+(message.sender_title?" · "+message.sender_title:"");
     footer.appendChild(signature);
   }
   if (message.is_edited) {
@@ -635,6 +645,14 @@ function applyMessageUpdate(message) {
     article.dataset.reactionUrl = message.urls.reaction || article.dataset.reactionUrl;
     article.dataset.reactorsUrl = message.urls.reactors || article.dataset.reactorsUrl;
     article.dataset.readersUrl = message.urls.readers || "";
+  }
+  if(Object.prototype.hasOwnProperty.call(message,"show_group_author")){
+    const previous=article.querySelector(".message-group-author"),author=makeGroupAuthor(message);
+    if(previous&&author)previous.replaceWith(author);
+    else if(previous)previous.remove();
+    else if(author)article.prepend(author);
+    const signature=article.querySelector(".message-channel-signature");
+    if(signature&&message.signature_name)signature.textContent=message.signature_name+(message.sender_title?" · "+message.sender_title:"");
   }
   window.SovietgramSocial.renderReactions(article, message);
 

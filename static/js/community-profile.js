@@ -248,7 +248,7 @@
       const strong = document.createElement("strong");
       strong.textContent = member.display_name;
       const small = document.createElement("small");
-      small.textContent = member.role === "member" ? member.presence : member.role_label + " · " + member.presence;
+      small.textContent = member.role === "member" ? member.presence : member.role_label + (member.admin_title ? " · " + member.admin_title : "") + " · " + member.presence;
       copy.append(strong, small);
       identity.append(picture, copy);
       row.appendChild(identity);

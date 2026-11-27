@@ -139,6 +139,36 @@ class BrowserControlsTests(StaticLiveServerTestCase):
                 self.click("#communityProfileClose")
                 self.hidden("#communityProfile")
 
+    def test_admin_title_and_public_community_directory(self):
+        self.group.title="Космическая группа"
+        self.group.username="browser_cosmic"
+        self.group.description="Корабли"
+        self.group.save()
+        self.go(self.group)
+        self.manage()
+        self.click('[data-community-settings-open="admins"]')
+        self.click(f'[data-admin-title-user="{self.owner.pk}"]')
+        self.visible("#communityAdminTitleDialog")
+        self.page.locator("#communityAdminTitleInput").fill("Капитан")
+        self.click("#communityAdminTitleSubmit")
+        self.hidden("#communityAdminTitleDialog")
+        self.expect(self.page.locator("#communitySettingsAdminList")).to_contain_text("Капитан")
+        self.click("#communitySettingsClose")
+        self.click("#communityProfileClose")
+        self.page.locator("#messageInput").fill("Сообщение капитана")
+        self.page.locator("#messageInput").press("Enter")
+        self.expect(self.page.locator(".message-group-author .message-admin-title")).to_have_text("Капитан")
+        self.page.reload(wait_until="domcontentloaded")
+        self.expect(self.page.locator(".message-group-author .message-admin-title")).to_have_text("Капитан")
+        self.click("#profileMenuButton")
+        self.click("#communityDirectoryEntry")
+        self.page.get_by_role("searchbox",name="Поиск сообществ").fill("КОРАБЛИ")
+        self.page.get_by_role("button",name="Найти",exact=True).click()
+        entry=self.page.locator(".directory-entry")
+        self.expect(entry).to_contain_text("Космическая группа")
+        entry.get_by_role("link",name="Открыть").click()
+        self.visible("#messageInput")
+
     def test_management_is_independent_of_profile_failure_and_retries(self):
         self.go(self.group)
         profile_pattern = "**/chat/*/profile/"

@@ -1791,3 +1791,9 @@ body[data-theme="dark"] .chat-history-date input { color-scheme:dark; }
 .scheduled-special-fields,.scheduled-special-rows {display:grid;gap:10px;min-width:0;}
 .scheduled-special-row {display:grid;gap:8px;padding:10px;border:1px solid var(--line);border-radius:8px;}
 #scheduledEditor .scheduled-special-fields input:not([type="checkbox"]) {box-sizing:border-box;width:100%;font:inherit;font-weight:400;color:inherit;border:1px solid var(--line);background:color-mix(in srgb,currentColor 4%,transparent);border-radius:8px;padding:8px;}
+
+.message-group-author{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;min-width:0;margin:0 0 4px;font-size:12px;color:var(--red);font-weight:650;}
+.message-group-author>span{min-width:0;overflow-wrap:anywhere;}
+.message-admin-title{font-size:11px;font-weight:500;color:var(--muted);border:1px solid currentColor;border-radius:5px;padding:1px 5px;}
+.message--outgoing .message-group-author{color:inherit;}
+.message-channel-signature{overflow-wrap:anywhere;min-width:0;}

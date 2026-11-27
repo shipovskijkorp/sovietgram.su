@@ -440,6 +440,16 @@
       </div>
       <div id="communityModerationList" class="community-settings-list"></div>
     </section>
+    <dialog id="communityAdminTitleDialog" class="community-moderation-dialog" aria-labelledby="communityAdminTitleHeading">
+      <form id="communityAdminTitleForm">
+        <header><h2 id="communityAdminTitleHeading">Титул администратора</h2><button type="button" id="communityAdminTitleClose" aria-label="Закрыть">×</button></header>
+        <p id="communityAdminTitleTarget"></p>
+        <label>Титул (до 32 символов)<input id="communityAdminTitleInput" maxlength="32" autocomplete="off" placeholder="Например, Модератор"></label>
+        <p class="micro-copy">Титул отображается в новых сообщениях групп и подписанных публикациях каналов. Пустое поле сбрасывает титул. Права не меняются.</p>
+        <p id="communityAdminTitleError" role="alert" hidden></p>
+        <footer><button type="button" id="communityAdminTitleCancel">Отмена</button><button type="submit" id="communityAdminTitleSubmit">Сохранить</button></footer>
+      </form>
+    </dialog>
     <dialog id="communityModerationDialog" class="community-moderation-dialog" aria-labelledby="communityModerationTitle">
       <form id="communityModerationForm">
         <header><h2 id="communityModerationTitle">Управление участником</h2><button id="communityModerationClose" type="button" aria-label="Закрыть">×</button></header>

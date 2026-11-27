@@ -1,0 +1,20 @@
+
+.community-directory-shell {align-items:flex-start;}
+.community-directory {width:min(720px,100%);max-width:720px;}
+.directory-filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+.directory-query{grid-column:1/-1;}
+.directory-filters label{display:grid;gap:5px;font-size:13px;font-weight:600;}
+.directory-filters input,.directory-filters select{box-sizing:border-box;width:100%;min-width:0;background:var(--panel-strong);color:var(--ink);border:1px solid var(--line);border-radius:8px;font:inherit;padding:10px;}
+.directory-results{display:grid;gap:8px;margin:18px 0;}
+.directory-entry{display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid var(--line);border-radius:12px;}
+.directory-entry-avatar{width:54px;height:54px;border-radius:50%;background:var(--red);color:white;display:grid;place-items:center;overflow:hidden;font-size:16px;font-weight:700;flex:0 0 54px;}
+.directory-entry-avatar img{width:100%;height:100%;object-fit:cover;}
+.directory-entry-copy{flex:1;min-width:0;overflow-wrap:anywhere;}
+.directory-entry-copy strong,.directory-entry-copy small{display:block;}
+.directory-entry-copy small{color:var(--muted);font-size:12px;margin:4px 0;}
+.directory-entry-copy p{font-size:13px;white-space:pre-wrap;margin:8px 0;color:var(--ink);}
+.directory-entry-copy form{margin:0;}
+.directory-action{display:inline-block;margin-top:8px;border:1px solid var(--line);border-radius:8px;padding:7px 14px;color:var(--red);background:transparent;font:inherit;font-weight:600;cursor:pointer;text-decoration:none;}
+.directory-action:hover{background:color-mix(in srgb,var(--red) 8%,transparent);}
+.directory-pagination{display:flex;gap:15px;justify-content:center;align-items:center;font-size:13px;}
+@media(max-width:480px){.directory-entry{padding:9px;gap:8px;}.directory-entry-avatar{width:42px;height:42px;flex-basis:42px;}}
