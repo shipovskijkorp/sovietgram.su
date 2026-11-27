@@ -739,7 +739,6 @@
         <div class="composer__field">
           <textarea id="messageInput" name="text" rows="1" maxlength="4096" placeholder="{% if not can_send_text and can_send_media %}Можно отправлять только медиа{% else %}Сообщение{% endif %}" autocomplete="off"{% if not can_send_text %} readonly{% endif %}>{{ composer_draft_text }}</textarea>
           {% if can_send_sticker %}<button type="button" class="composer-tool-button" data-open-stickers data-sticker-send="true" aria-expanded="false" aria-controls="stickerDialog" title="Стикеры" aria-label="Стикеры"><svg viewBox="0 0 24 24" fill="none"><path d="M4 4h16v10l-6 6H4zM14 20v-6h6M8 8h.01M15 8h.01M8 12c1.5 2 3 2 4 1"/></svg></button>{% endif %}
-          {% if can_record_video_note %}<button type="button" class="composer-tool-button video-note-composer-button" data-open-video-note aria-label="Записать видеокружок" title="Записать видеокружок"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="3"/><path d="m16 10 5-3v10l-5-3"/></svg></button>{% endif %}
           {% if can_send_text %}{% include 'messenger/_composer_tools.html' with editor_id="messageInput" %}
           <button class="composer-tool-button" id="sendOptionsToggle" type="button" aria-expanded="false" aria-controls="sendOptionsMenu" aria-label="Параметры отправки" title="Параметры отправки">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/></svg>
@@ -750,17 +749,21 @@
           </button>
           {% endif %}
         </div>
-        <button class="send-button composer-action-button{% if can_record_voice and not composer_draft_text %} is-voice-mode{% endif %}"
+        <button class="send-button composer-action-button{% if not composer_draft_text %}{% if can_record_voice %} is-voice-mode{% elif can_record_video_note %} is-voice-mode is-video-note-mode{% endif %}{% endif %}"
                 id="sendButton"
-                type="submit"
+                type="{% if not composer_draft_text %}{% if can_record_voice or can_record_video_note %}button{% else %}submit{% endif %}{% else %}submit{% endif %}"
                 data-can-record-voice="{{ can_record_voice|yesno:'true,false' }}"
-                data-composer-action="{% if can_record_voice and not composer_draft_text %}voice{% else %}send{% endif %}"
-                aria-label="{% if can_record_voice and not composer_draft_text %}Записать голосовое сообщение{% else %}Отправить{% endif %}"
-                title="{% if can_record_voice and not composer_draft_text %}Удерживайте для записи{% else %}Отправить{% endif %}">
+                data-can-record-video-note="{{ can_record_video_note|yesno:'true,false' }}"
+                data-composer-action="{% if not composer_draft_text %}{% if can_record_voice %}voice{% elif can_record_video_note %}video_note{% else %}send{% endif %}{% else %}send{% endif %}"
+                aria-label="{% if not composer_draft_text %}{% if can_record_voice %}Записать голосовое сообщение{% elif can_record_video_note %}Записать видеокружок{% else %}Отправить{% endif %}{% else %}Отправить{% endif %}"
+                title="{% if not composer_draft_text %}{% if can_record_voice or can_record_video_note %}Удерживайте для записи{% else %}Отправить{% endif %}{% else %}Отправить{% endif %}">
           <span class="composer-action-button__send tg-native-icon tg-native-icon--send" aria-hidden="true"></span>
           <svg class="composer-action-button__voice" viewBox="0 0 24 24" aria-hidden="true">
             <rect x="9" y="3" width="6" height="11" rx="3"></rect>
             <path d="M6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v4M9 21h6"></path>
+          </svg>
+          <svg class="composer-action-button__video" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="3" y="6" width="13" height="12" rx="3"/><path d="m16 10 5-3v10l-5-3"/>
           </svg>
         </button>
       </form>

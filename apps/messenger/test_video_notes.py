@@ -86,7 +86,9 @@ class VideoNoteTests(TestCase):
         set_privacy_rule(self.bob, "voice_messages", "nobody")
         self.assertEqual(self.send().status_code, 403)
         self.assertNotContains(self.client.get(reverse("messenger:chat", args=[self.chat.pk])),
-                               'class="composer-tool-button video-note-composer-button"')
+                               'data-can-record-video-note="true"')
+        self.assertNotContains(self.client.get(reverse("messenger:chat", args=[self.chat.pk])),
+                               'data-open-video-note')
         group = Chat.objects.create(type=Chat.Type.GROUP, title="Video only", members_allowed_media=["video"])
         ChatParticipant.objects.create(chat=group, user=self.alice)
         ChatParticipant.objects.create(chat=group, user=self.bob, role="owner")

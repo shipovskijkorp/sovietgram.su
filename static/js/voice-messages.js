@@ -678,28 +678,48 @@
     if (event.key === "Escape" && settingsPopup && !settingsPopup.hidden) closeSettings();
   });
 
+  const modeKey = "sovietgram.recordMode.v1." + (document.body?.dataset.accountId || "default");
+  let preferredMode = "voice", gesture = null;
+  try { if (localStorage.getItem(modeKey) === "video_note") preferredMode = "video_note"; } catch (_) {}
+
   function isVoiceMode() {
     return composerActionButton?.dataset.composerAction === "voice";
   }
-
+  function canVoice() {
+    return composerActionButton?.dataset.canRecordVoice === "true" && conversation?.dataset.canRecordVoice !== "false";
+  }
+  function canVideo() {
+    return composerActionButton?.dataset.canRecordVideoNote === "true";
+  }
   function syncComposerActions() {
-    if (!form || !composerActionButton) return;
-    if (recordSession) return;
-
+    if (!form || !composerActionButton || recordSession || gesture || window.SovietgramVideoNotes?.isOpen()) return;
     const hasText = Boolean(messageInput?.value.trim());
-    const canRecord = (
-      composerActionButton.dataset.canRecordVoice === "true"
-      && conversation?.dataset.canRecordVoice !== "false"
-    );
-    const voiceMode = canRecord && !hasText;
-
-    composerActionButton.dataset.composerAction = voiceMode ? "voice" : "send";
-    composerActionButton.classList.toggle("is-voice-mode", voiceMode);
-    composerActionButton.setAttribute(
-      "aria-label",
-      voiceMode ? "Записать голосовое сообщение" : "Отправить",
-    );
-    composerActionButton.title = voiceMode ? "Удерживайте для записи" : "Отправить";
+    let mode = "send";
+    if (!hasText) {
+      if (preferredMode === "video_note" && canVideo()) mode = "video_note";
+      else if (canVoice()) mode = "voice";
+      else if (canVideo()) mode = "video_note";
+    }
+    const recording = mode !== "send";
+    composerActionButton.dataset.composerAction = mode;
+    // Keep the shared idle recorder styling (including responsive palettes).
+    composerActionButton.classList.toggle("is-voice-mode", recording);
+    composerActionButton.classList.toggle("is-video-note-mode", mode === "video_note");
+    composerActionButton.type = recording ? "button" : "submit";
+    composerActionButton.setAttribute("aria-label", mode === "voice" ? "Записать голосовое сообщение" :
+      mode === "video_note" ? "Записать видеокружок" : "Отправить");
+    composerActionButton.title = recording ? (canVoice() && canVideo() ?
+      "Нажмите для смены режима, удерживайте для записи" : "Удерживайте для записи") : "Отправить";
+  }
+  function tapRecorder() {
+    if (recordSession || pendingVoiceData || window.SovietgramVideoNotes?.isOpen()) return;
+    if (canVoice() && canVideo()) {
+      preferredMode = isVoiceMode() ? "video_note" : "voice";
+      try { localStorage.setItem(modeKey, preferredMode); } catch (_) {}
+      syncComposerActions();
+      notify(preferredMode === "video_note" ? "Видеокружок · удерживайте для записи" : "Голосовое · удерживайте для записи");
+    } else if (canVideo()) window.SovietgramVideoNotes?.openPreview();
+    else notify("Удерживайте кнопку для записи голосового сообщения.");
   }
 
   messageInput?.addEventListener("input", syncComposerActions);
@@ -992,11 +1012,13 @@
       startX: pointerEvent.clientX,
       startY: pointerEvent.clientY,
       released: false,
+      locked: false,
     };
 
     recordButton.classList.add("is-arming");
+    let stream = null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
+      stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
@@ -1031,7 +1053,7 @@
         pointerId: pendingPointer.pointerId,
         startX: pendingPointer.startX,
         startY: pendingPointer.startY,
-        locked: false,
+        locked: pendingPointer.locked,
         stopping: false,
         sending: false,
         stopAction: "",
@@ -1075,6 +1097,8 @@
       setRecordingUi(session);
       drawRecordingWaveform(session);
     } catch (error) {
+      stream?.getTracks().forEach(track => track.stop());
+      if (recordSession?.stream === stream) { stopTracks(recordSession); recordSession = null; clearRecordingUi(); }
       const name = error?.name || "";
       if (name === "NotAllowedError" || name === "SecurityError") {
         notify("Разрешите Sovietgram доступ к микрофону в настройках браузера.");
@@ -1085,73 +1109,91 @@
       }
     } finally {
       recordButton.classList.remove("is-arming");
-      if (pendingPointer?.token === token && pendingPointer.released) pendingPointer = null;
+      if (pendingPointer?.token === token) pendingPointer = null;
     }
   }
 
-  recordButton?.addEventListener("pointerdown", (event) => {
-    if (!isVoiceMode()) return;
-    if (event.button !== 0 && event.pointerType === "mouse") return;
+  // One gesture controller owns the composer microphone/camera button.
+  // A short tap changes mode; no media permission is requested until hold.
+  recordButton?.addEventListener("pointerdown", event => {
+    const mode = recordButton.dataset.composerAction;
+    if (mode === "send" || gesture || recordSession || pendingPointer || pendingVoiceData ||
+        window.SovietgramVideoNotes?.isOpen() || !event.isPrimary ||
+        (event.pointerType === "mouse" && event.button !== 0)) return;
     event.preventDefault();
-    try {
-      recordButton.setPointerCapture(event.pointerId);
-    } catch (_error) {
-      // Pointer capture is best effort.
+    const g = {mode, pointerId:event.pointerId, clientX:event.clientX, clientY:event.clientY,
+      started:false, locked:false, canceled:false, timer:0};
+    gesture = g;
+    try { recordButton.setPointerCapture(event.pointerId); } catch (_) {}
+    g.timer = window.setTimeout(() => {
+      if (gesture !== g || g.canceled) return;
+      g.started = true;
+      if (g.mode === "video_note") {
+        if (!window.SovietgramVideoNotes?.startHold()) g.canceled = true;
+      } else void startRecording(g);
+    }, 240);
+  });
+
+  recordButton?.addEventListener("click", event => {
+    if (recordButton.dataset.composerAction === "send" && !gesture) return;
+    event.preventDefault();
+    // Keyboard or assistive activation can select a mode without a pointer.
+    // The attachment menu remains a keyboard-friendly video preview path.
+    if (event.detail === 0 && !gesture) tapRecorder();
+  });
+  recordButton?.addEventListener("contextmenu", event => {
+    if (recordButton.dataset.composerAction !== "send") event.preventDefault();
+  });
+
+  function stopGesture(event, canceled = false) {
+    const g = gesture;
+    if (!g || g.pointerId !== event.pointerId) return;
+    gesture = null; window.clearTimeout(g.timer);
+    if (!g.started && !g.canceled && !canceled) { tapRecorder(); return; }
+    if (g.started && g.mode === "video_note") {
+      if (canceled || g.canceled) window.SovietgramVideoNotes?.cancelHold();
+      else if (!g.locked) window.SovietgramVideoNotes?.releaseHold();
+    } else if (g.started) {
+      if (pendingPointer?.pointerId === g.pointerId && !g.locked) pendingPointer.released = true;
+      const session = recordSession;
+      if (session?.pointerId === g.pointerId && !session.locked && !session.stopping)
+        requestStop(session, canceled || g.canceled ? "cancel" : "send");
     }
-    startRecording(event);
-  });
-
-  recordButton?.addEventListener("click", (event) => {
-    // The composer has one physical action button. In voice mode its pointer
-    // gesture belongs to the recorder and must not submit the text form.
-    if (!isVoiceMode()) return;
-    event.preventDefault();
-  });
-
-  recordButton?.addEventListener("pointermove", (event) => {
-    const session = recordSession;
-    if (!session || session.pointerId !== event.pointerId || session.locked || session.stopping) return;
-
-    const dx = event.clientX - session.startX;
-    const dy = event.clientY - session.startY;
-    const cancelProgress = Math.max(0, Math.min(1, -dx / CANCEL_DISTANCE));
-    const lockProgress = Math.max(0, Math.min(1, -dy / LOCK_DISTANCE));
-    recordBar?.style.setProperty("--voice-cancel-progress", String(cancelProgress));
-    recordBar?.style.setProperty("--voice-lock-progress", String(lockProgress));
-
-    if (dx <= -CANCEL_DISTANCE) {
-      recordBar?.classList.add("is-cancelling");
-      requestStop(session, "cancel");
+    syncComposerActions();
+  }
+  document.addEventListener("pointermove", event => {
+    const g = gesture;
+    if (!g || g.pointerId !== event.pointerId || g.locked || g.canceled) return;
+    const dx = event.clientX - g.clientX, dy = event.clientY - g.clientY;
+    if (!g.started) {
+      if (Math.abs(dx) > 24 || Math.abs(dy) > 24) { g.canceled = true; window.clearTimeout(g.timer); }
       return;
     }
-    if (dy <= -LOCK_DISTANCE) {
-      session.locked = true;
-      setRecordingUi(session);
-      try {
-        recordButton.releasePointerCapture(event.pointerId);
-      } catch (_error) {
-        // Ignore.
+    const cancelProgress = Math.max(0, Math.min(1, -dx / CANCEL_DISTANCE));
+    const lockProgress = Math.max(0, Math.min(1, -dy / LOCK_DISTANCE));
+    if (g.mode === "video_note") window.SovietgramVideoNotes?.moveHold(cancelProgress, lockProgress);
+    else {
+      recordBar?.style.setProperty("--voice-cancel-progress", String(cancelProgress));
+      recordBar?.style.setProperty("--voice-lock-progress", String(lockProgress));
+    }
+    if (dx <= -CANCEL_DISTANCE && -dx >= -dy) {
+      g.canceled = true;
+      if (g.mode === "video_note") window.SovietgramVideoNotes?.cancelHold();
+      else {
+        if (pendingPointer?.pointerId === g.pointerId) pendingPointer.released = true;
+        if (recordSession?.pointerId === g.pointerId) requestStop(recordSession,"cancel");
+      }
+    } else if (dy <= -LOCK_DISTANCE) {
+      g.locked = true;
+      if (g.mode === "video_note") window.SovietgramVideoNotes?.lockHold();
+      else {
+        if (pendingPointer?.pointerId === g.pointerId) pendingPointer.locked = true;
+        if (recordSession?.pointerId === g.pointerId) { recordSession.locked = true; setRecordingUi(recordSession); }
       }
     }
-  });
-
-  recordButton?.addEventListener("pointerup", (event) => {
-    if (pendingPointer?.pointerId === event.pointerId) {
-      pendingPointer.released = true;
-    }
-    const session = recordSession;
-    if (!session || session.pointerId !== event.pointerId || session.locked || session.stopping) return;
-    event.preventDefault();
-    requestStop(session, "send");
-  });
-
-  recordButton?.addEventListener("pointercancel", (event) => {
-    if (pendingPointer?.pointerId === event.pointerId) pendingPointer.released = true;
-    const session = recordSession;
-    if (session && session.pointerId === event.pointerId && !session.locked) {
-      requestStop(session, "cancel");
-    }
-  });
+  }, true);
+  document.addEventListener("pointerup", event => stopGesture(event), true);
+  document.addEventListener("pointercancel", event => stopGesture(event,true), true);
 
   recordDelete?.addEventListener("click", () => {
     if (recordSession && !recordSession.sending) requestStop(recordSession, "cancel");
@@ -1160,13 +1202,18 @@
     if (recordSession && !recordSession.sending) requestStop(recordSession, "send");
   });
 
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && gesture) stopGesture({pointerId:gesture.pointerId},true);
+  });
   window.addEventListener("beforeunload", () => {
     if (recordSession && !recordSession.stopping) requestStop(recordSession, "cancel");
   });
 
   window.SovietgramVoice = {
     hydrate: hydrateTree,
-    isRecording: () => Boolean(recordSession || (pendingPointer && !pendingPointer.released)),
+    syncComposerActions,
+    isRecording: () => Boolean(recordSession || (pendingPointer && !pendingPointer.released) ||
+      (gesture?.started && gesture.mode === "voice" && !gesture.canceled)),
     get speed() { return voiceSpeed; },
     get volume() { return voiceVolume; },
     get autoplayNext() { return autoplayNext; },

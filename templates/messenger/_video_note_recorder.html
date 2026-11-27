@@ -1,14 +1,38 @@
 <dialog class="video-note-dialog" id="videoNoteDialog" aria-labelledby="videoNoteTitle">
-  <header class="video-note-dialog__header"><strong id="videoNoteTitle">Видеокружок</strong>
-    <button type="button" id="videoNoteClose" aria-label="Закрыть">×</button></header>
-  <div class="video-note-dialog__preview"><video id="videoNotePreview" playsinline muted></video><span id="videoNoteClock" hidden>0:00 / 1:00</span></div>
-  <p id="videoNoteStatus" role="status">Подготовка камеры…</p>
-  <div class="video-note-dialog__actions">
-    <button type="button" id="videoNoteCamera">Сменить камеру</button>
-    <button type="button" id="videoNoteStart" class="video-note-primary" disabled>Записать</button>
-    <button type="button" id="videoNoteStop" class="video-note-primary" hidden>Остановить</button>
-    <button type="button" id="videoNoteRetake" hidden>Перезаписать</button>
-    <button type="button" id="videoNoteSend" class="video-note-primary" hidden>Отправить</button>
+  <div class="video-note-dialog__panel">
+    <strong id="videoNoteTitle" class="visually-hidden">Видеокружок</strong>
+    <div class="video-note-dialog__preview">
+      <video id="videoNotePreview" playsinline muted></video>
+      <span id="videoNoteClock" hidden><i></i><time id="videoNoteElapsed">0:00</time> / 1:00</span>
+      <button type="button" id="videoNoteCamera" aria-label="Сменить камеру" title="Сменить камеру">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 7h12l2 3v8H4v-8l2-3Z"/><circle cx="12" cy="12" r="3"/><path d="M8 3h7l-2-2m3 2-3 3"/></svg>
+      </button>
+    </div>
+    <p id="videoNoteStatus" role="status">Подготовка камеры…</p>
   </div>
-  <label class="video-note-dialog__silent" id="videoNoteSilentRow" hidden><input type="checkbox" id="videoNoteSilent"> Без звука уведомления</label>
+  <div class="video-note-dialog__bottom">
+    <div id="videoNoteGesture" class="video-note-gesture" hidden>
+      <span class="video-note-gesture__dot"></span>
+      <span id="videoNoteGestureHint">‹ Сдвиньте влево для отмены</span>
+      <span class="video-note-gesture__lock" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m8 7 4-4 4 4M8 13v-2a4 4 0 0 1 8 0v2"/><rect x="6" y="13" width="12" height="9" rx="2"/></svg><small>Вверх</small></span>
+    </div>
+    <div class="video-note-dialog__actions" id="videoNoteActions">
+      <button type="button" id="videoNoteClose" aria-label="Отменить видеозапись" title="Отменить">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 6h16M9 6V3h6v3m3 0-1 15H7L6 6M10 10v7m4-7v7"/></svg>
+      </button>
+      <button type="button" id="videoNoteStart" class="video-note-primary" aria-label="Начать запись" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="currentColor"/></svg>
+      </button>
+      <button type="button" id="videoNoteStop" aria-label="Остановить запись" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>
+      </button>
+      <button type="button" id="videoNoteRetake" aria-label="Перезаписать" title="Перезаписать" hidden>
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 10a8 8 0 1 1 2 8M4 4v6h6"/></svg>
+      </button>
+      <button type="button" id="videoNoteSend" class="video-note-primary" aria-label="Отправить" hidden>
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3 4 19 8-19 8 3-8-3-8Zm3 8h16"/></svg>
+      </button>
+    </div>
+    <label class="video-note-dialog__silent" id="videoNoteSilentRow" hidden><input type="checkbox" id="videoNoteSilent"> Без звука уведомления</label>
+  </div>
 </dialog>

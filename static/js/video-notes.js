@@ -117,19 +117,27 @@
   const silent=$("videoNoteSilent"), silentRow=$("videoNoteSilentRow");
   const MAX_MS=60000, MIN_MS=200, MAX_BYTES=25*1024*1024;
   let state="idle", generation=0, facing="user", source=null, session=null, pending=null, objectUrl="";
-  let cameraNote="";
+  let holdMode=false, holdLocked=false;
+  const gestureBar=$("videoNoteGesture"), gestureHint=$("videoNoteGestureHint"), actions=$("videoNoteActions");
+  const elapsed=$("videoNoteElapsed");
   const stopTracks=stream=>stream?.getTracks?.().forEach(track=>track.stop());
   function ui(next,message="") {
     state=next; status.textContent=message;
+    dialog.dataset.recordState=next;
+    const holding=holdMode && !holdLocked && ["opening","ready","recording"].includes(next);
+    dialog.classList.toggle("is-holding",holding);
+    dialog.classList.toggle("is-locked",holdLocked);
+    gestureBar.hidden=!holding;
+    actions.hidden=holding;
     start.hidden=!["ready","opening","error"].includes(next);
     start.disabled=next!=="ready";
-    camera.hidden=!["ready","opening","error"].includes(next);
+    camera.hidden=holding || !["ready","opening","error"].includes(next);
     camera.disabled=next==="opening";
     stop.hidden=next!=="recording";
     retake.hidden=!["review","sending"].includes(next);
     send.hidden=!["review","sending"].includes(next);
     send.disabled=retake.disabled=close.disabled=silent.disabled=next==="sending"||next==="stopping";
-    send.textContent=next==="sending"?"Отправка…":"Отправить";
+    send.setAttribute("aria-label",next==="sending"?"Отправка…":"Отправить");
     silentRow.hidden=!["review","sending"].includes(next);
     clock.hidden=!["recording","stopping"].includes(next);
   }
@@ -147,6 +155,9 @@
   }
   function cancel() {
     generation++;
+    holdMode=false;holdLocked=false;
+    dialog.style.removeProperty("--note-cancel-progress");
+    dialog.style.removeProperty("--note-lock-progress");
     const current=session; session=null;
     if(current && current.recorder.state!=="inactive") { try{current.recorder.stop();}catch(_){} }
     releaseRecording(current); stopTracks(source);source=null;pending=null;
@@ -174,8 +185,8 @@
         if(state==="recording")finish();
         else if(state==="ready"){stopTracks(source);source=null;clearPreview();ui("error","Камера отключилась. Смените камеру или откройте запись заново.");}
       });
-      cameraNote="До 60 секунд. Перед отправкой можно посмотреть запись.";
-      ui("ready",cameraNote);
+      ui("ready","До 60 секунд. Перед отправкой можно посмотреть запись.");
+      if(holdMode) begin();
     } catch(error) {
       if(token!==generation)return;
       stopTracks(source);source=null;clearPreview();
@@ -186,9 +197,10 @@
     return ["video/mp4;codecs=avc1.42E01E,mp4a.40.2","video/mp4","video/webm;codecs=vp8,opus","video/webm;codecs=vp9,opus","video/webm"].find(type=>
       typeof MediaRecorder.isTypeSupported==="function"&&MediaRecorder.isTypeSupported(type)) || "";
   }
-  function finish() {
+  function finish(sendImmediately=false) {
     const current=session;
     if(!current||state!=="recording")return;
+    current.autoSend=sendImmediately===true;
     current.duration=Math.min(MAX_MS,Math.max(0,Math.round(performance.now()-current.started)));
     clearInterval(current.timer);clearTimeout(current.deadline);
     ui("stopping","Подготовка записи…");
@@ -259,12 +271,13 @@
       objectUrl=URL.createObjectURL(blob);preview.src=objectUrl;preview.controls=true;preview.muted=false;
       silent.checked=false;
       ui("review","Просмотрите кружок или отправьте его.");
+      if(current.autoSend) void upload();
     },{once:true});
     try{
       recorder.start(250);current.started=performance.now();
-      clock.textContent="0:00 / 1:00";ui("recording",canvas?"Идёт запись…":"Идёт запись… (кадр камеры отображается круглым)");
-      current.timer=setInterval(()=>{clock.textContent=time(Math.min(MAX_MS,performance.now()-current.started)/1000)+" / 1:00";},100);
-      current.deadline=setTimeout(finish,MAX_MS);
+      elapsed.textContent="0:00";ui("recording",holdLocked?"Запись зафиксирована":"Идёт запись…");
+      current.timer=setInterval(()=>{elapsed.textContent=time(Math.min(MAX_MS,performance.now()-current.started)/1000);},100);
+      current.deadline=setTimeout(()=>finish(false),MAX_MS);
     }catch(_){cancel();ui("error","Не удалось начать запись.");}
   }
   async function upload() {
@@ -303,23 +316,54 @@
       silent.disabled=true;
     }
   }
-  document.addEventListener("click",event=>{
-    const opener=event.target.closest?.("[data-open-video-note]");
-    if(!opener||dialog.open)return;
-    event.preventDefault();
+  function openRecorder(held=false) {
+    if(dialog.open)return false;
     if(window.SovietgramVoice?.isRecording?.() || ($("voiceRecordingBar") && !$("voiceRecordingBar").hidden)){
-      notify("Сначала завершите голосовую запись.");return;
+      notify("Сначала завершите голосовую запись.");return false;
     }
-    const menu=$("attachmentMenu");if(menu&&!menu.hidden)$("attachmentButton")?.click();
-    facing="user";dialog.showModal();void openCamera();
+    holdMode=held;holdLocked=false;facing="user";
+    gestureHint.textContent="‹ Сдвиньте влево для отмены";
+    // A non-modal overlay during a held pointer preserves its capture on
+    // the composer button. The overlay still intercepts unrelated clicks.
+    if(held) dialog.show(); else dialog.showModal();
+    void openCamera();return true;
+  }
+  Object.assign(window.SovietgramVideoNotes,{
+    openPreview:()=>openRecorder(false),
+    startHold:()=>openRecorder(true),
+    moveHold:(cancelProgress,lockProgress)=>{
+      if(!holdMode||holdLocked||!dialog.open)return;
+      dialog.style.setProperty("--note-cancel-progress",String(cancelProgress));
+      dialog.style.setProperty("--note-lock-progress",String(lockProgress));
+      gestureHint.textContent=cancelProgress>.5?"Отмена записи":lockProgress>.5?"Фиксация записи":"‹ Сдвиньте влево для отмены";
+    },
+    lockHold:()=>{
+      if(!holdMode||!dialog.open)return;
+      holdLocked=true;ui(state,"Запись зафиксирована");
+    },
+    cancelHold:()=>{if(holdMode && dialog.open && state!=="sending")shut();},
+    releaseHold:()=>{
+      if(!holdMode||holdLocked||!dialog.open)return;
+      if(state==="recording")finish(true);
+      else if(["opening","ready"].includes(state)){
+        shut();notify("Камера ещё не готова. Удерживайте кнопку до начала записи.");
+      }
+    },
   });
-  start.addEventListener("click",begin);stop.addEventListener("click",finish);
+  document.addEventListener("click",event=>{
+    if(!event.target.closest?.("[data-open-video-note]")||dialog.open)return;
+    event.preventDefault();
+    const menu=$("attachmentMenu");if(menu&&!menu.hidden)$("attachmentButton")?.click();
+    openRecorder(false);
+  });
+  start.addEventListener("click",begin);stop.addEventListener("click",()=>finish(false));
   close.addEventListener("click",shut);
-  camera.addEventListener("click",()=>{if(state!=="opening"){facing=facing==="user"?"environment":"user";void openCamera();}});
-  retake.addEventListener("click",()=>{if(state==="review"&&window.confirm("Удалить текущую запись и записать новую?"))void openCamera();});
+  camera.addEventListener("click",()=>{if(state!=="opening"){holdMode=false;holdLocked=false;facing=facing==="user"?"environment":"user";void openCamera();}});
+  retake.addEventListener("click",()=>{if(state==="review"&&window.confirm("Удалить текущую запись и записать новую?")){holdMode=false;holdLocked=false;void openCamera();}});
   send.addEventListener("click",upload);
   dialog.addEventListener("cancel",event=>{event.preventDefault();if(state!=="sending")shut();});
-  dialog.addEventListener("close",()=>{if(state!=="idle")cancel();});
+  dialog.addEventListener("close",()=>{if(state!=="idle")cancel();window.SovietgramVoice?.syncComposerActions?.();});
+  document.addEventListener("keydown",event=>{if(event.key==="Escape"&&dialog.open&&state!=="sending"){event.preventDefault();shut();}});
   document.addEventListener("visibilitychange",()=>{
     if(!document.hidden)return;
     if(state==="recording")finish();
