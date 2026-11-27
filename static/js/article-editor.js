@@ -827,7 +827,9 @@
     if (newArticle) {
       articleSendKeys.clear();
       editState = null;
-      window.setTimeout(() => configureEditor(null, null), 0);
+      // The attachment button target listener already reset/opened the panel.
+      // A deferred reset could overwrite input entered immediately afterwards.
+      configureEditor(null, null);
       return;
     }
 

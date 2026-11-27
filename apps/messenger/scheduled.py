@@ -178,6 +178,8 @@ def _serialize(item):
         "text": item.text,
         "display_text": item.special_data.get("title", item.text) if item.special_type == Message.SpecialType.ARTICLE else item.text,
         "special_type": item.special_type,
+        # Only the sender can list or mutate this private outbox.
+        "special_data": item.special_data if item.status in ACTIVE and item.special_type else {},
         "attachment_type": "sticker" if item.sticker_source_id is not None else "",
         "silent": item.silent,
         "reply_to": item.reply_message_id,
@@ -359,27 +361,35 @@ def scheduled_action(request, chat_id, scheduled_id):
                 item.save(update_fields=["status", "text", "special_type", "special_data", "sticker_source_id",
                     "sticker_image", "reply_message_id", "reply_quote", "error", "revision", "updated_at"])
             elif action == "edit":
-                # Structured content is immutable in the outbox editor.
-                # Its author can reschedule, change silence or remove a reply.
+                # Keep the attachment kind fixed. Old clients may still edit only
+                # timing; a supplied payload must pass the same validator as creation.
+                special_data = item.special_data
+                special_text = item.text if item.special_type or item.sticker_source_id is not None else None
+                if "payload" in request.POST or "special_type" in request.POST:
+                    if not item.special_type or request.POST.get("special_type") != item.special_type or "payload" not in request.POST:
+                        raise OutboxError("Нельзя менять тип отложенного вложения.")
+                    _, special_data, special_text = _special_fields(request.POST)
+                if request.FILES or request.POST.get("sticker_id"):
+                    raise OutboxError("Замена файла или стикера пока не поддерживается.")
                 text, when, silent, _ = _fields(request.POST, include_reply=False,
-                    special_text=item.text if item.special_type or item.sticker_source_id is not None else None,
-                    allow_empty=item.sticker_source_id is not None)
+                    special_text=special_text, allow_empty=item.sticker_source_id is not None)
                 _future(when, timezone.now())
                 reply_id = None if request.POST.get("remove_reply") == "1" else item.reply_message_id
                 reply = _validate(chat, sender, text, reply_id, check_slow_mode=False,
-                    special_type=item.special_type, special_data=item.special_data,
+                    special_type=item.special_type, special_data=special_data,
                     has_sticker=item.sticker_source_id is not None)
                 if reply_id is None:
                     item.reply_quote = ""
                 elif item.reply_quote and (chat.protect_content or not resolve_quote(reply, item.reply_quote)):
                     raise OutboxError("Цитата больше недоступна. Уберите ответ.", 409)
                 item.text, item.silent, item.reply_message_id = text, silent, reply_id
+                item.special_data = special_data
                 item.scheduled_for = item.next_attempt_at = when
                 item.status = ScheduledMessage.Status.PENDING
                 item.error = ""
                 item.revision += 1
                 item.save(update_fields=[
-                    "text", "silent", "reply_message_id", "reply_quote", "scheduled_for", "next_attempt_at",
+                    "text", "special_data", "silent", "reply_message_id", "reply_quote", "scheduled_for", "next_attempt_at",
                     "status", "error", "revision", "updated_at",
                 ])
             else:

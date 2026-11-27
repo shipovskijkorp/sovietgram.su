@@ -1787,3 +1787,7 @@ body[data-theme="dark"] .chat-history-date input { color-scheme:dark; }
   .history-jump-latest { right:max(10px,env(safe-area-inset-right)); bottom:10px; }
   .pinned-message-list-button { width:40px; height:40px; }
 }
+
+.scheduled-special-fields,.scheduled-special-rows {display:grid;gap:10px;min-width:0;}
+.scheduled-special-row {display:grid;gap:8px;padding:10px;border:1px solid var(--line);border-radius:8px;}
+#scheduledEditor .scheduled-special-fields input:not([type="checkbox"]) {box-sizing:border-box;width:100%;font:inherit;font-weight:400;color:inherit;border:1px solid var(--line);background:color-mix(in srgb,currentColor 4%,transparent);border-radius:8px;padding:8px;}

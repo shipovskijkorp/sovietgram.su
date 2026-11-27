@@ -24,6 +24,8 @@
   const $ = id => document.getElementById(id);
   const editor = $("scheduledEditor"), listPane = $("scheduledListPane"), list = $("scheduledList");
   const text = $("scheduledText"), date = $("scheduledDate"), silent = $("scheduledSilent");
+  const specialFields = $("scheduledSpecialFields"), textRow = $("scheduledTextRow");
+  let collectSpecial = null;
   const removeReply = $("scheduledRemoveReply"), replyRow = $("scheduledReplyRow");
   const errorNode = $("scheduledError"), title = $("scheduledTitle");
   const close = $("scheduledClose"), save = $("scheduledSave"), back = $("scheduledBack");
@@ -85,7 +87,8 @@
   function setBusy(value) {
     busy = value;
     close.disabled = save.disabled = back.disabled = value;
-    for (const node of editor.querySelectorAll("input,textarea")) node.disabled = value;
+    for (const node of editor.querySelectorAll("input,textarea,select,button")) node.disabled = value;
+    if (!value) updateSpecialControls?.();
     for (const node of listPane.querySelectorAll("button")) node.disabled = value;
   }
   async function request(endpoint, fields = null, keyed = false) {
@@ -153,9 +156,92 @@
     } catch(e) { if (version===listVersion && dialog.open && !listPane.hidden) error(e.message); }
   }
   function showList() {
-    ++listVersion; editing=original=stickerDraft=null;
+    ++listVersion; editing=original=stickerDraft=null;collectSpecial=null;updateSpecialControls=null;
     editor.hidden=true; listPane.hidden=false; title.textContent="Отложенные сообщения"; error();
     open(); void loadList();
+  }
+  let updateSpecialControls = null;
+  function showSpecialFields(item){
+    collectSpecial=null;updateSpecialControls=null;
+    specialFields.replaceChildren();specialFields.hidden=true;textRow.hidden=false;text.required=true;
+    const type=item?.special_type, data=item?.special_data;
+    if(!data||!["article","poll","todo","location"].includes(type))return;
+    specialFields.hidden=false;textRow.hidden=true;text.required=false;
+    const add=(parent,label,kind,value,max=null)=>{
+      const row=document.createElement("label"), field=document.createElement(kind==="textarea"?"textarea":"input");
+      if(kind!=="textarea")field.type=kind;
+      if(kind==="checkbox"){field.checked=Boolean(value);row.className="scheduled-checkbox";row.append(field," "+label);}
+      else{field.value=value??"";if(max!==null)field.maxLength=max;row.append(label,field);}
+      parent.append(row);return field;
+    };
+    if(type==="article"){
+      const heading=add(specialFields,"Заголовок","text",data.title,200);
+      const subtitle=add(specialFields,"Подзаголовок","text",data.subtitle,300);
+      const body=add(specialFields,"Текст статьи (Markdown)","textarea",data.body,40000);
+      heading.required=body.required=true;body.rows=10;
+      collectSpecial=()=>({title:heading.value,subtitle:subtitle.value,body:body.value});
+    }else if(type==="location"){
+      const label=add(specialFields,"Название","text",data.label,120);
+      const lat=add(specialFields,"Широта","number",data.latitude),lon=add(specialFields,"Долгота","number",data.longitude);
+      lat.min=-90;lat.max=90;lon.min=-180;lon.max=180;lat.step=lon.step="any";lat.required=lon.required=true;
+      collectSpecial=()=>({label:label.value,latitude:lat.value,longitude:lon.value});
+    }else{
+      const poll=type==="poll";
+      const heading=add(specialFields,poll?"Вопрос":"Название списка","text",poll?data.question:data.title,255);
+      heading.required=true;
+      const anonymous=add(specialFields,poll?"Анонимный опрос":"Участники могут добавлять задачи","checkbox",poll?data.anonymous:data.allow_others_add);
+      const multiple=add(specialFields,poll?"Несколько ответов":"Участники могут отмечать задачи","checkbox",poll?data.multiple:data.allow_others_mark);
+      const quiz=poll?add(specialFields,"Викторина","checkbox",data.quiz):null;
+      const explanation=poll?add(specialFields,"Пояснение к ответу","textarea",data.explanation,500):null;
+      const rows=document.createElement("div");rows.className="scheduled-special-rows";specialFields.append(rows);
+      const entries=[];
+      const min=poll?2:1, max=poll?10:30;
+      const addButton=makeButton(poll?"Добавить вариант":"Добавить задачу","add-row",()=>{if(entries.length<max)addEntry({});});
+      specialFields.append(addButton);
+      function refresh(){
+        addButton.disabled=entries.length>=max;
+        if(poll){
+          multiple.disabled=quiz.checked;if(quiz.checked)multiple.checked=false;
+          explanation.parentElement.hidden=!quiz.checked;
+        }
+        entries.forEach(entry=>{
+          entry.remove.disabled=entries.length<=min;
+          if(poll)entry.correct.parentElement.hidden=!quiz.checked;
+        });
+      }
+      function addEntry(value,correct=false){
+        const row=document.createElement("div");row.className="scheduled-special-row";rows.append(row);
+        const field=add(row,poll?"Вариант":"Задача","text",value.text,poll?100:160);
+        field.required=true;
+        const entry={row,field};
+        if(poll){
+          entry.correct=add(row,"Правильный ответ","checkbox",correct);
+          entry.correct.addEventListener("change",()=>{if(entry.correct.checked)entries.forEach(other=>{if(other!==entry)other.correct.checked=false;});});
+        }else entry.due=add(row,"Срок","date",value.due_date||"");
+        entry.remove=makeButton("Удалить","remove-row",()=>{
+          if(entries.length<=min)return;
+          entries.splice(entries.indexOf(entry),1);row.remove();refresh();
+        });
+        row.append(entry.remove);entries.push(entry);refresh();
+      }
+      const initial=poll?data.options:data.tasks;
+      (initial||[]).forEach((value,i)=>addEntry(value,poll&&i===data.correct_option));
+      while(entries.length<min)addEntry({});
+      quiz?.addEventListener("change",refresh);updateSpecialControls=refresh;refresh();
+      collectSpecial=()=>{
+        if(poll){
+          const options=entries.map(e=>e.field.value.trim());
+          if(options.some(v=>!v)||new Set(options.map(v=>v.toLocaleLowerCase())).size!==options.length)
+            throw Error("Варианты ответа должны быть непустыми и различаться.");
+          const index=entries.findIndex(e=>e.correct.checked);
+          if(quiz.checked&&index<0)throw Error("Выберите правильный ответ викторины.");
+          return {question:heading.value,options,anonymous:anonymous.checked,multiple:multiple.checked,
+                  quiz:quiz.checked,correct_option:quiz.checked?index:null,explanation:explanation.value};
+        }
+        return {title:heading.value,tasks:entries.map(e=>({text:e.field.value,due_date:e.due.value})),
+                allow_others_add:anonymous.checked,allow_others_mark:multiple.checked};
+      };
+    }
   }
   function openEditor(item = null, sticker = null) {
     if (busy) return;
@@ -164,6 +250,7 @@
     const stickerMode = Boolean(stickerDraft || item?.attachment_type === "sticker");
     text.value=stickerMode ? "Стикер" : item ? (item.display_text || item.text) : original.text;
     text.readOnly=Boolean(item?.special_type || stickerMode);
+    showSpecialFields(item);
     const minimum = localDateValue(Date.now()+60000);
     date.min=minimum; date.max=localDateValue(Date.now()+365*86400000-60000);
     date.value=item && new Date(item.scheduled_for).getTime()>Date.now()+60000 ? localDateValue(item.scheduled_for) : localDateValue(Date.now()+300000);
@@ -172,7 +259,7 @@
     listPane.hidden=true; editor.hidden=false;
     title.textContent=item?"Изменить отложенное сообщение":stickerDraft?"Запланировать стикер":"Отправить позже";
     save.textContent=item?"Сохранить":"Запланировать";
-    error();open();(text.readOnly ? date : text).focus();
+    error();open();(collectSpecial ? specialFields.querySelector("input,textarea") : text.readOnly ? date : text)?.focus();
   }
   window.SovietgramSchedule.openSticker = item => {
     if (!item || !/^\d+$/.test(String(item.id)) || busy) return false;
@@ -195,10 +282,11 @@
   editor.addEventListener("submit",async event=>{
     event.preventDefault();if(busy)return;
     error();
-    let when;
+    let when, specialPayload;
     try {
       when=toScheduledISO(date.value);
-      if (!text.value.trim()) throw new Error("Введите текст сообщения.");
+      if (collectSpecial) specialPayload=collectSpecial();
+      else if (!text.value.trim()) throw new Error("Введите текст сообщения.");
     } catch(e) {error(e.message);return;}
     setBusy(true);
     try {
@@ -206,6 +294,7 @@
       const fields={text:isSticker?"":text.value,scheduled_for:when,silent:silent.checked?"1":"0"};
       if (editing) {
         Object.assign(fields,{action:"edit",revision:editing.revision,remove_reply:removeReply.checked?"1":"0"});
+        if (specialPayload) Object.assign(fields,{special_type:editing.special_type,payload:JSON.stringify(specialPayload)});
         await request(editing.action_url,fields);
         toast("Отложенное сообщение изменено.");
       } else {

@@ -404,3 +404,45 @@ class SoundNotificationTests(TestCase):
             self.assertTrue(response.json()["message"]["silent"])
             self.client.force_login(self.bob)
             self.assertEqual(self.ids(),[])
+
+    def test_edit_structured_outbox_payloads_with_revision_and_private_data(self):
+        import json
+        cases = [
+            ("article", {"title":"Before","body":"Original"}, {"title":"After","subtitle":"Subtitle","body":"**New**"}),
+            ("todo", {"title":"Before","tasks":["A"]}, {"title":"After","tasks":[{"text":"B","due_date":"2028-02-29"}]}),
+            ("poll", {"question":"Before","options":["A","B"]}, {"question":"After","options":["C","D"],"quiz":True,"correct_option":1}),
+            ("location", {"latitude":0,"longitude":0}, {"label":"After","latitude":12.5,"longitude":-25}),
+        ]
+        for kind, before, after in cases:
+            item = self.schedule(text="", special_type=kind, payload=json.dumps(before))
+            listed = next(row for row in self.client.get(self.url()).json()["items"] if row["id"] == item.pk)
+            self.assertEqual(listed["special_data"], item.special_data)
+            self.assertEqual(self.peer.get(self.url()).json()["items"], [])
+            fields = {"special_type":kind, "payload":json.dumps(after),
+                      "scheduled_for":(timezone.now()+timedelta(hours=1)).isoformat()}
+            result = self.action(item, "edit", **fields)
+            self.assertEqual(result.status_code, 200, result.content)
+            self.assertEqual(self.action(item, "edit", **fields).status_code, 409)
+            item.refresh_from_db()
+            self.assertEqual(item.special_type, kind)
+            self.assertNotEqual(item.special_data, before)
+            self.assertEqual(item.text.splitlines()[0], "After")
+            self.assertEqual(self.action(item, "edit", **{**fields,"special_type":"invalid"}).status_code, 400)
+            result = self.action(item, "send_now")
+            self.assertEqual(result.status_code, 200, result.content)
+            item.refresh_from_db()
+            self.assertEqual(item.special_data, {})
+            self.assertEqual(item.delivered_message.special_type, kind)
+
+    def test_edit_structured_payload_enforces_link_permissions(self):
+        import json
+        group = Chat.objects.create(type=Chat.Type.GROUP, title="No links", members_can_send_links=False)
+        ChatParticipant.objects.create(chat=group, user=self.alice)
+        ChatParticipant.objects.create(chat=group, user=self.bob, role="owner")
+        item = self.schedule(group, text="", special_type="article", payload=json.dumps({"title":"Before","body":"Plain"}))
+        response = self.action(item, "edit", special_type="article",
+            payload=json.dumps({"title":"After","body":"x"*4000+" https://example.org"}),
+            scheduled_for=(timezone.now()+timedelta(hours=1)).isoformat())
+        self.assertEqual(response.status_code, 403)
+        item.refresh_from_db()
+        self.assertEqual(item.special_data["title"], "Before")
