@@ -212,6 +212,18 @@ def build_export(user, include_files=False):
                     yield row
 
             writer.jsonl("scheduled.jsonl", scheduled_rows())
+            archived_photos = user.avatar_history.all()
+            if include_files:
+                for photo in archived_photos:
+                    writer.file(f"avatars/history-{photo.pk}.bin", photo.image)
+
+            def avatar_rows():
+                for row in rows(archived_photos, "id", "archived_at"):
+                    path = f"avatars/history-{row['id']}.bin"
+                    row["archive_path"] = path if path in bundle.NameToInfo else None
+                    yield row
+
+            writer.jsonl("avatar_history.jsonl", avatar_rows())
             writer.jsonl("sticker_packs.jsonl", rows(StickerPack.objects.filter(owner=user),
                 "id", "name", "created_at"))
 

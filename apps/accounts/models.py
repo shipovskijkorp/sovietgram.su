@@ -208,3 +208,15 @@ class SecurityEvent(models.Model):
     class Meta:
         ordering = ("-id",)
         indexes = [models.Index(fields=["user", "-id"], name="sg_security_user_idx")]
+
+
+class AvatarHistory(models.Model):
+    """Private archive of a previous profile photo, never a public media URL."""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="avatar_history")
+    image = models.ImageField(upload_to="avatars/%Y/%m/")
+    archived_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-id",)
+        constraints = [models.UniqueConstraint(fields=["user", "image"], name="sg_unique_avatar_history")]

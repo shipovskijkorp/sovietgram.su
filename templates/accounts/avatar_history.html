@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}История фотографий — Sovietgram{% endblock %}
+{% block body_class %}auth-body{% endblock %}
+{% block content %}
+<main class="auth-shell">
+  <section class="auth-card auth-card--wide storage-page">
+    <a class="auth-brand" href="{% url 'messenger:home' %}?settings=main"><span class="brand__mark">★</span><span>SOVIETGRAM</span></a>
+    <div class="auth-heading">
+      <p class="eyebrow">Ваш профиль</p>
+      <h1>История фотографий</h1>
+      <p>При замене фотографии сохраняются до {{ history_limit }} предыдущих. Архив виден только вам. Удаление текущего аватара не добавляет его в архив.</p>
+    </div>
+    {% if request.user.avatar %}
+      <section class="storage-section">
+        <h2>Текущая фотография</h2>
+        <img src="{{ request.user.avatar_url }}" alt="Текущий аватар" width="96" height="96" style="object-fit:cover;border-radius:50%">
+      </section>
+    {% endif %}
+    <section class="storage-section">
+      <h2>Предыдущие фотографии</h2>
+      {% for photo in photos %}
+        <div class="storage-section" style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+          <img src="{% url 'accounts:avatar_history_image' photo.pk %}" alt="Предыдущий аватар" width="96" height="96" loading="lazy" style="object-fit:cover;border-radius:12px">
+          <form class="auth-form" method="post" action="{% url 'accounts:avatar_history_action' photo.pk %}" style="flex:1;min-width:160px">
+            {% csrf_token %}
+            <input type="hidden" name="account_id" value="{{ request.user.pk }}">
+            <time datetime="{{ photo.archived_at|date:'c' }}">{{ photo.archived_at|date:"d.m.Y H:i" }}</time>
+            <button class="primary-button" type="submit" name="action" value="restore">Установить снова</button>
+            <button class="storage-secondary" type="submit" name="action" value="delete">Удалить из истории</button>
+          </form>
+        </div>
+      {% empty %}
+        <p>Предыдущих фотографий пока нет.</p>
+      {% endfor %}
+    </section>
+    <p class="auth-switch"><a href="{% url 'messenger:home' %}?settings=main">Вернуться к настройкам</a></p>
+  </section>
+</main>
+{% endblock %}

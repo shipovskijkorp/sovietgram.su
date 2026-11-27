@@ -133,6 +133,8 @@ def delete_user_account(user, *, inactive_at=None):
     Message.objects.filter(reactions__user=user).exclude(sender=user).update(
         reaction_version=F("reaction_version") + 1, reaction_changed_at=timezone.now(),
     )
+    for photo in user.avatar_history.all().iterator():
+        _delete_stored_file(photo.image)
     _delete_stored_file(user.avatar)
     user.delete()
     return True

@@ -148,6 +148,7 @@
       </div>
     </form>
 
+    <p class="auth-switch"><a href="{% url 'accounts:avatar_history' %}">История фотографий профиля</a></p>
     {% if request.user.avatar %}
       <form method="post" action="{% url 'accounts:remove_avatar' %}" class="danger-zone" data-confirm-form="Удалить фотографию профиля?">
         {% csrf_token %}

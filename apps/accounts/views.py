@@ -36,6 +36,7 @@ from .forms import (
     UserSettingsForm,
 )
 from .models import SecurityEvent, User, UserBlock
+from .avatar_history import archive_previous, delete_unused_avatar
 from .security_events import record_event
 from .two_factor import verify_factor_locked
 from .multiaccount import (
@@ -372,13 +373,17 @@ def switch_account(request, user_id):
 
 
 @login_required
+@transaction.atomic
 def profile(request):
-    old_avatar_name = request.user.avatar.name if request.user.avatar else ""
-    old_avatar_storage = request.user.avatar.storage if request.user.avatar else None
+    # Serialize replacement, restoration and deletion of the profile image.
+    profile_user = (User.objects.select_for_update().get(pk=request.user.pk)
+                    if request.method == "POST" else request.user)
+    old_avatar_name = profile_user.avatar.name if profile_user.avatar else ""
+    old_avatar_storage = profile_user.avatar.storage if profile_user.avatar else None
     wants_json = request.headers.get("x-requested-with") == "XMLHttpRequest"
 
     if wants_json and request.method == "POST":
-        form = OverlayProfileForm(request.POST, request.FILES, instance=request.user)
+        form = OverlayProfileForm(request.POST, request.FILES, instance=profile_user)
         if not form.is_valid():
             return JsonResponse(
                 {"ok": False, "errors": form.errors.get_json_data()},
@@ -387,9 +392,11 @@ def profile(request):
         user = form.save(commit=False)
         # A stale profile request must never restore an old email or password.
         user.save(update_fields=[field for field in form._meta.fields if field != "email"])
-        if request.FILES.get("avatar") and old_avatar_name and old_avatar_storage:
-            if old_avatar_name != user.avatar.name:
-                old_avatar_storage.delete(old_avatar_name)
+        if old_avatar_name and old_avatar_name != user.avatar.name:
+            if request.FILES.get("avatar") and user.avatar:
+                archive_previous(user, old_avatar_name)
+            else:
+                delete_unused_avatar(old_avatar_name, old_avatar_storage)
         return JsonResponse(
             {
                 "ok": True,
@@ -409,14 +416,16 @@ def profile(request):
             }
         )
 
-    form = ProfileForm(request.POST or None, request.FILES or None, instance=request.user)
+    form = ProfileForm(request.POST or None, request.FILES or None, instance=profile_user)
     if request.method == "POST" and form.is_valid():
         user = form.save(commit=False)
         # A stale profile request must never restore an old email or password.
         user.save(update_fields=[field for field in form._meta.fields if field != "email"])
-        if request.FILES.get("avatar") and old_avatar_name and old_avatar_storage:
-            if old_avatar_name != user.avatar.name:
-                old_avatar_storage.delete(old_avatar_name)
+        if old_avatar_name and old_avatar_name != user.avatar.name:
+            if request.FILES.get("avatar") and user.avatar:
+                archive_previous(user, old_avatar_name)
+            else:
+                delete_unused_avatar(old_avatar_name, old_avatar_storage)
         messages.success(request, "Профиль сохранён.")
         return redirect("accounts:profile")
 
@@ -690,10 +699,13 @@ def settings_view(request):
 @login_required
 @require_POST
 def remove_avatar(request):
-    if request.user.avatar:
-        request.user.avatar.delete(save=False)
-        request.user.avatar = ""
-        request.user.save(update_fields=["avatar"])
+    with transaction.atomic():
+        user = User.objects.select_for_update().get(pk=request.user.pk)
+        if user.avatar:
+            name, storage = user.avatar.name, user.avatar.storage
+            user.avatar = ""
+            user.save(update_fields=["avatar"])
+            delete_unused_avatar(name, storage)
 
     if request.headers.get("x-requested-with") == "XMLHttpRequest":
         return JsonResponse(

@@ -24,6 +24,8 @@
         {% endfor %}
         <div><dt>Личные стикеры <small>({{ storage.sticker_count }})</small></dt><dd>{{ storage.sticker_bytes|filesizeformat }}</dd></div>
         <div><dt>Аватар</dt><dd>{% if storage.avatar_bytes == None %}Нет данных{% else %}{{ storage.avatar_bytes|filesizeformat }}{% endif %}</dd></div>
+        <div><dt><a href="{% url 'accounts:avatar_history' %}">История фотографий</a> <small>({{ storage.archived_avatar_count }})</small></dt><dd>{{ storage.archived_avatar_bytes|filesizeformat }}</dd></div>
+        <div><dt>Отложенные стикеры <small>({{ storage.scheduled_sticker_count }})</small></dt><dd>{{ storage.scheduled_sticker_bytes|filesizeformat }}</dd></div>
       </dl>
       <p class="micro-copy">Это оценка по метаданным файлов, а не полный расход диска VPS. Удаление сообщений осуществляется в соответствующем чате, а не очисткой браузера.</p>
     </section>

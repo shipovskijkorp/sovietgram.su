@@ -39,6 +39,18 @@ def storage_summary(user):
             avatar_size = user.avatar.size
         except (OSError, ValueError, NotImplementedError):
             avatar_size = None
+    archived_avatar_bytes = 0
+    archived_avatar_count = 0
+    for photo in user.avatar_history.all():
+        archived_avatar_count += 1
+        try:
+            archived_avatar_bytes += photo.image.size
+        except (OSError, ValueError, NotImplementedError):
+            pass
+    scheduled_stickers = user.scheduled_messages.filter(
+        status__in=["pending", "failed"], sticker_source_id__isnull=False,
+    ).aggregate(count=Count("pk"), size=Sum(Length("sticker_image"), output_field=BigIntegerField()))
+    scheduled_sticker_bytes = scheduled_stickers["size"] or 0
     total = sum(row.get("size") or 0 for row in grouped.values())
     counts = sum(row.get("count", 0) for row in grouped.values())
     sticker_bytes = stickers["size"] or 0
@@ -46,7 +58,9 @@ def storage_summary(user):
         "categories": categories, "attachment_bytes": total, "attachment_count": counts,
         "sticker_bytes": sticker_bytes, "sticker_count": stickers["count"],
         "avatar_bytes": avatar_size,
-        "total_known": total + sticker_bytes + (avatar_size or 0),
+        "archived_avatar_count": archived_avatar_count, "archived_avatar_bytes": archived_avatar_bytes,
+        "scheduled_sticker_count": scheduled_stickers["count"], "scheduled_sticker_bytes": scheduled_sticker_bytes,
+        "total_known": total + sticker_bytes + (avatar_size or 0) + archived_avatar_bytes + scheduled_sticker_bytes,
     }
 
 
