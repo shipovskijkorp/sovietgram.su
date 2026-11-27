@@ -9,6 +9,13 @@
   const modalHint = document.getElementById("attachSpecialHint");
   const panels = [...document.querySelectorAll("[data-special-panel]")];
   const replyInput = document.getElementById("replyToInput");
+  const stage = document.getElementById("messageStage");
+  const scheduleControls = document.getElementById("attachSpecialScheduleControls");
+  const scheduleToggle = document.getElementById("attachSpecialSchedule");
+  const scheduleDate = document.getElementById("attachSpecialScheduleDate");
+  const scheduleDateRow = document.getElementById("attachSpecialScheduleDateRow");
+  const scheduleSilent = document.getElementById("attachSpecialScheduleSilent");
+  const scheduleSilentRow = document.getElementById("attachSpecialScheduleSilentRow");
   const csrfToken = document.querySelector("#messageForm [name='csrfmiddlewaretoken']")?.value || "";
 
   if (!conversation) return;
@@ -29,8 +36,18 @@
     busy = next;
     if (modalSend) modalSend.disabled = next;
     if (modalClose) modalClose.disabled = next;
-    if (modalSend) modalSend.textContent = next ? "Отправка…" : "Отправить";
+    if (modalSend) modalSend.textContent = next ? "Отправка…" :
+      (scheduleToggle?.checked && !scheduleControls?.hidden ? "Запланировать" : "Отправить");
+    for (const control of [scheduleToggle,scheduleDate,scheduleSilent]) if (control) control.disabled = next;
   }
+
+  function updateScheduleControls() {
+    const scheduled = Boolean(scheduleToggle?.checked && !scheduleControls?.hidden);
+    if (scheduleDateRow) scheduleDateRow.hidden = !scheduled;
+    if (scheduleSilentRow) scheduleSilentRow.hidden = !scheduled;
+    if (modalSend && !busy) modalSend.textContent = scheduled ? "Запланировать" : "Отправить";
+  }
+  scheduleToggle?.addEventListener("change", updateScheduleControls);
 
   function clearNode(node) {
     while (node?.firstChild) node.removeChild(node.firstChild);
@@ -214,6 +231,17 @@
     specialSendKeys.clear();
     activeType = type;
     resetType(type);
+    if (scheduleControls) scheduleControls.hidden = !stage?.dataset.scheduledUrl ||
+      !window.SovietgramSchedule?.toScheduledISO || !["poll","todo","location"].includes(type);
+    if (scheduleToggle) scheduleToggle.checked = false;
+    if (scheduleSilent) scheduleSilent.checked = false;
+    if (scheduleDate && window.SovietgramSchedule?.localDateValue) {
+      const local = window.SovietgramSchedule.localDateValue;
+      scheduleDate.min = local(Date.now()+60000);
+      scheduleDate.max = local(Date.now()+365*86400000-60000);
+      scheduleDate.value = local(Date.now()+300000);
+    }
+    updateScheduleControls();
     panels.forEach((panel) => {
       panel.hidden = panel.dataset.specialPanel !== type;
     });
@@ -240,18 +268,18 @@
 
   function collectPayload() {
     if (activeType === "poll") {
-      const options = [...(pollOptions?.querySelectorAll("input[type='text']") || [])]
-        .map((input) => input.value.trim())
-        .filter(Boolean);
+      const rows = [...(pollOptions?.children || [])];
+      const filled = rows.filter(row => row.querySelector("input[type='text']")?.value.trim());
+      const options = filled.map(row => row.querySelector("input[type='text']").value.trim());
       const quiz = Boolean(pollQuiz?.checked);
-      const correct = pollOptions?.querySelector("input[type='radio']:checked");
+      const correctIndex = filled.findIndex(row => row.querySelector("input[type='radio']:checked"));
       return {
         question: pollQuestion?.value.trim() || "",
         options,
         anonymous: Boolean(pollAnonymous?.checked),
         multiple: Boolean(pollMultiple?.checked) && !quiz,
         quiz,
-        correct_option: quiz && correct ? Number(correct.value) : null,
+        correct_option: quiz && correctIndex >= 0 ? correctIndex : null,
         explanation: pollExplanation?.value.trim() || "",
       };
     }
@@ -285,6 +313,8 @@
     if (type === "poll") {
       if (!payload.question) return "Введите вопрос.";
       if (payload.options.length < 2) return "Добавьте хотя бы два варианта ответа.";
+      if (new Set(payload.options.map(option => option.toLocaleLowerCase())).size !== payload.options.length)
+        return "Варианты ответа должны отличаться.";
       if (payload.quiz && payload.correct_option == null) return "Для викторины выберите правильный ответ.";
     }
     if (type === "todo") {
@@ -305,8 +335,14 @@
   }
 
   async function sendSpecial() {
-    const url = conversation.dataset.specialSendUrl;
+    const scheduled = Boolean(scheduleToggle?.checked && !scheduleControls?.hidden);
+    const url = scheduled ? stage?.dataset.scheduledUrl : conversation.dataset.specialSendUrl;
     if (!url || !activeType || busy) return;
+    let scheduledFor = "";
+    if (scheduled) {
+      try { scheduledFor = window.SovietgramSchedule.toScheduledISO(scheduleDate.value); }
+      catch (error) { notify(error.message); return; }
+    }
 
     const payload = collectPayload();
     const error = validatePayload(activeType, payload);
@@ -320,13 +356,19 @@
     data.append("csrfmiddlewaretoken", csrfToken);
     data.append("special_type", activeType);
     data.append("payload", JSON.stringify(payload));
+    if (scheduled) {
+      data.append("account_id", stage.dataset.accountId);
+      data.append("scheduled_for", scheduledFor);
+      data.append("silent", scheduleSilent?.checked ? "1" : "0");
+    }
     const originalReply = replyInput?.value || "";
     const quote = originalReply ? window.SovietgramChat?.currentQuote?.() || "" : "";
     if (originalReply) data.append("reply_to", originalReply);
     if (quote) data.append("reply_quote", quote);
     const signature = [activeType, payload, originalReply];
     if (quote) signature.push(quote);
-    data.append("client_message_id", specialSendKeys.key("special", signature));
+    if (scheduled) signature.push(scheduledFor, Boolean(scheduleSilent?.checked));
+    data.append("client_message_id", specialSendKeys.key(scheduled ? "scheduled-special" : "special", signature));
 
     try {
       const response = await window.SovietgramSendRetry.fetchSend(url, {
@@ -340,7 +382,10 @@
         throw new Error(result.error || "Не удалось отправить вложение.");
       }
 
-      if (typeof window.renderSovietgramChatMessage === "function") {
+      if (scheduled) {
+        if (result.item?.status === "canceled") throw new Error("Эта отправка уже отменена.");
+        notify(result.item?.status === "sent" ? "Сообщение уже отправлено." : "Сообщение запланировано.");
+      } else if (typeof window.renderSovietgramChatMessage === "function") {
         window.renderSovietgramChatMessage(result.message);
       } else {
         window.location.reload();

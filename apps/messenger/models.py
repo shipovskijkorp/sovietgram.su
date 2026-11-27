@@ -516,6 +516,8 @@ class ScheduledMessage(models.Model):
     client_id = models.UUIDField()
     request_digest = models.CharField(max_length=64)
     text = models.TextField(blank=True, max_length=4096)
+    special_type = models.CharField(max_length=16, choices=Message.SpecialType.choices, blank=True, default="")
+    special_data = models.JSONField(default=dict, blank=True)
     # Keep the original ID even if the referenced message is removed.
     reply_message_id = models.PositiveBigIntegerField(null=True, blank=True)
     reply_quote = models.CharField(max_length=88, blank=True, default="")

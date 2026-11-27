@@ -121,7 +121,9 @@
       const row = document.createElement("article"); row.className = "scheduled-item";
       const when = document.createElement("time"); when.dateTime = item.scheduled_for;
       when.textContent = formatDate(item.scheduled_for) + (item.silent ? " · Без звука" : "");
-      const body = document.createElement("p"); body.textContent = item.text;
+      const body = document.createElement("p");
+      const labels = {poll:"Опрос", todo:"Список задач", location:"Геопозиция"};
+      body.textContent = (labels[item.special_type] ? labels[item.special_type] + ": " : "") + item.text;
       const state = document.createElement("small");
       state.textContent = item.status === "failed" ? "Не отправлено: "+item.error
         : item.error ? item.error+" Следующая попытка: "+formatDate(item.next_attempt_at)
@@ -159,6 +161,7 @@
     ++listVersion; editing=item;
     original=item ? null : {text:input?.value || "",reply:reply?.value || "",quote:window.SovietgramChat?.currentQuote?.() || ""};
     text.value=item ? item.text : original.text;
+    text.readOnly=Boolean(item?.special_type);
     const minimum = localDateValue(Date.now()+60000);
     date.min=minimum; date.max=localDateValue(Date.now()+365*86400000-60000);
     date.value=item && new Date(item.scheduled_for).getTime()>Date.now()+60000 ? localDateValue(item.scheduled_for) : localDateValue(Date.now()+300000);
@@ -167,7 +170,7 @@
     listPane.hidden=true; editor.hidden=false;
     title.textContent=item?"Изменить отложенное сообщение":"Отправить позже";
     save.textContent=item?"Сохранить":"Запланировать";
-    error();open();text.focus();
+    error();open();(text.readOnly ? date : text).focus();
   }
   async function mutate(item, action) {
     if (busy) return;

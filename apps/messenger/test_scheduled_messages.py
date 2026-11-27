@@ -77,6 +77,69 @@ class ScheduledMessageTests(TestCase):
         self.assertTrue(history[0]["silent"])
         self.assertEqual(self.client.get(self.url()).json()["items"], [])
 
+    def test_scheduled_poll_remains_private_and_delivers_as_poll(self):
+        import json
+        payload = {"question": "Pick one", "options": ["A", "B"], "quiz": True,
+                   "correct_option": 1, "explanation": "private explanation"}
+        data = self.data(text="", special_type="poll", payload=json.dumps(payload))
+        result = self.client.post(self.url(), data)
+        self.assertEqual(result.status_code, 200, result.content)
+        item = ScheduledMessage.objects.get(pk=result.json()["item"]["id"])
+        self.assertEqual(item.special_type, "poll")
+        self.assertEqual(item.special_data["correct_option"], 1)
+        self.assertTrue(self.client.post(self.url(), data).json()["replayed"])
+        self.assertEqual(self.peer.get(self.url()).json()["items"], [])
+        self.assertFalse(Message.objects.exists())
+        self.make_due(item)
+        self.assertEqual(deliver_due_messages(), 1)
+        self.assertEqual(deliver_due_messages(), 0)
+        item.refresh_from_db()
+        self.assertEqual(item.special_data, {})
+        self.assertEqual(item.special_type, "")
+        message = item.delivered_message
+        self.assertEqual(message.special_type, "poll")
+        self.assertEqual(message.special_data["correct_option"], 1)
+        self.assertEqual(message.special_data["options"][0]["voters"], [])
+        self.assertTrue(message.silent)
+        response = self.peer.get(reverse("messenger:message_history", args=[self.chat.pk]))
+        self.assertNotContains(response, "private explanation")
+        self.assertNotContains(response, '"correct_option":')
+
+    def test_scheduled_special_reschedule_cancel_and_link_policy(self):
+        import json
+        group = Chat.objects.create(type=Chat.Type.GROUP, title="Group")
+        ChatParticipant.objects.create(chat=group, user=self.alice)
+        ChatParticipant.objects.create(chat=group, user=self.bob, role="owner")
+        item = self.schedule(group, text="", special_type="todo",
+            payload=json.dumps({"title":"Tasks","tasks":["Read https://example.org"]}))
+        updated = self.action(item, "edit", text="ignored", silent="0",
+            scheduled_for=(timezone.now()+timedelta(hours=1)).isoformat())
+        self.assertEqual(updated.status_code, 200, updated.content)
+        item.refresh_from_db()
+        self.assertEqual(item.text, "Tasks")
+        self.assertEqual(item.special_data["tasks"][0]["text"], "Read https://example.org")
+        Chat.objects.filter(pk=group.pk).update(members_can_send_links=False)
+        self.make_due(item)
+        self.assertEqual(deliver_due_messages(), 0)
+        item.refresh_from_db()
+        self.assertEqual(item.status, ScheduledMessage.Status.FAILED)
+        self.assertEqual(self.action(item, "cancel").status_code, 200)
+        item.refresh_from_db()
+        self.assertEqual(item.special_data, {})
+        self.assertFalse(Message.objects.filter(chat=group).exists())
+        self.assertEqual(self.client.post(self.url(group), self.data(
+            text="", special_type="todo", payload=json.dumps({"title":"Tasks","tasks":["https://example.org"]})
+        )).status_code, 403)
+
+    def test_invalid_scheduled_special_is_rejected(self):
+        import json
+        for kind, payload in (("poll", {"question":"Q","options":["A"]}),
+                              ("location", {"latitude":100,"longitude":0}),
+                              ("article", {"title":"T","body":"Text"})):
+            response = self.client.post(self.url(), self.data(text="", special_type=kind, payload=json.dumps(payload)))
+            self.assertEqual(response.status_code, 400)
+        self.assertFalse(ScheduledMessage.objects.exists())
+
     def test_create_retry_does_not_duplicate_or_recreate_cancelled_item(self):
         data = self.data()
         first = self.client.post(self.url(), data).json()

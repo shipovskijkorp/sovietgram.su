@@ -1,4 +1,4 @@
-"""Persistent text-message outbox with a transactionally safe delivery worker."""
+"""Persistent text and structured-message outbox with a transactionally safe delivery worker."""
 import hashlib
 import json
 import logging
@@ -59,8 +59,8 @@ def _future(value, now):
         raise OutboxError("Можно запланировать отправку не более чем на год вперёд.")
 
 
-def _fields(post, *, include_reply=True):
-    text = post.get("text", "")
+def _fields(post, *, include_reply=True, special_text=None):
+    text = post.get("text", "") if special_text is None else special_text
     if not text.strip() or len(text) > 4096:
         raise OutboxError("Введите сообщение длиной от 1 до 4096 символов.")
     when = _time(post.get("scheduled_for", ""))
@@ -76,16 +76,37 @@ def _fields(post, *, include_reply=True):
     return text, when, silent, reply_id
 
 
+def _special_fields(post):
+    kind = post.get("special_type", "")
+    if not kind:
+        if post.get("payload"):
+            raise OutboxError("Для вложения укажите его тип.")
+        return "", {}, None
+    if kind not in {Message.SpecialType.POLL, Message.SpecialType.TODO, Message.SpecialType.LOCATION}:
+        raise OutboxError("Планирование этого типа вложения пока недоступно.")
+    raw = post.get("payload", "")
+    if len(raw) > 16384:
+        raise OutboxError("Слишком большой объём данных вложения.")
+    try:
+        payload = json.loads(raw)
+        data, text = views._clean_special_payload(kind, payload)
+    except (TypeError, ValueError) as error:
+        raise OutboxError("Некорректное вложение: " + str(error)) from None
+    return kind, data, text
+
+
 def _identity(request):
     # A tab from an old account must not schedule or mutate another account.
     if request.POST.get("account_id") != str(request.user.pk):
         raise OutboxError("Аккаунт изменился. Обновите страницу.", 409)
 
 
-def _digest(chat_id, text, when, silent, reply_id, quote=""):
+def _digest(chat_id, text, when, silent, reply_id, quote="", special_type="", special_data=None):
     payload = [chat_id, text, when.isoformat(), silent, reply_id]
     if quote:
         payload.append(quote)
+    if special_type:
+        payload.append([special_type, special_data])
     return hashlib.sha256(json.dumps(payload, ensure_ascii=False).encode()).hexdigest()
 
 
@@ -99,7 +120,7 @@ def _lock_sender_chat(sender_id, chat_id):
 
 
 def _member(chat, sender):
-    if sender is None or not sender.is_active or chat is None:
+    if sender is None or not sender.is_active or sender.platform_suspended_at or chat is None:
         raise OutboxError("Аккаунт или чат недоступен.", 403)
     membership = ChatParticipant.objects.filter(chat=chat, user=sender, is_hidden=False).first()
     if membership is None:
@@ -107,13 +128,14 @@ def _member(chat, sender):
     return membership
 
 
-def _validate(chat, sender, text, reply_id, *, check_slow_mode):
+def _validate(chat, sender, text, reply_id, *, check_slow_mode, special_type="", special_data=None):
     membership = _member(chat, sender)
     capabilities = views._posting_capabilities(chat, membership, sender)
     if not capabilities["text"]:
         raise OutboxError(capabilities["reason"] or "Отправка текста запрещена.", 403)
     restriction = views._posting_restriction(
-        chat, membership, text=text, check_slow_mode=check_slow_mode,
+        chat, membership, text=views._special_restriction_text(special_type, special_data, text),
+        check_slow_mode=check_slow_mode,
     )
     if restriction:
         reason, retry_after = restriction
@@ -130,6 +152,7 @@ def _serialize(item):
     return {
         "id": item.pk,
         "text": item.text,
+        "special_type": item.special_type,
         "silent": item.silent,
         "reply_to": item.reply_message_id,
         "has_quote": bool(item.reply_quote),
@@ -150,6 +173,7 @@ def _deliver(item, sender, chat):
     try:
         reply = _validate(
             chat, sender, item.text, item.reply_message_id, check_slow_mode=True,
+            special_type=item.special_type, special_data=item.special_data,
         )
         if item.reply_quote and (chat.protect_content or not resolve_quote(reply, item.reply_quote)):
             raise OutboxError("Цитата больше недоступна. Уберите ответ и повторите отправку.", 409)
@@ -167,6 +191,7 @@ def _deliver(item, sender, chat):
     message = Message.objects.create(
         chat=chat, sender=sender, text=item.text, reply_to=reply,
         reply_quote=item.reply_quote, silent=item.silent,
+        special_type=item.special_type, special_data=item.special_data,
         signature_name=sender.display_name if chat.type == Chat.Type.CHANNEL and chat.signatures_enabled else "",
     )
     touch_chat(chat)
@@ -175,12 +200,14 @@ def _deliver(item, sender, chat):
     item.delivered_message = message
     item.status = ScheduledMessage.Status.SENT
     item.text = ""
+    item.special_type = ""
+    item.special_data = {}
     item.reply_message_id = None
     item.reply_quote = ""
     item.error = ""
     item.revision += 1
     item.save(update_fields=[
-        "delivered_message", "status", "text", "reply_message_id", "reply_quote", "error", "revision", "updated_at",
+        "delivered_message", "status", "text", "special_type", "special_data", "reply_message_id", "reply_quote", "error", "revision", "updated_at",
     ])
     return item
 
@@ -200,8 +227,9 @@ def scheduled_messages(request, chat_id):
     try:
         _identity(request)
         if request.FILES:
-            raise OutboxError("Пока можно планировать только текстовые сообщения.")
-        text, when, silent, reply_id = _fields(request.POST)
+            raise OutboxError("Планирование файлов пока недоступно.")
+        special_type, special_data, special_text = _special_fields(request.POST)
+        text, when, silent, reply_id = _fields(request.POST, special_text=special_text)
         try:
             client_id = UUID(request.POST.get("client_message_id", ""))
         except (TypeError, ValueError, AttributeError):
@@ -209,7 +237,7 @@ def scheduled_messages(request, chat_id):
         raw_quote = request.POST.get("reply_quote", "")
         if len(raw_quote) > 1024:
             raise OutboxError("Выберите фрагмент текста до 1024 символов.")
-        digest = _digest(chat.pk, text, when, silent, reply_id, raw_quote)
+        digest = _digest(chat.pk, text, when, silent, reply_id, raw_quote, special_type, special_data)
         with transaction.atomic():
             sender, fresh_chat = _lock_sender_chat(request.user.pk, chat.pk)
             _member(fresh_chat, sender)
@@ -219,7 +247,8 @@ def scheduled_messages(request, chat_id):
                     raise OutboxError("Идентификатор уже использован для другой отправки.", 409)
                 return _response({"item": _serialize(previous), "replayed": True})
             _future(when, timezone.now())
-            reply = _validate(fresh_chat, sender, text, reply_id, check_slow_mode=False)
+            reply = _validate(fresh_chat, sender, text, reply_id, check_slow_mode=False,
+                              special_type=special_type, special_data=special_data)
             try:
                 if raw_quote and fresh_chat.protect_content:
                     raise ValueError("Цитирование отключено в защищённом чате.")
@@ -230,7 +259,8 @@ def scheduled_messages(request, chat_id):
                 raise OutboxError("Достигнут предел в 100 запланированных сообщений.", 409)
             item = ScheduledMessage.objects.create(
                 chat=fresh_chat, sender=sender, client_id=client_id, request_digest=digest,
-                text=text, reply_message_id=reply_id, reply_quote=quote_ref, silent=silent,
+                text=text, special_type=special_type, special_data=special_data,
+                reply_message_id=reply_id, reply_quote=quote_ref, silent=silent,
                 scheduled_for=when, next_attempt_at=when,
             )
         return _response({"item": _serialize(item)})
@@ -265,16 +295,22 @@ def scheduled_action(request, chat_id, scheduled_id):
             if action == "cancel":
                 item.status = ScheduledMessage.Status.CANCELED
                 item.text = ""
+                item.special_type = ""
+                item.special_data = {}
                 item.reply_message_id = None
                 item.reply_quote = ""
                 item.error = ""
                 item.revision += 1
-                item.save(update_fields=["status", "text", "reply_message_id", "reply_quote", "error", "revision", "updated_at"])
+                item.save(update_fields=["status", "text", "special_type", "special_data", "reply_message_id", "reply_quote", "error", "revision", "updated_at"])
             elif action == "edit":
-                text, when, silent, _ = _fields(request.POST, include_reply=False)
+                # Structured content is immutable in the outbox editor.
+                # Its author can reschedule, change silence or remove a reply.
+                text, when, silent, _ = _fields(request.POST, include_reply=False,
+                    special_text=item.text if item.special_type else None)
                 _future(when, timezone.now())
                 reply_id = None if request.POST.get("remove_reply") == "1" else item.reply_message_id
-                reply = _validate(chat, sender, text, reply_id, check_slow_mode=False)
+                reply = _validate(chat, sender, text, reply_id, check_slow_mode=False,
+                    special_type=item.special_type, special_data=item.special_data)
                 if reply_id is None:
                     item.reply_quote = ""
                 elif item.reply_quote and (chat.protect_content or not resolve_quote(reply, item.reply_quote)):

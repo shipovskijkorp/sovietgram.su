@@ -196,7 +196,7 @@ def build_export(user, include_files=False):
             writer.jsonl("scheduled.jsonl", rows(ScheduledMessage.objects.filter(
                 sender=user, chat_id__in=memberships.filter(chat__protect_content=False).values("chat_id"),
                 status__in=[ScheduledMessage.Status.PENDING, ScheduledMessage.Status.FAILED],
-            ), "id", "chat_id", "text", "silent", "scheduled_for", "status"))
+            ), "id", "chat_id", "text", "special_type", "special_data", "silent", "scheduled_for", "status"))
             writer.jsonl("sticker_packs.jsonl", rows(StickerPack.objects.filter(owner=user),
                 "id", "name", "created_at"))
 
