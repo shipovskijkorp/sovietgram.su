@@ -257,6 +257,7 @@ class Message(models.Model):
         return {
             MessageAttachment.Kind.IMAGE: "Фото",
             MessageAttachment.Kind.VIDEO: "Видео",
+            MessageAttachment.Kind.VIDEO_NOTE: "Видеокружок",
             MessageAttachment.Kind.AUDIO: "Аудио",
             MessageAttachment.Kind.VOICE: "Голосовое сообщение",
             MessageAttachment.Kind.STICKER: "Стикер",
@@ -312,6 +313,7 @@ class MessageAttachment(models.Model):
     class Kind(models.TextChoices):
         IMAGE = "image", "Изображение"
         VIDEO = "video", "Видео"
+        VIDEO_NOTE = "video_note", "Видеокружок"
         AUDIO = "audio", "Аудио"
         VOICE = "voice", "Голосовое сообщение"
         STICKER = "sticker", "Стикер"

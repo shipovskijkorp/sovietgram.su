@@ -1,0 +1,14 @@
+<div class="video-note-player" data-video-note-player
+     {% if note %}data-note-id="{{ note.pk }}" data-duration-ms="{{ note.duration_ms }}"
+     data-mark-played-url="{% url 'messenger:mark_voice_played' note.pk %}"
+     data-listened="{% if message.sender_id == request.user.pk or note.pk in voice_listened_attachment_ids %}true{% else %}false{% endif %}"{% endif %}>
+  <div class="video-note-player__ring">
+    <video class="video-note-player__video" playsinline
+           preload="{% if request.user.media_preload %}metadata{% else %}none{% endif %}"
+           {% if note %}src="{% url 'messenger:view_attachment' note.pk %}"{% endif %}></video>
+    <button type="button" class="video-note-player__play" data-note-play aria-label="Воспроизвести видеокружок">▶</button>
+    <span class="video-note-player__badge"><span data-note-time>0:00</span><i data-note-unread{% if not note or message.sender_id == request.user.pk or note.pk in voice_listened_attachment_ids %} hidden{% endif %} aria-label="Не просмотрено"></i></span>
+  </div>
+  <input class="video-note-player__seek" type="range" min="0" max="1000" value="0" step="1" data-note-seek aria-label="Позиция воспроизведения">
+  <small class="video-note-player__error" data-note-error role="status" hidden></small>
+</div>

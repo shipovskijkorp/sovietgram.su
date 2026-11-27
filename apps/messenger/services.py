@@ -510,7 +510,7 @@ def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=No
         voice_ids = [
             attachment.pk
             for attachment in attachment_items
-            if attachment.kind == MessageAttachment.Kind.VOICE
+            if attachment.kind in {MessageAttachment.Kind.VOICE, MessageAttachment.Kind.VIDEO_NOTE}
         ]
         if voice_ids:
             listened_ids = set(
@@ -536,7 +536,7 @@ def serialize_message(message, current_user, other_last_read_id=0, pinned_ids=No
                 ),
                 "mark_played_url": (
                     reverse("messenger:mark_voice_played", args=[attachment.pk])
-                    if attachment.kind == MessageAttachment.Kind.VOICE
+                    if attachment.kind in {MessageAttachment.Kind.VOICE, MessageAttachment.Kind.VIDEO_NOTE}
                     else ""
                 ),
             }

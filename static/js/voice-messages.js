@@ -971,6 +971,7 @@
   }
 
   async function startRecording(pointerEvent) {
+    if (window.SovietgramVideoNotes?.isOpen()) return;
     if (
       !form
       || !recordButton

@@ -99,5 +99,7 @@ test("initial, dynamic, edited and preview messages use the same server HTML",()
   assert.match(read("static/js/chat-controls.js"),/renderText\(paragraph, message.text, message.markdown_html\)/);
   assert.match(read("static/js/composer-tools.js"),/renderText\(body,text,result.markdown_html\)/);
   assert.match(read("static/js/message-social.js"),/image.referrerPolicy = "no-referrer"/);
-  assert.match(template,/image\/webp,image\/gif,video\/mp4/);
+  assert.match(template,/accept="{{ media_accept }}"/);
+  assert.match(read("apps/messenger/views.py"),/image\/png,image\/jpeg,image\/webp,image\/gif/);
+  assert.match(read("apps/messenger/views.py"),/video\/mp4,video\/webm,video\/quicktime,video\/x-m4v/);
 });

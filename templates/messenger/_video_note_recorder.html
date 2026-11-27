@@ -1,0 +1,14 @@
+<dialog class="video-note-dialog" id="videoNoteDialog" aria-labelledby="videoNoteTitle">
+  <header class="video-note-dialog__header"><strong id="videoNoteTitle">Видеокружок</strong>
+    <button type="button" id="videoNoteClose" aria-label="Закрыть">×</button></header>
+  <div class="video-note-dialog__preview"><video id="videoNotePreview" playsinline muted></video><span id="videoNoteClock" hidden>0:00 / 1:00</span></div>
+  <p id="videoNoteStatus" role="status">Подготовка камеры…</p>
+  <div class="video-note-dialog__actions">
+    <button type="button" id="videoNoteCamera">Сменить камеру</button>
+    <button type="button" id="videoNoteStart" class="video-note-primary" disabled>Записать</button>
+    <button type="button" id="videoNoteStop" class="video-note-primary" hidden>Остановить</button>
+    <button type="button" id="videoNoteRetake" hidden>Перезаписать</button>
+    <button type="button" id="videoNoteSend" class="video-note-primary" hidden>Отправить</button>
+  </div>
+  <label class="video-note-dialog__silent" id="videoNoteSilentRow" hidden><input type="checkbox" id="videoNoteSilent"> Без звука уведомления</label>
+</dialog>

@@ -4,7 +4,13 @@ from django.utils import timezone
 
 from .models import Chat, ChatMemberModeration, ChatParticipant, MessageAttachment, MessageReaction
 
-MEDIA_KINDS = tuple(MessageAttachment.Kind.values)
+# Video notes share the existing video permission, including older group configs.
+MEDIA_KINDS = tuple(kind for kind in MessageAttachment.Kind.values
+                    if kind != MessageAttachment.Kind.VIDEO_NOTE)
+
+
+def permission_media_kind(kind):
+    return MessageAttachment.Kind.VIDEO if kind == MessageAttachment.Kind.VIDEO_NOTE else kind
 MEDIA_LABELS = dict(MessageAttachment.Kind.choices)
 
 

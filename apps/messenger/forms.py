@@ -42,6 +42,8 @@ VOICE_CONTENT_TYPES = {
     "application/octet-stream",
 }
 MAX_VOICE_DURATION_MS = 100 * 60 * 1000
+MAX_VIDEO_NOTE_DURATION_MS = 60 * 1000
+VIDEO_NOTE_CONTENT_TYPES = {".webm": "video/webm", ".mp4": "video/mp4"}
 MAX_VOICE_WAVEFORM_SAMPLES = 96
 IMAGE_FORMATS = {
     ".png": {"PNG"},
@@ -150,6 +152,7 @@ class MessageForm(forms.Form):
     MODE_FILE = "file"
     MODE_AUDIO = "audio"
     MODE_VOICE = "voice"
+    MODE_VIDEO_NOTE = "video_note"
 
     text = forms.CharField(required=False, max_length=4096, strip=False)
     silent = forms.BooleanField(required=False)
@@ -164,6 +167,7 @@ class MessageForm(forms.Form):
             (MODE_FILE, "Файл"),
             (MODE_AUDIO, "Музыка"),
             (MODE_VOICE, "Голосовое сообщение"),
+            (MODE_VIDEO_NOTE, "Видеокружок"),
         ),
         initial=MODE_MEDIA,
     )
@@ -174,6 +178,8 @@ class MessageForm(forms.Form):
         max_value=MAX_VOICE_DURATION_MS,
     )
     voice_waveform = forms.CharField(required=False, max_length=4096)
+    video_note_duration_ms = forms.IntegerField(required=False, min_value=200,
+                                               max_value=MAX_VIDEO_NOTE_DURATION_MS)
 
     def clean_text(self):
         text = self.cleaned_data.get("text", "")
@@ -229,6 +235,21 @@ class MessageForm(forms.Form):
                     raise forms.ValidationError(
                         "Выбранный файл не распознан как аудио."
                     )
+            elif mode == self.MODE_VIDEO_NOTE:
+                expected = VIDEO_NOTE_CONTENT_TYPES.get(extension)
+                if expected is None or content_type.split(";", 1)[0].strip() != expected:
+                    raise forms.ValidationError("Видеокружок должен быть записан в WebM или MP4.")
+                # Reject obvious non-video input. This is a bounded container
+                # signature check, not a codec parser or verified media duration.
+                try:
+                    uploaded.seek(0)
+                    header = uploaded.read(16)
+                finally:
+                    uploaded.seek(0)
+                valid = (header.startswith(bytes.fromhex("1a45dfa3")) if extension == ".webm"
+                         else len(header) >= 12 and header[4:8] == b"ftyp")
+                if not valid:
+                    raise forms.ValidationError("Файл не распознан как видеозапись.")
             elif mode == self.MODE_VOICE:
                 normalized_type = content_type.split(";", 1)[0]
                 if extension not in VOICE_EXTENSIONS:
@@ -281,6 +302,11 @@ class MessageForm(forms.Form):
             if duration < 200:
                 raise forms.ValidationError("Голосовое сообщение слишком короткое.")
             cleaned["text"] = ""
+        elif mode == self.MODE_VIDEO_NOTE:
+            if len(attachments) != 1 or cleaned.get("text"):
+                raise forms.ValidationError("Видеокружок отправляется отдельно, без подписи.")
+            if not cleaned.get("video_note_duration_ms"):
+                raise forms.ValidationError("Укажите длительность видеокружка (до 60 секунд).")
         elif not cleaned.get("text") and not attachments:
             raise forms.ValidationError("Введите сообщение или прикрепите файл.")
 

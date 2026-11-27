@@ -591,6 +591,7 @@
       )),
       media: list.some((article) => Boolean(article.querySelector(".message-media"))),
       voice: list.some((article) => Boolean(article.querySelector("[data-voice-player]"))),
+      videoNote: list.some((article) => Boolean(article.querySelector("[data-video-note-player]"))),
     };
   }
 
@@ -599,6 +600,7 @@
     if (requirements.text && target.dataset.forwardCanText === "false") return false;
     if (requirements.media && target.dataset.forwardCanMedia === "false") return false;
     if (requirements.voice && target.dataset.forwardCanVoice === "false") return false;
+    if (requirements.videoNote && target.dataset.forwardCanVideoNote === "false") return false;
     return true;
   }
 

@@ -70,7 +70,7 @@ from .forms import CommunityForm, EditMessageForm, MessageForm
 from .media_processing import THUMBNAIL_VERSION, compress_image_upload, make_thumbnail
 from PIL import Image
 from .community_permissions import (
-    MEDIA_KINDS, MEDIA_LABELS, group_media_kinds,
+    MEDIA_KINDS, MEDIA_LABELS, group_media_kinds, permission_media_kind,
     can_pin_messages, has_admin_right, is_banned, member_denials, member_reaction_emojis,
 )
 from .folder_rules import decorate_folder_categories, matching_chats, requested_folder
@@ -533,7 +533,7 @@ def _posting_restriction(
         return ("Администраторы запретили участникам отправлять текстовые сообщения.", 0)
     if has_attachments and not chat.members_can_send_media:
         return ("Администраторы запретили участникам отправлять медиа и файлы.", 0)
-    forbidden = set(attachment_kinds) - set(group_media_kinds(chat))
+    forbidden = {permission_media_kind(kind) for kind in attachment_kinds} - set(group_media_kinds(chat))
     if forbidden:
         labels = ", ".join(MEDIA_LABELS[kind] for kind in MEDIA_KINDS if kind in forbidden)
         return ("Этот тип вложения запрещён в группе: " + (labels or "неизвестный тип") + ".", 0)
@@ -764,6 +764,7 @@ def _prepare_sidebar_chats(user, archived=False):
                 MessageAttachment.Kind.AUDIO: "Аудио",
                 MessageAttachment.Kind.IMAGE: "Фото",
                 MessageAttachment.Kind.VIDEO: "Видео",
+                MessageAttachment.Kind.VIDEO_NOTE: "Видеокружок",
                 MessageAttachment.Kind.FILE: "Файл",
             }.get(
                 attachment_kinds.get(chat.last_message_id_ui),
@@ -792,6 +793,7 @@ def _upload_kinds(form, sticker):
         MessageForm.MODE_FILE: MessageAttachment.Kind.FILE,
         MessageForm.MODE_AUDIO: MessageAttachment.Kind.AUDIO,
         MessageForm.MODE_VOICE: MessageAttachment.Kind.VOICE,
+        MessageForm.MODE_VIDEO_NOTE: MessageAttachment.Kind.VIDEO_NOTE,
     }.get(mode)
     return [override or attachment_kind(upload) for upload in form.cleaned_data["attachments"]]
 
@@ -845,7 +847,11 @@ def _posting_capabilities(chat, membership, user):
     elif not can_voice:
         media_kinds = [kind for kind in media_kinds if kind != MessageAttachment.Kind.VOICE]
     can_media = bool(media_kinds)
+    can_video_note = MessageAttachment.Kind.VIDEO in media_kinds and (
+        chat.type != Chat.Type.PRIVATE or can_voice
+    )
     return {
+        "video_note": can_video_note,
         "text": can_text,
         "media": can_media,
         "media_kinds": media_kinds,
@@ -893,6 +899,7 @@ def _forward_targets(user):
         chat.can_forward_text_ui = capabilities["text"]
         chat.can_forward_media_ui = capabilities["media"]
         chat.can_forward_voice_ui = capabilities["voice"]
+        chat.can_forward_video_note_ui = capabilities["video_note"]
         if capabilities["text"] or capabilities["media"]:
             visible.append(chat)
     return visible
@@ -1080,7 +1087,7 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
         VoiceMessagePlayback.objects.filter(
             user=user,
             attachment__message__chat=selected_chat,
-            attachment__kind=MessageAttachment.Kind.VOICE,
+            attachment__kind__in=[MessageAttachment.Kind.VOICE, MessageAttachment.Kind.VIDEO_NOTE],
         ).values_list("attachment_id", flat=True)
     )
 
@@ -1116,6 +1123,7 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
                 ) if kind in capabilities["media_kinds"]
             ),
             "can_record_voice": can_record_voice,
+            "can_record_video_note": capabilities["video_note"],
             "post_restriction_ui": capabilities["reason"],
             "composer_draft_text": membership.draft_text if can_send_text else "",
             "composer_draft_reply": draft_reply,
@@ -2118,7 +2126,7 @@ def send_message(request, chat_id):
 
         attachment_mode = form.cleaned_data.get("attachment_mode") or MessageForm.MODE_MEDIA
         if (
-            attachment_mode == MessageForm.MODE_VOICE
+            attachment_mode in {MessageForm.MODE_VOICE, MessageForm.MODE_VIDEO_NOTE}
             and form.cleaned_data["attachments"]
             and not privacy_allows(recipient, request.user, "voice_messages")
         ):
@@ -2162,6 +2170,7 @@ def send_message(request, chat_id):
     send_as_file = attachment_mode == MessageForm.MODE_FILE
     send_as_audio = attachment_mode == MessageForm.MODE_AUDIO
     send_as_voice = attachment_mode == MessageForm.MODE_VOICE
+    send_as_video_note = attachment_mode == MessageForm.MODE_VIDEO_NOTE
 
     with transaction.atomic():
         # Allocate IDs under the chat row lock so a later ID cannot become
@@ -2170,6 +2179,12 @@ def send_message(request, chat_id):
         membership = ChatParticipant.objects.filter(chat=chat, user=request.user, is_hidden=False).first()
         if membership is None:
             raise Http404
+        if send_as_video_note and not _posting_capabilities(chat, membership, request.user)["video_note"]:
+            error = "Отправка видеокружков в этот чат недоступна."
+            if wants_json:
+                return JsonResponse({"ok": False, "error": error}, status=403)
+            messages.error(request, error)
+            return redirect("messenger:chat", chat_id=chat.pk)
         restriction = _posting_restriction(chat, membership, text=form.cleaned_data["text"],
                                            attachment_kinds=_upload_kinds(form, sticker))
         if restriction:
@@ -2228,6 +2243,8 @@ def send_message(request, chat_id):
                 kind=(
                     MessageAttachment.Kind.FILE
                     if send_as_file
+                    else MessageAttachment.Kind.VIDEO_NOTE
+                    if send_as_video_note
                     else MessageAttachment.Kind.VOICE
                     if send_as_voice
                     else MessageAttachment.Kind.AUDIO
@@ -2238,7 +2255,9 @@ def send_message(request, chat_id):
                 mime_type=(getattr(uploaded, "content_type", "") or "")[:127],
                 size=uploaded.size,
                 duration_ms=(
-                    int(form.cleaned_data.get("voice_duration_ms") or 0)
+                    int(form.cleaned_data.get("video_note_duration_ms") or 0)
+                    if send_as_video_note
+                    else int(form.cleaned_data.get("voice_duration_ms") or 0)
                     if send_as_voice
                     else 0
                 ),
@@ -2718,6 +2737,8 @@ def edit_message(request, chat_id, message_id):
         return JsonResponse({"ok": False, "errors": form.errors.get_json_data()}, status=400)
 
     text = form.cleaned_data["text"]
+    if message.attachments.filter(kind=MessageAttachment.Kind.VIDEO_NOTE).exists():
+        return JsonResponse({"ok": False, "error": "Видеокружок нельзя редактировать."}, status=400)
     edit_restriction = _posting_restriction(
         chat,
         _membership(chat, request.user),
@@ -2908,7 +2929,7 @@ def forward_message(request, chat_id, message_id):
             )
         if (
             source.attachments.filter(
-                kind=MessageAttachment.Kind.VOICE
+                kind__in=[MessageAttachment.Kind.VOICE, MessageAttachment.Kind.VIDEO_NOTE]
             ).exists()
             and not privacy_allows(recipient, request.user, "voice_messages")
         ):
@@ -3890,7 +3911,7 @@ def chat_gallery(request, chat_id):
     membership = _membership(chat, request.user)
     kind = request.GET.get("kind", "media")
     filters = {
-        "media": [MessageAttachment.Kind.IMAGE, MessageAttachment.Kind.VIDEO],
+        "media": [MessageAttachment.Kind.IMAGE, MessageAttachment.Kind.VIDEO, MessageAttachment.Kind.VIDEO_NOTE],
         "files": [MessageAttachment.Kind.FILE],
         "audio": [MessageAttachment.Kind.AUDIO],
         "voice": [MessageAttachment.Kind.VOICE],
@@ -4077,6 +4098,7 @@ def view_attachment(request, attachment_id):
     if attachment.kind not in {
         MessageAttachment.Kind.IMAGE,
         MessageAttachment.Kind.VIDEO,
+        MessageAttachment.Kind.VIDEO_NOTE,
         MessageAttachment.Kind.AUDIO,
         MessageAttachment.Kind.VOICE,
         MessageAttachment.Kind.STICKER,
@@ -4124,9 +4146,11 @@ def view_attachment(request, attachment_id):
 @require_POST
 def mark_voice_played(request, attachment_id):
     attachment = _attachment_for_user(request.user, attachment_id)
-    if attachment.kind != MessageAttachment.Kind.VOICE:
+    if request.POST.get("account_id", str(request.user.pk)) != str(request.user.pk):
+        return JsonResponse({"ok": False, "error": "Аккаунт изменился."}, status=409)
+    if attachment.kind not in {MessageAttachment.Kind.VOICE, MessageAttachment.Kind.VIDEO_NOTE}:
         return JsonResponse(
-            {"ok": False, "error": "Это вложение не является голосовым сообщением."},
+            {"ok": False, "error": "Это вложение не является голосовым сообщением или видеокружком."},
             status=400,
         )
 

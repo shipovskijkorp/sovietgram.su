@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="{% static 'css/media.css' %}?v={{ static_version }}">
 <link rel="stylesheet" href="{% static 'css/chat.css' %}?v={{ static_version }}">
 <link rel="stylesheet" href="{% static 'css/voice-messages.css' %}?v={{ static_version }}">
+<link rel="stylesheet" href="{% static 'css/video-notes.css' %}?v={{ static_version }}">
 <link rel="stylesheet" href="{% static 'css/community-profile.css' %}?v={{ static_version }}">
 <link rel="stylesheet" href="{% static 'css/settings.css' %}?v={{ static_version }}">
 <link rel="stylesheet" href="{% static 'css/stickers.css' %}?v={{ static_version }}">
@@ -349,6 +350,7 @@
                 <option value="file">Файлы</option>
                 <option value="audio">Музыка</option>
                 <option value="voice">Голосовые</option>
+                <option value="video_note">Видеокружки</option>
                 <option value="sticker">Стикеры</option>
                 <option value="poll">Опросы</option>
                 <option value="todo">Списки задач</option>
@@ -576,6 +578,8 @@
                         </a>
                       {% elif attachment.kind == 'video' %}
                         <div class="message-video-wrap"><video class="message-media__video" controls preload="{% if request.user.media_preload %}metadata{% else %}none{% endif %}" src="{% url 'messenger:view_attachment' attachment.pk %}"></video><button type="button" class="message-video-expand" data-lightbox-video="{% url 'messenger:view_attachment' attachment.pk %}" data-media-name="{{ attachment.original_name }}" data-media-download="{% if not selected_chat.protect_content %}{% url 'messenger:download_attachment' attachment.pk %}{% endif %}" aria-label="Открыть видео" title="Открыть видео"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3h7v7M10 21H3v-7M21 3l-7 7M3 21l7-7"/></svg></button></div>
+                      {% elif attachment.kind == 'video_note' %}
+                        {% include 'messenger/_video_note_player.html' with note=attachment %}
                       {% elif attachment.kind == 'voice' %}
                         <div class="voice-message"
                              data-voice-player
@@ -696,6 +700,12 @@
               <span>Файл</span>
             </button>
             {% endif %}
+            {% if can_record_video_note %}
+            <button type="button" role="menuitem" data-open-video-note>
+              <svg class="video-note-camera-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="3"/><path d="m16 10 5-3v10l-5-3"/></svg>
+              <span>Видеокружок</span>
+            </button>
+            {% endif %}
             {% if can_send_text %}
             <button type="button" role="menuitem" data-attach-special="poll">
               <span class="tg-native-icon tg-native-icon--attach-poll" aria-hidden="true"></span>
@@ -729,6 +739,7 @@
         <div class="composer__field">
           <textarea id="messageInput" name="text" rows="1" maxlength="4096" placeholder="{% if not can_send_text and can_send_media %}Можно отправлять только медиа{% else %}Сообщение{% endif %}" autocomplete="off"{% if not can_send_text %} readonly{% endif %}>{{ composer_draft_text }}</textarea>
           {% if can_send_sticker %}<button type="button" class="composer-tool-button" data-open-stickers data-sticker-send="true" aria-expanded="false" aria-controls="stickerDialog" title="Стикеры" aria-label="Стикеры"><svg viewBox="0 0 24 24" fill="none"><path d="M4 4h16v10l-6 6H4zM14 20v-6h6M8 8h.01M15 8h.01M8 12c1.5 2 3 2 4 1"/></svg></button>{% endif %}
+          {% if can_record_video_note %}<button type="button" class="composer-tool-button video-note-composer-button" data-open-video-note aria-label="Записать видеокружок" title="Записать видеокружок"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="3"/><path d="m16 10 5-3v10l-5-3"/></svg></button>{% endif %}
           {% if can_send_text %}{% include 'messenger/_composer_tools.html' with editor_id="messageInput" %}
           <button class="composer-tool-button" id="sendOptionsToggle" type="button" aria-expanded="false" aria-controls="sendOptionsMenu" aria-label="Параметры отправки" title="Параметры отправки">
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l4 2"/></svg>
@@ -1042,7 +1053,8 @@
                   data-forward-search="{{ target.search_text_ui }}"
                   data-forward-can-text="{{ target.can_forward_text_ui|yesno:'true,false' }}"
                   data-forward-can-media="{{ target.can_forward_media_ui|yesno:'true,false' }}"
-                  data-forward-can-voice="{{ target.can_forward_voice_ui|yesno:'true,false' }}">
+                  data-forward-can-voice="{{ target.can_forward_voice_ui|yesno:'true,false' }}"
+                  data-forward-can-video-note="{{ target.can_forward_video_note_ui|yesno:'true,false' }}">
             {% if target.type == 'private' and target.other_user_avatar_url_ui %}
               <img class="forward-target__avatar" data-avatar-user-id="{{ target.other_user.pk }}" src="{{ target.other_user_avatar_url_ui }}" alt="">
             {% elif target.type != 'private' and target.avatar %}
@@ -1093,7 +1105,7 @@
         {% for attachment in shared_attachments %}
           {% if attachment.kind == 'image' %}
             <a class="shared-media-item shared-media-item--image" href="{% url 'messenger:view_attachment' attachment.pk %}" target="_blank" rel="noopener" data-lightbox-image="{% url 'messenger:view_attachment' attachment.pk %}" data-media-name="{{ attachment.original_name }}" data-media-download="{% if not selected_chat.protect_content %}{% url 'messenger:download_attachment' attachment.pk %}{% endif %}"><img src="{% url 'messenger:thumbnail_attachment' attachment.pk %}" alt="{{ attachment.original_name }}" loading="lazy"></a>
-          {% elif attachment.kind == 'video' %}
+          {% elif attachment.kind == 'video' or attachment.kind == 'video_note' %}
             <a class="shared-media-item shared-media-item--video" href="{% url 'messenger:view_attachment' attachment.pk %}" target="_blank" rel="noopener" data-lightbox-video="{% url 'messenger:view_attachment' attachment.pk %}" data-media-name="{{ attachment.original_name }}" data-media-download="{% if not selected_chat.protect_content %}{% url 'messenger:download_attachment' attachment.pk %}{% endif %}"><span>▶</span><small>{{ attachment.original_name }}</small></a>
           {% else %}
             <a class="shared-file-item" href="{% if selected_chat.protect_content and attachment.kind == 'file' %}{% url 'messenger:chat' selected_chat.pk %}?message={{ attachment.message_id }}#message-{{ attachment.message_id }}{% else %}{{ attachment.ui_url }}{% endif %}"><span>↓</span><span><strong>{{ attachment.original_name }}</strong><small>{{ attachment.size|filesizeformat }}</small></span></a>
@@ -1109,7 +1121,9 @@
 {% endif %}
 
 {% include 'messenger/_media_gallery.html' %}
+{% if can_record_video_note %}{% include 'messenger/_video_note_recorder.html' %}{% endif %}
 {% endif %}
+<template id="videoNotePlayerTemplate">{% include 'messenger/_video_note_player.html' with note=None %}</template>
 
 <div class="profile-drawer-backdrop" id="profileMenuBackdrop" aria-hidden="true"></div>
 <aside class="profile-drawer profile-drawer--telegram" id="profileMenu" aria-hidden="true">
@@ -1347,6 +1361,7 @@
 <script src="{% static 'js/read-ack.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/channel-discussions.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/channel-views.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/video-notes.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/chat.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/media-gallery.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/scheduled-messages.js' %}?v={{ static_version }}"></script>

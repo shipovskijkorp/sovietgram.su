@@ -96,12 +96,12 @@
   function card(item) {
     const root = node("article", "", "chat-gallery-card");
     const picture = item.kind === "image" || item.kind === "sticker";
-    if (picture || item.kind === "video") {
+    if (picture || item.kind === "video" || item.kind === "video_note") {
       const button = node("button", "", "chat-gallery-preview");
       button.type = "button";
       button.dataset.mediaName = item.name;
       button.dataset.mediaDownload = item.download_url || "";
-      if (item.kind === "video") {
+      if (item.kind === "video" || item.kind === "video_note") {
         button.dataset.lightboxVideo = item.url;
         button.append(node("span", "▶"));
       } else {

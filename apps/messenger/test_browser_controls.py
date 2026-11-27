@@ -42,7 +42,9 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         cls.expect = staticmethod(expect)
         cls.playwright = sync_playwright().start()
         cls.addClassCleanup(cls.playwright.stop)
-        cls.browser = cls.playwright.chromium.launch(headless=True)
+        cls.browser = cls.playwright.chromium.launch(headless=True, args=[
+            "--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream",
+        ])
         cls.addClassCleanup(cls.browser.close)
 
     def setUp(self):
@@ -322,6 +324,33 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.visible("#scheduledListPane")
         self.expect(self.page.locator("#scheduledList")).to_contain_text("Стикер")
         self.assertTrue(ScheduledMessage.objects.filter(sender=self.owner, sticker_source_id=sticker.pk).exists())
+
+    def test_video_note_record_preview_send_and_reload(self):
+        self.context.grant_permissions(["camera", "microphone"], origin=self.live_server_url)
+        self.go(self.direct)
+        self.click(".video-note-composer-button")
+        self.visible("#videoNoteDialog")
+        self.expect(self.page.locator("#videoNoteStart")).to_be_enabled()
+        self.click("#videoNoteStart")
+        self.visible("#videoNoteStop")
+        self.page.wait_for_timeout(1200)
+        self.click("#videoNoteStop")
+        self.visible("#videoNoteSend")
+        self.expect(self.page.locator("#videoNotePreview")).to_have_attribute("src", re.compile(r"^blob:"))
+        self.click("#videoNoteSend")
+        self.hidden("#videoNoteDialog")
+        self.expect(self.page.locator("[data-video-note-player]")).to_have_count(1)
+        attachment = MessageAttachment.objects.get(message__chat=self.direct, kind="video_note")
+        self.assertGreaterEqual(attachment.duration_ms, 200)
+        self.assertLessEqual(attachment.duration_ms, 60000)
+        self.page.reload(wait_until="domcontentloaded")
+        self.visible("[data-video-note-player]")
+        self.expect(self.page.locator("[data-video-note-player]")).to_have_attribute("data-note-id", str(attachment.pk))
+        self.click(".video-note-composer-button")
+        self.expect(self.page.locator("#videoNoteStart")).to_be_enabled()
+        self.click("#videoNoteClose")
+        self.hidden("#videoNoteDialog")
+        self.assertEqual(MessageAttachment.objects.filter(message__chat=self.direct, kind="video_note").count(), 1)
 
     def test_group_message_readers_dialog(self):
         ChatParticipant.objects.filter(chat=self.group, user=self.peer).update(read_through_id=self.message.pk)

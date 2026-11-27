@@ -186,6 +186,7 @@ function messagePreview(article) {
   const fileName = article?.querySelector(".message-file-card strong")?.textContent?.trim();
   if (fileName) return fileName;
   if (article?.querySelector("[data-voice-player]")) return "Голосовое сообщение";
+  if (article?.querySelector("[data-video-note-player]")) return "Видеокружок";
   if (article?.querySelector(".message-media")) return "Медиа";
   return "Сообщение";
 }
@@ -329,6 +330,9 @@ function makeMedia(attachment, isOwn = false) {
   }
   if (attachment.kind === "voice") {
     return makeVoiceMessage(attachment, isOwn);
+  }
+  if (attachment.kind === "video_note") {
+    return window.SovietgramVideoNotes.buildPlayer(attachment);
   }
 
   if (attachment.kind === "image") {
@@ -541,6 +545,14 @@ function syncMessageAttachments(article, message) {
     return;
   }
 
+  if (attachments.length === 1 && attachments[0].kind === "video_note") {
+    const player = current?.querySelector("[data-video-note-player]");
+    if (player?.dataset.noteId === String(attachments[0].id)) {
+      if (attachments[0].listened) window.SovietgramVideoNotes?.setListened(player);
+      return; // Read/reaction updates must not restart ongoing playback.
+    }
+  }
+
   const media = document.createElement("div");
   const album = (
     attachments.length > 1
@@ -692,7 +704,7 @@ function openMessageMenu(article, x, y) {
   const copyButton = contextMenu.querySelector('[data-message-action="copy"]');
   const forwardButton = contextMenu.querySelector('[data-message-action="forward"]');
   const contentProtected = document.querySelector(".conversation--chat")?.dataset.chatProtected === "true";
-  if (editButton) editButton.hidden = !own || Boolean(article.dataset.messageKind);
+  if (editButton) editButton.hidden = !own || Boolean(article.dataset.messageKind) || Boolean(article.querySelector("[data-video-note-player]"));
   if (copyButton) copyButton.hidden = contentProtected || !hasText;
   if (forwardButton) forwardButton.hidden = contentProtected;
   if (pinLabel) pinLabel.textContent = article.dataset.messagePinned === "true" ? "Открепить" : "Закрепить";
