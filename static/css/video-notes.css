@@ -28,7 +28,8 @@
 }
 .video-note-dialog:not([hidden]) { display:grid; grid-template-rows:minmax(0,1fr) auto; align-items:center; justify-items:center; }
 .video-note-dialog[hidden] { display:none !important; }
-.video-note-dialog { height:100dvh; width:100vw; touch-action:none; overscroll-behavior:contain; }
+.video-note-dialog { height:100dvh; width:100vw; touch-action:manipulation; overscroll-behavior:contain; }
+.video-note-dialog.is-holding { touch-action:none; }
 .video-note-dialog__panel { width:min(340px,88vw); min-height:0; display:grid; justify-items:center; gap:12px; }
 .video-note-dialog__preview {
   width:min(320px,74vw,52vh); aspect-ratio:1; position:relative; border-radius:50%;

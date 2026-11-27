@@ -123,7 +123,7 @@
   const MAX_MS=60000, MIN_MS=200, MAX_BYTES=25*1024*1024;
   const CAMERA_TIMEOUT=30000, STOP_TIMEOUT=5000, DECODE_TIMEOUT=10000;
   let state="idle", generation=0, facing="user", source=null, session=null, pending=null, objectUrl="";
-  let holdMode=false, holdLocked=false, openingTimer=0, uploadController=null, restoreFocus=null;
+  let holdMode=false, holdLocked=false, openingTimer=0, uploadController=null, restoreFocus=null, reviewCleanup=null;
   const stopTracks=stream=>stream?.getTracks?.().forEach(track=>track.stop());
   function ui(next,message="") {
     state=next; status.textContent=message;
@@ -136,7 +136,7 @@
     start.hidden=next!=="ready";
     start.disabled=next!=="ready";
     camera.hidden=!["ready","error"].includes(next);
-    camera.disabled=next!=="ready";
+    camera.disabled=!["ready","error"].includes(next);
     retry.hidden=next!=="error";
     stop.hidden=next!=="recording";
     retake.hidden=!["checking","review"].includes(next);
@@ -145,12 +145,15 @@
     retake.disabled=next==="sending";
     close.disabled=false;
     close.setAttribute("aria-label",next==="sending"?"Прервать ожидание отправки":"Отменить видеозапись");
+    close.querySelector("span").textContent=next==="sending"?"Прервать":"Отмена";
     send.setAttribute("aria-label",next==="sending"?"Отправка…":"Отправить");
+    send.querySelector("span").textContent=next==="sending"?"Отправка…":"Отправить";
     silentRow.hidden=next!=="review";
     silent.disabled=Boolean(pending?.data);
     clock.hidden=!["recording","stopping"].includes(next);
   }
   function clearPreview() {
+    reviewCleanup?.();reviewCleanup=null;
     preview.pause();preview.autoplay=false;preview.controls=false;preview.muted=true;
     preview.srcObject=null;preview.removeAttribute("src");
     try{preview.load();}catch(_){}
@@ -309,6 +312,7 @@
       clearTimeout(timer);
       for(const name of ["loadeddata","canplay","playing"])preview.removeEventListener(name,decoded);
       preview.removeEventListener("error",invalid);
+      if(reviewCleanup===cleanup)reviewCleanup=null;
     };
     const decoded=()=>{
       if(token!==generation||pending!==item){cleanup();return;}
@@ -322,6 +326,7 @@
       if(settled)return;settled=true;cleanup();
       if(token===generation&&pending===item)fail("Не удалось декодировать записанное видео. Запишите кружок заново.");
     };
+    reviewCleanup=cleanup;
     for(const name of ["loadeddata","canplay","playing"])preview.addEventListener(name,decoded);
     preview.addEventListener("error",invalid);
     timer=setTimeout(()=>{
@@ -470,7 +475,7 @@
   close.addEventListener("click",stopOrCancel);
   retry.addEventListener("click",()=>{holdMode=false;holdLocked=false;void openCamera();});
   camera.addEventListener("click",()=>{
-    if(state!=="ready")return;
+    if(!["ready","error"].includes(state))return;
     holdMode=false;holdLocked=false;facing=facing==="user"?"environment":"user";void openCamera();
   });
   retake.addEventListener("click",()=>{

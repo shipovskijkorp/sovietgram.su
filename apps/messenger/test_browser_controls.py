@@ -405,8 +405,9 @@ class BrowserControlsTests(StaticLiveServerTestCase):
                 return originalStart.apply(this, args);
             };
         """)
-        self.page.set_viewport_size({"width":390, "height":844})
         self.go(self.direct)
+        self.page.set_viewport_size({"width":390, "height":844})
+        self.visible("#sendButton")
         action = self.page.locator("#sendButton")
         action.click()
         self.expect(action).to_have_attribute("data-composer-action", "video_note")
