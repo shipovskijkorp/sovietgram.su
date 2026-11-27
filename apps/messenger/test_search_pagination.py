@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import User
-from .models import Chat, ChatParticipant, Message, MessageAttachment, MessageHiddenForUser, PinnedMessage
+from .models import Chat, ChatMemberModeration, ChatParticipant, Message, MessageAttachment, MessageHiddenForUser, PinnedMessage
 from .services import get_or_create_direct_chat
 
 
@@ -79,6 +79,35 @@ class SearchPaginationTests(TestCase):
         self.assertEqual(self.client.get(self.chat_url, {"kind": "unknown"}).status_code, 400)
         for url in (self.global_url, self.chat_url):
             self.assertEqual(self.client.get(url, {"q": "report", "before": "-1"}).status_code, 400)
+
+    def test_all_words_quotes_and_attachment_names_without_duplicate_results(self):
+        ordered = Message.objects.create(chat=self.chat, sender=self.bob, text="annual report approved #work")
+        reversed_words = Message.objects.create(chat=self.chat, sender=self.bob, text="report for annual review #work")
+        mixed = Message.objects.create(chat=self.chat, sender=self.bob, text="annual update #work")
+        for name in ("report.pdf", "report-copy.pdf"):
+            MessageAttachment.objects.create(message=mixed, kind="file", file="test/"+name, original_name=name)
+        missing = Message.objects.create(chat=self.chat, sender=self.bob, text="annual #workshop")
+        hidden = Message.objects.create(chat=self.chat, sender=self.bob, text="annual report #work")
+        MessageHiddenForUser.objects.create(message=hidden, user=self.alice)
+        expired = Message.objects.create(chat=self.chat, sender=self.bob, text="annual report #work")
+        Message.objects.filter(pk=expired.pk).update(expires_at=timezone.now()-timedelta(seconds=1))
+        foreign = get_or_create_direct_chat(self.other, self.bob)
+        Message.objects.create(chat=foreign, sender=self.bob, text="annual report #work")
+        group = Chat.objects.create(type=Chat.Type.GROUP, title="Banned")
+        ChatParticipant.objects.create(chat=group, user=self.alice)
+        ChatMemberModeration.objects.create(chat=group, user=self.alice, banned=True)
+        Message.objects.create(chat=group, sender=self.bob, text="annual report #work")
+        for url, key in ((self.global_url, "messages"), (self.chat_url, "results")):
+            def ids(query):
+                response = self.client.get(url, {"q": query})
+                self.assertEqual(response.status_code, 200, response.content)
+                return [item["id"] for item in response.json()[key]]
+            self.assertEqual(ids("report annual"), [mixed.pk, reversed_words.pk, ordered.pk])
+            self.assertEqual(ids('"annual report"'), [ordered.pk])
+            self.assertEqual(ids("annual #work"), [mixed.pk, reversed_words.pk, ordered.pk])
+            self.assertNotIn(missing.pk, ids("annual #work"))
+            self.assertEqual(ids("report.pdf annual"), [mixed.pk])
+            self.assertEqual(self.client.get(url, {"q":" ".join("term"+str(i) for i in range(13))}).status_code, 400)
 
     def test_date_target_uses_first_visible_message_and_requires_account(self):
         from datetime import datetime, UTC

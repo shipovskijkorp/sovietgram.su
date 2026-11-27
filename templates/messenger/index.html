@@ -334,7 +334,7 @@
       <section class="chat-search-panel" id="chatSearchPanel" data-search-url="{{ search_url }}" data-history-target-url="{% url 'messenger:history_target' selected_chat.pk %}" hidden>
         <div class="chat-search-box">
           <span class="tg-native-icon tg-native-icon--search tg-native-icon--compact" aria-hidden="true"></span>
-          <input id="chatSearchInput" type="search" maxlength="120" placeholder="Поиск сообщений" autocomplete="off">
+          <input id="chatSearchInput" type="search" maxlength="120" placeholder="Поиск сообщений" title='Все слова или «точная фраза» в двойных кавычках' autocomplete="off">
           <button id="chatSearchClose" type="button" aria-label="Закрыть"><span class="tg-native-icon tg-native-icon--close tg-native-icon--compact" aria-hidden="true"></span></button>
         </div>
         <details class="chat-search-filters">

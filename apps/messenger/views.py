@@ -79,6 +79,7 @@ from .models import (
     Chat,
     ChatFolder,
     ChatJoinRequest,
+    ChatMemberModeration,
     ChatParticipant,
     Contact,
     Message,
@@ -1655,6 +1656,7 @@ def start_chat(request, username):
 
 @login_required
 @require_GET
+@never_cache
 @rate_limit("global_search")
 def global_search(request):
     query = request.GET.get("q", "").strip()[:120]
@@ -1685,8 +1687,9 @@ def global_search(request):
     messages_only = request.GET.get("messages_only") == "1"
     try:
         before = _search_before(request)
-    except ValueError:
-        return JsonResponse({"ok": False, "error": "Некорректный курсор поиска."}, status=400)
+        search_condition = _search_text_condition(query)
+    except ValueError as error:
+        return JsonResponse({"ok": False, "error": str(error)}, status=400)
 
     membership_base = ChatParticipant.objects.filter(
         user=request.user, is_hidden=False, **membership_scope,
@@ -1836,13 +1839,20 @@ def global_search(request):
                 | Q(chat__memberships__can_see_pre_join_history=True)
                 | Q(created_at__gte=F("chat__memberships__joined_at"))
             ),
-            _search_text_condition(query),
+            search_condition,
+            Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now()),
             chat__memberships__user=request.user,
             chat__memberships__is_hidden=False,
             is_deleted=False,
             **message_scope,
         )
         .exclude(hidden_for_users__user=request.user)
+        .exclude(
+            Q(chat__type__in=(Chat.Type.GROUP, Chat.Type.CHANNEL))
+            & Q(Exists(ChatMemberModeration.objects.filter(
+                chat_id=OuterRef("chat_id"), user=request.user, banned=True,
+            ).filter(Q(expires_at__isnull=True) | Q(expires_at__gt=timezone.now()))))
+        )
         .select_related("sender", "chat")
         .distinct()
     )
@@ -3292,9 +3302,30 @@ def _search_before(request):
 
 
 def _search_text_condition(query):
-    return _message_search_condition(query) or (
-        Q(text__icontains=query) | Q(attachments__original_name__icontains=query)
-    )
+    """Match every term, with quoted phrases and exact mention/tag tokens.
+
+    Correlated EXISTS avoids joining all attachment combinations for queries
+    matching several words or several attachments on the same message.
+    """
+    parts = re.findall(r'"[^"]+"|\S+', query)
+    terms = list(dict.fromkeys(parts))
+    if len(terms) > 12:
+        raise ValueError("Введите не более 12 слов или фраз для поиска.")
+    condition = Q()
+    for part in terms:
+        quoted = len(part) >= 2 and part.startswith('"') and part.endswith('"')
+        term = part[1:-1] if quoted else part
+        special = None if quoted else _message_search_condition(term)
+        if special is not None:
+            condition &= special
+        else:
+            condition &= (
+                Q(text__icontains=term)
+                | Q(Exists(MessageAttachment.objects.filter(
+                    message_id=OuterRef("pk"), original_name__icontains=term,
+                )))
+            )
+    return condition
 
 
 def _search_page(queryset, before, size):
@@ -3381,6 +3412,7 @@ def search_messages(request, chat_id):
     raw_to = request.GET.get("date_to", "").strip()
     try:
         before = _search_before(request)
+        search_condition = _search_text_condition(query) if query else Q()
         date_from = parse_date(raw_from) if raw_from else None
         date_to = parse_date(raw_to) if raw_to else None
         if (raw_from and date_from is None) or (raw_to and date_to is None):
@@ -3396,7 +3428,7 @@ def search_messages(request, chat_id):
 
     base = _visible_message_queryset(chat, request.user).filter(is_deleted=False)
     if query:
-        base = base.filter(_search_text_condition(query))
+        base = base.filter(search_condition)
     if sender:
         base = base.filter(sender__username__iexact=sender)
     if date_from:
