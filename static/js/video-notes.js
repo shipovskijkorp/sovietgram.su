@@ -48,7 +48,8 @@
       if (marking || root.dataset.listened === "true" || !root.dataset.markPlayedUrl) return;
       marking = true;
       try {
-        const csrf = form?.querySelector("[name=csrfmiddlewaretoken]")?.value;
+        const csrf = (form?.querySelector("[name=csrfmiddlewaretoken]") ||
+          $("settingsAjaxForm")?.querySelector("[name=csrfmiddlewaretoken]"))?.value;
         if (!csrf) return;
         const response = await fetch(root.dataset.markPlayedUrl, {
           method:"POST", credentials:"same-origin", headers:{"X-Requested-With":"XMLHttpRequest"},
@@ -162,7 +163,7 @@
       const stream=await navigator.mediaDevices.getUserMedia({video:{
         facingMode:{ideal:facing},width:{ideal:480},height:{ideal:480},aspectRatio:{ideal:1},frameRate:{ideal:24,max:30},
       },audio:true});
-      if(token!==generation||!dialog.open){stopTracks(stream);return;}
+      if(token!==generation||!dialog.open||document.hidden){stopTracks(stream);return;}
       if(!stream.getVideoTracks().length||!stream.getAudioTracks().length){stopTracks(stream);throw new Error("Нужны камера и микрофон.");}
       source=stream; preview.srcObject=source; preview.muted=true;
       preview.classList.toggle("is-mirrored",facing==="user");
@@ -306,7 +307,9 @@
     const opener=event.target.closest?.("[data-open-video-note]");
     if(!opener||dialog.open)return;
     event.preventDefault();
-    if(!$("voiceRecordingBar")?.hidden){notify("Сначала завершите голосовую запись.");return;}
+    if(window.SovietgramVoice?.isRecording?.() || ($("voiceRecordingBar") && !$("voiceRecordingBar").hidden)){
+      notify("Сначала завершите голосовую запись.");return;
+    }
     const menu=$("attachmentMenu");if(menu&&!menu.hidden)$("attachmentButton")?.click();
     facing="user";dialog.showModal();void openCamera();
   });
@@ -317,6 +320,13 @@
   send.addEventListener("click",upload);
   dialog.addEventListener("cancel",event=>{event.preventDefault();if(state!=="sending")shut();});
   dialog.addEventListener("close",()=>{if(state!=="idle")cancel();});
-  document.addEventListener("visibilitychange",()=>{if(document.hidden&&state==="recording")finish();});
+  document.addEventListener("visibilitychange",()=>{
+    if(!document.hidden)return;
+    if(state==="recording")finish();
+    else if(state==="ready"||state==="opening"){
+      generation++;stopTracks(source);source=null;clearPreview();
+      ui("error","Камера отключена, поскольку вкладка скрыта. Смените камеру или откройте запись заново.");
+    }
+  });
   window.addEventListener("pagehide",cancel);
 })();

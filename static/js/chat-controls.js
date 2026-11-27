@@ -503,7 +503,8 @@
     const readersButton = contextMenu.querySelector('[data-message-action="readers"]');
     if (readersButton) readersButton.hidden = chatType !== "group" || !isOwn(article) || !article.dataset.readersUrl;
 
-    if (editButton) editButton.hidden = !isOwn(article) || Boolean(article.dataset.messageKind) || Boolean(article.querySelector(".message-sticker"));
+    if (editButton) editButton.hidden = !isOwn(article) || Boolean(article.dataset.messageKind) ||
+      Boolean(article.querySelector(".message-sticker, [data-video-note-player]"));
     if (copyButton) copyButton.hidden = chatProtected || !(article.dataset.messageText || "").trim();
     if (forwardButton) forwardButton.hidden = chatProtected;
     if (deleteButton) deleteButton.hidden = !canDeleteArticle(article);

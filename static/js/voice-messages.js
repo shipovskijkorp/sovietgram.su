@@ -1005,7 +1005,7 @@
         },
       });
 
-      if (!pendingPointer || pendingPointer.token !== token || pendingPointer.released) {
+      if (!pendingPointer || pendingPointer.token !== token || pendingPointer.released || window.SovietgramVideoNotes?.isOpen()) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
@@ -1166,6 +1166,7 @@
 
   window.SovietgramVoice = {
     hydrate: hydrateTree,
+    isRecording: () => Boolean(recordSession || (pendingPointer && !pendingPointer.released)),
     get speed() { return voiceSpeed; },
     get volume() { return voiceVolume; },
     get autoplayNext() { return autoplayNext; },
