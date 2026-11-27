@@ -1,12 +1,14 @@
 """Opt-in link sharing and explicit additive updates of private snapshots."""
 import hashlib
 from collections import Counter
+from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.http import HttpResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods
@@ -106,7 +108,10 @@ def shared_sticker_pack(request, token):
                 ])
             # Never discover a replacement token by source ID alone.
             installed.source_share_token = pack.share_token
-            installed.save(update_fields=["source_share_token"])
+            installed.auto_update_error = ""
+            if installed.auto_update_at is not None:
+                installed.auto_update_at = timezone.now() + timedelta(hours=6)
+            installed.save(update_fields=["source_share_token", "auto_update_at", "auto_update_error"])
             return redirect(reverse("messenger:home") + "?manage_stickers=1")
         if action == "update":
             return page(request, pack, problem="Сначала установите набор.", status=409)

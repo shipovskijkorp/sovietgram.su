@@ -225,7 +225,7 @@ def build_export(user, include_files=False):
 
             writer.jsonl("avatar_history.jsonl", avatar_rows())
             writer.jsonl("sticker_packs.jsonl", rows(StickerPack.objects.filter(owner=user),
-                "id", "name", "created_at", "catalog_published_at"))
+                "id", "name", "created_at", "catalog_published_at", "auto_update_at", "auto_update_error"))
 
             def sticker_rows():
                 query = Sticker.objects.filter(pack__owner=user).order_by("pk")

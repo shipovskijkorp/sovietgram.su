@@ -325,6 +325,15 @@
       sourceUpdate.disabled=busy;
       sourceUpdate.textContent=current?.source_url?"Обновить из исходного набора":"Обновить по ссылке";
     }
+    const autoUpdate=$("stickerAutoUpdate"),autoStatus=$("stickerAutoUpdateStatus");
+    if(autoUpdate){
+      autoUpdate.hidden=!detail||!current?.installed_copy;
+      autoUpdate.disabled=busy||!current?.source_url;
+      autoUpdate.textContent=current?.auto_update?"Выключить автообновление":"Включить автообновление";
+      autoUpdate.setAttribute("aria-pressed",String(Boolean(current?.auto_update)));
+      autoStatus.hidden=!detail||!current?.installed_copy||!current?.auto_update_error;
+      autoStatus.textContent=current?.auto_update_error||"";
+    }
     $("stickerSharePanel").hidden=!shared||editing;
     if(shared)$("stickerShareLink").value=new URL(current.share_url,window.location.origin).href;
     else $("stickerShareLink").value="";
@@ -613,6 +622,12 @@
     if(current.share_url)window.open(new URL(current.share_url,window.location.origin).href,"_blank","noopener,noreferrer");
     else confirmAction("Поделиться набором","Любой авторизованный пользователь со ссылкой сможет установить отдельную копию набора.","Создать ссылку",
       ()=>mutate("share",{pack_id:current.id},"pack"));
+  });
+  $("stickerAutoUpdate")?.addEventListener("click",()=>{
+    const current=pack();if(!current?.source_url||busy)return;
+    if(current.auto_update)void mutate("auto_update",{pack_id:current.id,enabled:"0"},"pack");
+    else confirmAction("Включить автообновление?","Сервер будет периодически добавлять новые стикеры по действующей ссылке. Ваши копии и избранное не удаляются.","Включить",
+      ()=>mutate("auto_update",{pack_id:current.id,enabled:"1"},"pack"));
   });
   $("stickerSourceUpdate")?.addEventListener("click",()=>{
     const current=pack();if(!current?.installed_copy||busy)return;

@@ -129,6 +129,8 @@ def pack_payload(pack):
             "source_url": reverse("messenger:shared_sticker_pack", args=[pack.source_share_token]) if pack.source_share_token else "",
             "installed_copy": pack.source_pack_id is not None,
             "catalog_published": pack.catalog_published_at is not None,
+            "auto_update": pack.auto_update_at is not None,
+            "auto_update_error": pack.auto_update_error,
             "stickers": [
         sticker_payload(item) for item in pack.stickers.defer("image").all()
     ]}
@@ -155,7 +157,7 @@ def sticker_packs(request):
     if request.POST.get("account_id") != str(request.user.pk):
         return error("Аккаунт изменился. Обновите страницу.", 409)
     action = request.POST.get("action", "")
-    if action not in {"create", "rename", "delete", "add", "remove", "save_message", "favorite", "forget_recent", "clear_recent", "share", "unshare", "publish", "unpublish"}:
+    if action not in {"create", "rename", "delete", "add", "remove", "save_message", "favorite", "forget_recent", "clear_recent", "share", "unshare", "publish", "unpublish", "auto_update"}:
         return error("Неизвестное действие.")
     image = None
     emoji = request.POST.get("emoji", "").strip()
@@ -238,6 +240,18 @@ def sticker_packs(request):
             if pack.share_token is None:
                 pack.share_token = uuid4()
                 pack.save(update_fields=["share_token"])
+        elif action == "auto_update":
+            value = request.POST.get("enabled")
+            if value not in {"0", "1"} or pack.source_pack_id is None:
+                return error("Некорректная настройка автообновления.")
+            if value == "1" and pack.source_share_token is None:
+                return error("Сначала откройте действующую ссылку исходного набора.")
+            if value == "1":
+                pack.auto_update_at = pack.auto_update_at or timezone.now()
+            else:
+                pack.auto_update_at = None
+            pack.auto_update_error = ""
+            pack.save(update_fields=["auto_update_at", "auto_update_error"])
         elif action == "publish":
             if pack.source_pack_id is not None:
                 return error("В каталог можно публиковать только собственные наборы.")

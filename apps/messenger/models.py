@@ -581,6 +581,8 @@ class StickerPack(models.Model):
     # Do not expose the source ID or token to recipients' public profiles.
     source_pack_id = models.PositiveBigIntegerField(null=True, blank=True, editable=False, db_index=True)
     source_share_token = models.UUIDField(null=True, blank=True, editable=False)
+    auto_update_at = models.DateTimeField(null=True, blank=True, editable=False, db_index=True)
+    auto_update_error = models.CharField(max_length=180, blank=True, default="", editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
