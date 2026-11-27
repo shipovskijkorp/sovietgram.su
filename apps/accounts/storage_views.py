@@ -9,7 +9,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 
-from apps.messenger.models import MessageAttachment, Sticker
+from apps.messenger.models import MessageAttachment, ScheduledAttachment, Sticker
 from .models import User
 
 
@@ -51,6 +51,8 @@ def storage_summary(user):
         status__in=["pending", "failed"], sticker_source_id__isnull=False,
     ).aggregate(count=Count("pk"), size=Sum(Length("sticker_image"), output_field=BigIntegerField()))
     scheduled_sticker_bytes = scheduled_stickers["size"] or 0
+    scheduled_files = ScheduledAttachment.objects.filter(scheduled__sender=user, scheduled__status__in=["pending", "failed"]).aggregate(count=Count("pk"), size=Sum("size"))
+    scheduled_file_bytes = scheduled_files["size"] or 0
     total = sum(row.get("size") or 0 for row in grouped.values())
     counts = sum(row.get("count", 0) for row in grouped.values())
     sticker_bytes = stickers["size"] or 0
@@ -60,7 +62,8 @@ def storage_summary(user):
         "avatar_bytes": avatar_size,
         "archived_avatar_count": archived_avatar_count, "archived_avatar_bytes": archived_avatar_bytes,
         "scheduled_sticker_count": scheduled_stickers["count"], "scheduled_sticker_bytes": scheduled_sticker_bytes,
-        "total_known": total + sticker_bytes + (avatar_size or 0) + archived_avatar_bytes + scheduled_sticker_bytes,
+        "scheduled_file_count": scheduled_files["count"], "scheduled_file_bytes": scheduled_file_bytes,
+        "total_known": total + sticker_bytes + (avatar_size or 0) + archived_avatar_bytes + scheduled_sticker_bytes + scheduled_file_bytes,
     }
 
 

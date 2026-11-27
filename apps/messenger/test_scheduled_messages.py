@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import User, UserBlock
-from .models import Chat, ChatParticipant, Message, MessageAttachment, MessageHiddenForUser, ScheduledMessage, Sticker, StickerPack
+from .models import Chat, ChatParticipant, Message, MessageAttachment, MessageHiddenForUser, ScheduledAttachment, ScheduledMessage, Sticker, StickerPack
 from .scheduled import deliver_due_messages
 from .services import get_or_create_direct_chat
 
@@ -51,6 +51,83 @@ class ScheduledMessageTests(TestCase):
         return self.client.post(reverse("messenger:scheduled_action", args=[item.chat_id,item.pk]), {
             "account_id": str(self.alice.pk), "revision": item.revision, "action": action, **overrides,
         })
+
+    def test_scheduled_file_retry_private_storage_and_delivery(self):
+        with TemporaryDirectory() as folder, override_settings(MEDIA_ROOT=folder):
+            fields = self.data(text="", attachment_mode="file")
+            def post(contents):
+                return self.client.post(self.url(), {**fields, "attachments":
+                    SimpleUploadedFile("test.txt", contents, content_type="text/plain")})
+            response = post(b"exact file")
+            self.assertEqual(response.status_code, 200, response.content)
+            item = ScheduledMessage.objects.get(pk=response.json()["item"]["id"])
+            queued = item.attachments.get()
+            name = queued.file.name
+            self.assertTrue(name.startswith("messages/"))
+            self.assertEqual(response.json()["item"]["attachments"][0]["name"], "test.txt")
+            self.assertTrue(post(b"exact file").json()["replayed"])
+            self.assertEqual(post(b"changed").status_code, 409)
+            self.assertEqual(ScheduledAttachment.objects.count(), 1)
+            self.assertEqual(self.peer.get(self.url()).json()["items"], [])
+            self.assertFalse(MessageAttachment.objects.exists())
+            self.make_due(item)
+            with self.captureOnCommitCallbacks(execute=True):
+                self.assertEqual(deliver_due_messages(), 1)
+            self.assertEqual(deliver_due_messages(), 0)
+            item.refresh_from_db()
+            self.assertFalse(item.attachments.exists())
+            delivered = item.delivered_message.attachments.get()
+            self.assertEqual(delivered.file.name, name)
+            with delivered.file.open("rb") as stream:
+                self.assertEqual(stream.read(), b"exact file")
+            self.assertTrue(delivered.message.silent)
+
+    def test_scheduled_files_cancel_and_cascade_cleanup(self):
+        with TemporaryDirectory() as folder, override_settings(MEDIA_ROOT=folder):
+            item = self.schedule(text="", attachment_mode="file", attachments=SimpleUploadedFile("a.txt", b"abc"))
+            file = item.attachments.get().file
+            with self.captureOnCommitCallbacks(execute=True):
+                self.assertEqual(self.action(item, "cancel").status_code, 200)
+            self.assertFalse(file.storage.exists(file.name))
+            item = self.schedule(text="", attachment_mode="file", attachments=SimpleUploadedFile("b.txt", b"abc"))
+            file = item.attachments.get().file
+            with self.captureOnCommitCallbacks(execute=True):
+                item.delete()
+            self.assertFalse(file.storage.exists(file.name))
+
+    def test_scheduled_media_rechecks_permissions_and_caption_edits(self):
+        with TemporaryDirectory() as folder, override_settings(MEDIA_ROOT=folder):
+            group = Chat.objects.create(type=Chat.Type.GROUP, title="Files")
+            ChatParticipant.objects.create(chat=group, user=self.bob, role="owner")
+            ChatParticipant.objects.create(chat=group, user=self.alice)
+            item = self.schedule(group, text="Before", attachment_mode="file", attachments=SimpleUploadedFile("a.txt", b"abc"))
+            response = self.action(item, "edit", text="", scheduled_for=(timezone.now()+timedelta(hours=1)).isoformat())
+            self.assertEqual(response.status_code, 200, response.content)
+            item.refresh_from_db()
+            self.assertEqual(item.text, "")
+            Chat.objects.filter(pk=group.pk).update(members_can_send_media=False)
+            self.make_due(item)
+            self.assertEqual(deliver_due_messages(), 0)
+            item.refresh_from_db()
+            self.assertEqual(item.status, ScheduledMessage.Status.FAILED)
+            self.assertTrue(item.attachments.exists())
+            self.assertFalse(Message.objects.filter(chat=group).exists())
+
+    def test_scheduled_recordings_keep_metadata(self):
+        with TemporaryDirectory() as folder, override_settings(MEDIA_ROOT=folder):
+            voice = self.schedule(text="", attachment_mode="voice", voice_duration_ms=1234,
+                voice_waveform="[12,34,56]", attachments=SimpleUploadedFile("voice.webm", b"voice", content_type="audio/webm"))
+            note = self.schedule(text="", attachment_mode="video_note", video_note_duration_ms=3210,
+                attachments=SimpleUploadedFile("note.webm", bytes.fromhex("1a45dfa3")+b"video", content_type="video/webm"))
+            for item in (voice, note):
+                self.make_due(item)
+            with self.captureOnCommitCallbacks(execute=True):
+                self.assertEqual(deliver_due_messages(), 2)
+            voice.refresh_from_db(); note.refresh_from_db()
+            sound = voice.delivered_message.attachments.get()
+            video = note.delivered_message.attachments.get()
+            self.assertEqual((sound.kind, sound.duration_ms, sound.waveform), ("voice", 1234, [12,34,56]))
+            self.assertEqual((video.kind, video.duration_ms), ("video_note", 3210))
 
     def test_private_queue_invisible_until_delivery_and_idempotent_worker(self):
         before = self.chat.updated_at

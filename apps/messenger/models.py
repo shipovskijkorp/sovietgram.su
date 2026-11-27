@@ -13,6 +13,13 @@ def message_attachment_path(instance, filename):
     return f"messages/{instance.message.chat_id}/{now:%Y/%m}/{uuid4().hex}{extension}"
 
 
+def scheduled_attachment_path(instance, filename):
+    # Already protected by the messages namespace on Nginx and Django.
+    extension = Path(filename).suffix.lower()[:12]
+    now = timezone.now()
+    return f"messages/{instance.scheduled.chat_id}/{now:%Y/%m}/{uuid4().hex}{extension}"
+
+
 def chat_avatar_path(instance, filename):
     extension = Path(filename).suffix.lower()[:12]
     return f"chat_avatars/{instance.pk or 'new'}/{uuid4().hex}{extension}"
@@ -551,6 +558,22 @@ class ScheduledMessage(models.Model):
             models.Index(fields=("status", "next_attempt_at", "id"), name="sg_sched_due_idx"),
             models.Index(fields=("sender", "chat", "status"), name="sg_sched_owner_idx"),
         ]
+
+
+class ScheduledAttachment(models.Model):
+    """Private file snapshot owned by an undelivered ScheduledMessage."""
+    scheduled = models.ForeignKey(ScheduledMessage, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(upload_to=scheduled_attachment_path)
+    kind = models.CharField(max_length=16, choices=MessageAttachment.Kind.choices, default=MessageAttachment.Kind.FILE)
+    original_name = models.CharField(max_length=255)
+    mime_type = models.CharField(max_length=127, blank=True)
+    size = models.PositiveBigIntegerField(default=0)
+    duration_ms = models.PositiveIntegerField(default=0)
+    waveform = models.JSONField(default=list, blank=True)
+    is_spoiler = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ("pk",)
 
 
 class ChatFolder(models.Model):

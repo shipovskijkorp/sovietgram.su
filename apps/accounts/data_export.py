@@ -19,7 +19,7 @@ from django.views.decorators.http import require_http_methods
 from apps.messenger.models import (
     ChannelComment, ChannelPostView, Chat, ChatFolder, ChatMemberModeration,
     ChatParticipant, Contact, Message, MessageAttachment, MessageHiddenForUser,
-    MessageReaction, ScheduledMessage, Sticker, StickerPack,
+    MessageReaction, ScheduledAttachment, ScheduledMessage, Sticker, StickerPack,
 )
 from .account_security import FactorConfirmedForm, _limited, _page
 from .models import User, UserBlock
@@ -212,6 +212,19 @@ def build_export(user, include_files=False):
                     yield row
 
             writer.jsonl("scheduled.jsonl", scheduled_rows())
+            queued_files = ScheduledAttachment.objects.filter(scheduled__in=scheduled).order_by("pk")
+            if include_files:
+                for attachment in queued_files.iterator(chunk_size=20):
+                    writer.file(f"scheduled/attachment-{attachment.pk}.bin", attachment.file)
+
+            def queued_attachment_rows():
+                for row in rows(queued_files, "id", "scheduled_id", "kind", "original_name", "mime_type",
+                                "size", "duration_ms", "is_spoiler"):
+                    path = f"scheduled/attachment-{row['id']}.bin"
+                    row["archive_path"] = path if path in bundle.NameToInfo else None
+                    yield row
+
+            writer.jsonl("scheduled_attachments.jsonl", queued_attachment_rows())
             archived_photos = user.avatar_history.all()
             if include_files:
                 for photo in archived_photos:

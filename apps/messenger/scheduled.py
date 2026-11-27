@@ -3,12 +3,14 @@ import hashlib
 import json
 import logging
 from datetime import timedelta
+from pathlib import Path
 from uuid import UUID
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.files.base import ContentFile
 from django.db import transaction
+from django.db.models import Sum
 from django.http import Http404, JsonResponse
 from django.urls import reverse
 from django.utils import timezone
@@ -16,7 +18,9 @@ from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_http_methods, require_POST
 
 from . import views
-from .models import Chat, ChatParticipant, Message, MessageAttachment, ScheduledMessage, Sticker
+from .models import Chat, ChatParticipant, Message, MessageAttachment, ScheduledAttachment, ScheduledMessage, Sticker
+from .forms import MessageForm
+from .media_processing import compress_image_upload
 from .ratelimit import rate_limit
 from .quotes import make_quote, resolve_quote
 from .services import apply_archive_rules_on_new_message, touch_chat
@@ -24,6 +28,7 @@ from .services import apply_archive_rules_on_new_message, touch_chat
 logger = logging.getLogger(__name__)
 MAX_PENDING = 100
 MAX_STICKER_BYTES = 256 * 1024
+MAX_SCHEDULED_MEDIA_BYTES = 512 * 1024 * 1024
 ACTIVE = (ScheduledMessage.Status.PENDING, ScheduledMessage.Status.FAILED)
 
 
@@ -150,15 +155,17 @@ def _member(chat, sender):
     return membership
 
 
-def _validate(chat, sender, text, reply_id, *, check_slow_mode, special_type="", special_data=None, has_sticker=False):
+def _validate(chat, sender, text, reply_id, *, check_slow_mode, special_type="", special_data=None, has_sticker=False, attachment_kinds=()):
     membership = _member(chat, sender)
     capabilities = views._posting_capabilities(chat, membership, sender)
-    capability = "media" if has_sticker else "text"
-    if not capabilities[capability]:
+    kinds = list(attachment_kinds) + ([MessageAttachment.Kind.STICKER] if has_sticker else [])
+    if ((kinds and not capabilities["media"]) or ((text or not kinds) and not capabilities["text"])
+            or (MessageAttachment.Kind.VOICE in kinds and not capabilities["voice"])
+            or (MessageAttachment.Kind.VIDEO_NOTE in kinds and not capabilities["video_note"])):
         raise OutboxError(capabilities["reason"] or "Отправка сообщения запрещена.", 403)
     restriction = views._posting_restriction(
         chat, membership, text=views._special_restriction_text(special_type, special_data, text),
-        attachment_kinds=[MessageAttachment.Kind.STICKER] if has_sticker else [],
+        attachment_kinds=kinds,
         check_slow_mode=check_slow_mode,
     )
     if restriction:
@@ -173,6 +180,7 @@ def _validate(chat, sender, text, reply_id, *, check_slow_mode, special_type="",
 
 
 def _serialize(item):
+    attachments = list(item.attachments.all()) if item.status in ACTIVE else []
     return {
         "id": item.pk,
         "text": item.text,
@@ -180,7 +188,9 @@ def _serialize(item):
         "special_type": item.special_type,
         # Only the sender can list or mutate this private outbox.
         "special_data": item.special_data if item.status in ACTIVE and item.special_type else {},
-        "attachment_type": "sticker" if item.sticker_source_id is not None else "",
+        "attachment_type": "sticker" if item.sticker_source_id is not None else "media" if attachments else "",
+        "attachments": [{"id": a.pk, "kind": a.kind, "name": a.original_name, "size": a.size,
+                         "duration_ms": a.duration_ms, "is_spoiler": a.is_spoiler} for a in attachments],
         "silent": item.silent,
         "reply_to": item.reply_message_id,
         "has_quote": bool(item.reply_quote),
@@ -198,12 +208,15 @@ def _deliver(item, sender, chat):
     """Caller holds the sender, chat and outbox row locks, in that order."""
     if item.status not in ACTIVE:
         return item
+    attachments = list(item.attachments.all())
     try:
         reply = _validate(
             chat, sender, item.text, item.reply_message_id, check_slow_mode=True,
             special_type=item.special_type, special_data=item.special_data,
-            has_sticker=item.sticker_source_id is not None,
+            has_sticker=item.sticker_source_id is not None, attachment_kinds=[a.kind for a in attachments],
         )
+        if any(not a.file or not a.file.storage.exists(a.file.name) for a in attachments):
+            raise OutboxError("Сохранённое вложение недоступно.", 409)
         if item.sticker_source_id is not None and not (0 < len(item.sticker_image) <= MAX_STICKER_BYTES):
             raise OutboxError("Сохранённый стикер недоступен.", 409)
         if item.reply_quote and (chat.protect_content or not resolve_quote(reply, item.reply_quote)):
@@ -233,6 +246,14 @@ def _deliver(item, sender, chat):
             mime_type="image/webp", size=len(image),
         )
         Sticker.objects.filter(pk=item.sticker_source_id, pack__owner=sender).update(last_used_at=timezone.now())
+    if attachments:
+        MessageAttachment.objects.bulk_create([
+            MessageAttachment(message=message, file=a.file.name, kind=a.kind, original_name=a.original_name,
+                              mime_type=a.mime_type, size=a.size, duration_ms=a.duration_ms,
+                              waveform=a.waveform, is_spoiler=a.is_spoiler)
+            for a in attachments
+        ])
+        item.attachments.all().delete()
     touch_chat(chat)
     apply_archive_rules_on_new_message(chat, message)
     # Do not erase a new draft or typing state when the worker delivers.
@@ -263,19 +284,34 @@ def scheduled_messages(request, chat_id):
         account = request.GET.get("account_id")
         if account is not None and account != str(request.user.pk):
             return _failure(OutboxError("Аккаунт изменился. Обновите страницу.", 409))
-        rows = ScheduledMessage.objects.filter(chat=chat, sender=request.user, status__in=ACTIVE).defer("sticker_image")
+        rows = ScheduledMessage.objects.filter(chat=chat, sender=request.user, status__in=ACTIVE).defer("sticker_image").prefetch_related("attachments")
         return _response({"items": [_serialize(item) for item in rows.order_by("scheduled_for", "id")[:MAX_PENDING]]})
 
+    created_files = []
+    committed = False
     try:
         _identity(request)
-        if request.FILES:
-            raise OutboxError("Планирование файлов пока недоступно.")
         sticker_id = _sticker_id(request.POST)
         special_type, special_data, special_text = _special_fields(request.POST)
+        upload_form = None
+        kinds = []
+        if request.FILES:
+            if sticker_id is not None or special_type or set(request.FILES) != {"attachments"}:
+                raise OutboxError("Файлы нельзя объединять со стикером или структурированным вложением.")
+            upload_form = MessageForm(request.POST, request.FILES)
+            if not upload_form.is_valid():
+                first = next(iter(upload_form.errors.values()))[0]
+                raise OutboxError(str(first))
+            if not upload_form.cleaned_data["attachments"]:
+                raise OutboxError("Выберите файлы.")
+            kinds = views._upload_kinds(upload_form, None)
+            special_text = upload_form.cleaned_data["text"]
         text, when, silent, reply_id = _fields(
             request.POST, special_text="" if sticker_id is not None else special_text,
-            allow_empty=sticker_id is not None,
+            allow_empty=sticker_id is not None or bool(kinds),
         )
+        if upload_form is not None:
+            silent = upload_form.cleaned_data["silent"]
         try:
             client_id = UUID(request.POST.get("client_message_id", ""))
         except (TypeError, ValueError, AttributeError):
@@ -283,7 +319,8 @@ def scheduled_messages(request, chat_id):
         raw_quote = request.POST.get("reply_quote", "")
         if len(raw_quote) > 1024:
             raise OutboxError("Выберите фрагмент текста до 1024 символов.")
-        digest = _digest(chat.pk, text, when, silent, reply_id, raw_quote, special_type, special_data, sticker_id)
+        digest = (views._send_request_digest(request) if upload_form is not None else
+                  _digest(chat.pk, text, when, silent, reply_id, raw_quote, special_type, special_data, sticker_id))
         with transaction.atomic():
             sender, fresh_chat = _lock_sender_chat(request.user.pk, chat.pk)
             _member(fresh_chat, sender)
@@ -294,7 +331,8 @@ def scheduled_messages(request, chat_id):
                 return _response({"item": _serialize(previous), "replayed": True})
             _future(when, timezone.now())
             reply = _validate(fresh_chat, sender, text, reply_id, check_slow_mode=False,
-                              special_type=special_type, special_data=special_data, has_sticker=sticker_id is not None)
+                              special_type=special_type, special_data=special_data, has_sticker=sticker_id is not None,
+                              attachment_kinds=kinds)
             sticker_image = b""
             if sticker_id is not None:
                 sticker = Sticker.objects.filter(pk=sticker_id, pack__owner=sender).first()
@@ -311,6 +349,13 @@ def scheduled_messages(request, chat_id):
                 raise OutboxError(str(error)) from error
             if ScheduledMessage.objects.filter(sender=sender, status__in=ACTIVE).count() >= MAX_PENDING:
                 raise OutboxError("Достигнут предел в 100 запланированных сообщений.", 409)
+            if upload_form is not None:
+                queued_size = ScheduledAttachment.objects.filter(
+                    scheduled__sender=sender, scheduled__status__in=ACTIVE,
+                ).aggregate(total=Sum("size"))["total"] or 0
+                incoming = sum(upload.size for upload in upload_form.cleaned_data["attachments"])
+                if queued_size + incoming > MAX_SCHEDULED_MEDIA_BYTES:
+                    raise OutboxError("Лимит отложенных файлов: 512 МиБ на аккаунт.", 409)
             item = ScheduledMessage.objects.create(
                 chat=fresh_chat, sender=sender, client_id=client_id, request_digest=digest,
                 text=text, special_type=special_type, special_data=special_data,
@@ -318,9 +363,37 @@ def scheduled_messages(request, chat_id):
                 reply_message_id=reply_id, reply_quote=quote_ref, silent=silent,
                 scheduled_for=when, next_attempt_at=when,
             )
+            if upload_form is not None:
+                clean = upload_form.cleaned_data
+                mode = clean["attachment_mode"]
+                for upload, kind in zip(clean["attachments"], kinds):
+                    if mode == MessageForm.MODE_MEDIA and clean["compress_images"]:
+                        upload = compress_image_upload(upload)
+                    attachment = ScheduledAttachment(
+                        scheduled=item, kind=kind, original_name=Path(upload.name).name[:255],
+                        mime_type=(getattr(upload, "content_type", "") or "")[:127], size=upload.size,
+                        is_spoiler=bool(mode == MessageForm.MODE_MEDIA and clean["media_spoiler"]),
+                        duration_ms=int(clean["voice_duration_ms"] or 0) if kind == MessageAttachment.Kind.VOICE
+                            else int(clean["video_note_duration_ms"] or 0) if kind == MessageAttachment.Kind.VIDEO_NOTE else 0,
+                        waveform=clean["voice_waveform"] if kind == MessageAttachment.Kind.VOICE else [],
+                    )
+                    attachment.file.save(upload.name, upload, save=False)
+                    created_files.append((attachment.file.storage, attachment.file.name))
+                    attachment.save()
+        committed = True
         return _response({"item": _serialize(item)})
     except OutboxError as error:
         return _failure(error)
+    except OSError:
+        logger.exception("Could not save scheduled media")
+        return _failure(OutboxError("Не удалось сохранить вложения. Повторите отправку.", 503))
+    finally:
+        if not committed:
+            for storage, name in created_files:
+                try:
+                    storage.delete(name)
+                except OSError:
+                    logger.exception("Could not clean failed scheduled upload")
 
 
 @login_required
@@ -348,6 +421,7 @@ def scheduled_action(request, chat_id, scheduled_id):
             if str(item.revision) != request.POST.get("revision") or item.status not in ACTIVE:
                 raise OutboxError("Сообщение уже изменилось. Обновите список.", 409)
             if action == "cancel":
+                item.attachments.all().delete()
                 item.status = ScheduledMessage.Status.CANCELED
                 item.text = ""
                 item.special_type = ""
@@ -371,13 +445,18 @@ def scheduled_action(request, chat_id, scheduled_id):
                     _, special_data, special_text = _special_fields(request.POST)
                 if request.FILES or request.POST.get("sticker_id"):
                     raise OutboxError("Замена файла или стикера пока не поддерживается.")
+                kinds = list(item.attachments.values_list("kind", flat=True))
                 text, when, silent, _ = _fields(request.POST, include_reply=False,
-                    special_text=special_text, allow_empty=item.sticker_source_id is not None)
+                    special_text=special_text, allow_empty=item.sticker_source_id is not None or bool(kinds))
+                if text.strip() and any(kind in {MessageAttachment.Kind.VOICE, MessageAttachment.Kind.VIDEO_NOTE} for kind in kinds):
+                    raise OutboxError("Записи отправляются без подписи.")
+                if kinds and not text.strip():
+                    text = ""
                 _future(when, timezone.now())
                 reply_id = None if request.POST.get("remove_reply") == "1" else item.reply_message_id
                 reply = _validate(chat, sender, text, reply_id, check_slow_mode=False,
                     special_type=item.special_type, special_data=special_data,
-                    has_sticker=item.sticker_source_id is not None)
+                    has_sticker=item.sticker_source_id is not None, attachment_kinds=kinds)
                 if reply_id is None:
                     item.reply_quote = ""
                 elif item.reply_quote and (chat.protect_content or not resolve_quote(reply, item.reply_quote)):
