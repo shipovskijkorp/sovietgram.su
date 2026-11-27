@@ -182,8 +182,9 @@ def build_export(user, include_files=False):
                 "chat_id", "chat__type", "chat__title", "chat__username", "role", "joined_at",
                 "read_through_id", "is_pinned", "pin_order", "is_archived", "is_muted",
                 "muted_until", "marked_unread_at"))
-            writer.jsonl("drafts.jsonl", rows(memberships.filter(chat__protect_content=False).exclude(draft_text=""),
-                "chat_id", "draft_text", "draft_updated_at"))
+            writer.jsonl("drafts.jsonl", rows(memberships.filter(chat__protect_content=False)
+                .filter(Q(draft_text__gt="") | Q(draft_reply_id__isnull=False)),
+                "chat_id", "draft_text", "draft_reply_id", "draft_updated_at"))
             writer.jsonl("messages.jsonl", (safe_special(row) for row in rows(own,
                 "id", "chat_id", "text", "special_type", "special_data", "silent", "created_at", "edited_at")))
             writer.jsonl("reactions.jsonl", rows(MessageReaction.objects.filter(user=user, message__in=visible),

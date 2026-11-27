@@ -89,7 +89,7 @@ from .models import (
 )
 from .models import ChannelPostView, MessageReaction, MessageSendReceipt
 from .contact_names import contact_aliases, contact_display_name, normalize_alias
-from .quotes import make_quote
+from .quotes import make_quote, resolve_quote
 from .ratelimit import rate_limit
 from .services import (
     apply_archive_rules_on_new_message,
@@ -456,6 +456,8 @@ def _clear_history_for_user(chat, membership):
     membership.marked_unread_at = None
     membership.draft_text = ""
     membership.draft_updated_at = None
+    membership.draft_reply_id = None
+    membership.draft_quote = ""
     membership.last_typing_at = None
     membership.save(
         update_fields=(
@@ -465,6 +467,8 @@ def _clear_history_for_user(chat, membership):
             "marked_unread_at",
             "draft_text",
             "draft_updated_at",
+            "draft_reply_id",
+            "draft_quote",
             "last_typing_at",
         )
     )
@@ -1052,6 +1056,7 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
     can_send_media = capabilities["media"]
     can_record_voice = capabilities["media"] and capabilities["voice"]
     can_post = can_send_text or can_send_media
+    draft_reply = _draft_reply_payload(selected_chat, membership, user) if can_post else {}
 
     context.update(
         {
@@ -1064,6 +1069,7 @@ def _messenger_context(request, selected_chat=None, chat_messages=None, archived
             "can_record_voice": can_record_voice,
             "post_restriction_ui": capabilities["reason"],
             "composer_draft_text": membership.draft_text if can_send_text else "",
+            "composer_draft_reply": draft_reply,
             "other_last_read_id": other_last_read_id,
             "pinned_records": pins,
             "pinned_message_ids": pinned_ids,
@@ -2204,6 +2210,8 @@ def send_message(request, chat_id):
                 is_hidden=False,
                 draft_text="",
                 draft_updated_at=None,
+                draft_reply_id=None,
+                draft_quote="",
                 last_typing_at=None,
             )
 
@@ -2329,6 +2337,8 @@ def send_special_message(request, chat_id):
             is_hidden=False,
             draft_text="",
             draft_updated_at=None,
+            draft_reply_id=None,
+            draft_quote="",
             last_typing_at=None,
         )
 
@@ -3533,6 +3543,8 @@ def chat_action(request, chat_id):
                     marked_unread_at=None,
                     draft_text="",
                     draft_updated_at=None,
+                    draft_reply_id=None,
+                    draft_quote="",
                     last_typing_at=None,
                 )
                 PinnedMessage.objects.filter(chat=chat).delete()
@@ -3559,6 +3571,8 @@ def chat_action(request, chat_id):
                     marked_unread_at=None,
                     draft_text="",
                     draft_updated_at=None,
+                    draft_reply_id=None,
+                    draft_quote="",
                     last_typing_at=None,
                 )
                 PinnedMessage.objects.filter(chat=chat).delete()
@@ -3606,6 +3620,8 @@ def chat_action(request, chat_id):
                         is_archived=False,
                         draft_text="",
                         draft_updated_at=None,
+                        draft_reply_id=None,
+                        draft_quote="",
                         last_typing_at=None,
                         last_read_message=None,
                         marked_unread_at=None,
@@ -3666,8 +3682,22 @@ def chat_action(request, chat_id):
     return redirect("messenger:chat", chat_id=chat.pk)
 
 
+def _draft_reply_payload(chat, membership, user):
+    if not membership.draft_reply_id:
+        return {}
+    reply = _visible_message_queryset(chat, user).filter(pk=membership.draft_reply_id, is_deleted=False).first()
+    if reply is None:
+        return {}
+    quote = "" if chat.protect_content else resolve_quote(reply, membership.draft_quote)
+    return {
+        "id": reply.pk, "name": reply.sender.display_name,
+        "preview": quote or reply.preview[:150], "quote": quote,
+    }
+
+
 @login_required
 @require_POST
+@rate_limit("save_draft")
 def save_draft(request, chat_id):
     account_id = request.POST.get("account_id")
     if account_id is not None and account_id != str(request.user.pk):
@@ -3676,10 +3706,38 @@ def save_draft(request, chat_id):
     text = request.POST.get("text", "")
     if len(text) > 4096:
         return JsonResponse({"ok": False, "error": "Черновик слишком длинный."}, status=400)
-    ChatParticipant.objects.filter(chat=chat, user=request.user).update(
-        draft_text=text,
-        draft_updated_at=timezone.now() if text else None,
-    )
+    raw_reply = request.POST.get("reply_to", "")
+    raw_quote = request.POST.get("reply_quote", "")
+    reply_id = None
+    quote_ref = ""
+    if raw_reply:
+        try:
+            reply_id = int(raw_reply)
+            if not 0 < reply_id <= 9223372036854775807:
+                raise ValueError
+        except (TypeError, ValueError, OverflowError):
+            return JsonResponse({"ok": False, "error": "Некорректный ответ."}, status=400)
+    if len(raw_quote) > 1024 or (raw_quote and not reply_id):
+        return JsonResponse({"ok": False, "error": "Некорректная цитата."}, status=400)
+    with transaction.atomic():
+        membership = ChatParticipant.objects.select_for_update().filter(chat=chat, user=request.user, is_hidden=False).first()
+        if membership is None:
+            raise Http404
+        if reply_id:
+            reply = _visible_message_queryset(chat, request.user).filter(pk=reply_id, is_deleted=False).first()
+            if reply is None:
+                reply_id = None
+            elif raw_quote and not chat.protect_content:
+                try:
+                    quote_ref = make_quote(reply, raw_quote)
+                except ValueError:
+                    # Keep the text and reply if the original quote was edited.
+                    quote_ref = ""
+        membership.draft_text = text
+        membership.draft_reply_id = reply_id
+        membership.draft_quote = quote_ref
+        membership.draft_updated_at = timezone.now() if text or reply_id else None
+        membership.save(update_fields=["draft_text", "draft_reply_id", "draft_quote", "draft_updated_at"])
     return JsonResponse({"ok": True})
 
 

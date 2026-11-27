@@ -643,13 +643,13 @@
       {% if can_post %}
       <form class="composer" id="messageForm" method="post" action="{% url 'messenger:send_message' selected_chat.pk %}" enctype="multipart/form-data">
         {% csrf_token %}
-        <div class="composer-reply" id="composerReply" hidden>
+        <div class="composer-reply" id="composerReply"{% if not composer_draft_reply.id %} hidden{% endif %}>
           <span class="composer-reply__line"></span>
-          <span class="composer-reply__copy"><strong id="composerReplyName">Ответ</strong><small id="composerReplyPreview"></small></span>
+          <span class="composer-reply__copy"><strong id="composerReplyName">{% if composer_draft_reply.quote %}Цитата · {% endif %}{{ composer_draft_reply.name|default:"Ответ" }}</strong><small id="composerReplyPreview">{{ composer_draft_reply.preview }}</small></span>
           <button id="composerReplyClose" type="button" aria-label="Отменить ответ"><span class="tg-native-icon tg-native-icon--close tg-native-icon--compact" aria-hidden="true"></span></button>
         </div>
-        <input id="replyToInput" type="hidden" name="reply_to" value="">
-        <input id="replyQuoteInput" type="hidden" name="reply_quote" value="">
+        <input id="replyToInput" type="hidden" name="reply_to" value="{{ composer_draft_reply.id|default:'' }}">
+        <input id="replyQuoteInput" type="hidden" name="reply_quote" value="{{ composer_draft_reply.quote|default:'' }}">
         <div class="voice-retry-row" id="voiceRetryRow" hidden>
           <span>Голосовое сообщение не подтверждено сервером.</span>
           <button type="button" id="voiceRetrySend">Повторить</button>

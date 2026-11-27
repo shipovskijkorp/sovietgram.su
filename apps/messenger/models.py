@@ -134,6 +134,8 @@ class ChatParticipant(models.Model):
     cleared_before_message_id = models.PositiveBigIntegerField(default=0)
     draft_text = models.TextField(blank=True, default="", max_length=4096)
     draft_updated_at = models.DateTimeField(null=True, blank=True)
+    draft_reply_id = models.PositiveBigIntegerField(null=True, blank=True)
+    draft_quote = models.CharField(max_length=88, blank=True, default="")
     last_typing_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:

@@ -11,6 +11,7 @@ DEFAULT_RATE_LIMITS = {
     "history_target": {"limit": 30, "window": 60},
     "global_search": {"limit": 90, "window": 60},
     "typing": {"limit": 120, "window": 60},
+    "save_draft": {"limit": 120, "window": 60},
     "message_reaction": {"limit": 120, "window": 60},
     "channel_discussion_read": {"limit": 120, "window": 60},
     "channel_post_views": {"limit": 40, "window": 60},

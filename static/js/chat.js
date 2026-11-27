@@ -201,13 +201,16 @@ function setReply(article, quote = "") {
   if (composerReplyName) composerReplyName.textContent = (quote ? "Цитата · " : "") + (article.dataset.messageSender || "Ответ");
   if (composerReplyPreview) composerReplyPreview.textContent = quote || messagePreview(article);
   composerReply.hidden = false;
+  scheduleDraftSave();
   messageInput?.focus();
 }
 
 function clearReplyState() {
+  const changed = Boolean(replyToInput?.value || replyQuoteInput?.value);
   if (replyToInput) replyToInput.value = "";
   if (replyQuoteInput) replyQuoteInput.value = "";
   if (composerReply) composerReply.hidden = true;
+  if (changed) scheduleDraftSave();
 }
 
 composerReplyClose?.addEventListener("click", clearReplyState);
@@ -1118,32 +1121,46 @@ chatInfoClose?.addEventListener("click", () => setChatInfo(false));
 
 let draftTimer;
 let typingSentAt = 0;
-async function saveDraft(text, keepalive = false) {
-  if (!messageStage?.dataset.draftUrl) return;
+let draftDirty = false, draftBusy = false, draftVersion = 0;
+function draftForm() {
   const data = new FormData();
   data.append("csrfmiddlewaretoken", csrfToken);
-  data.append("text", text);
+  data.append("text", messageInput?.value || "");
+  data.append("reply_to", replyToInput?.value || "");
+  data.append("reply_quote", currentQuote());
   data.append("account_id", messageStage.dataset.accountId);
+  return data;
+}
+async function saveDraft() {
+  if (!messageStage?.dataset.draftUrl || !draftDirty || draftBusy) return;
+  draftBusy = true;
+  const version = draftVersion;
+  let saved = false;
   try {
-    await fetch(messageStage.dataset.draftUrl, {
-      method: "POST",
-      body: data,
-      credentials: "same-origin",
-      keepalive,
+    const response = await fetch(messageStage.dataset.draftUrl, {
+      method: "POST", body: draftForm(), credentials: "same-origin", keepalive: true,
     });
-  } catch (_error) {
-    // Draft sync is best-effort; the next input event retries it.
+    const result = await response.json();
+    saved = response.ok && result.ok;
+    if (saved && version === draftVersion) draftDirty = false;
+  } catch (_) {}
+  finally {
+    draftBusy = false;
+    // Serialize saves from this tab. New edits made in flight need a new save.
+    if (draftDirty && version !== draftVersion) void saveDraft();
   }
 }
 
 function scheduleDraftSave() {
+  draftDirty = true; draftVersion++;
   clearTimeout(draftTimer);
-  draftTimer = window.setTimeout(() => saveDraft(messageInput?.value || ""), 650);
+  draftTimer = window.setTimeout(saveDraft, 650);
 }
 
 function clearDraftState() {
+  draftDirty = true; draftVersion++;
   clearTimeout(draftTimer);
-  saveDraft("");
+  void saveDraft();
 }
 
 function sendTypingState() {
@@ -1164,14 +1181,12 @@ messageInput?.addEventListener("keydown", (event) => {
   event.preventDefault();
   form?.requestSubmit();
 });
-window.addEventListener("beforeunload", () => {
-  if (!messageStage?.dataset.draftUrl || !messageInput) return;
-  const data = new FormData();
-  data.append("csrfmiddlewaretoken", csrfToken);
-  data.append("text", messageInput.value);
-  data.append("account_id", messageStage.dataset.accountId);
-  navigator.sendBeacon?.(messageStage.dataset.draftUrl, data);
+window.addEventListener("pagehide", () => {
+  // Closing an untouched tab must not overwrite a draft from another device.
+  if (!messageStage?.dataset.draftUrl || !messageInput || !draftDirty) return;
+  navigator.sendBeacon?.(messageStage.dataset.draftUrl, draftForm());
 });
+window.addEventListener("online", () => { if (draftDirty) void saveDraft(); });
 
 const pendingTextList = document.getElementById("pendingTextMessages");
 const queueScope = "sovietgram.outbox.v1." + (messageStage?.dataset.accountId || "") + "." + (conversation?.dataset.chatId || "");
