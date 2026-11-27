@@ -36,6 +36,45 @@ class ConnectionNotificationTests(TestCase):
         self.assertEqual(self.client.get(reverse("accounts:presence_heartbeat")).json()["account_id"],self.alice.pk)
         self.assertEqual(self.client.get(reverse("messenger:poll_sound_notifications"), {"account_id": self.bob.pk}).status_code,409)
 
+    def test_notification_preview_requires_account_opt_in_and_respects_protection(self):
+        normal = Message.objects.create(chat=self.chat, sender=self.bob, text="visible preview")
+        spoiler = Message.objects.create(chat=self.chat, sender=self.bob, text="||spoiler secret||")
+        protected = Message.objects.create(chat=self.group, sender=self.bob, text="protected secret")
+        Chat.objects.filter(pk=self.group.pk).update(protect_content=True)
+        url = reverse("messenger:poll_sound_notifications")
+        params = {"since": (timezone.now()-timedelta(seconds=10)).isoformat(),
+                  "account_id": self.alice.pk, "include_preview": "1"}
+        def results(**changes):
+            response = self.client.get(url, {**params, **changes})
+            return {row["id"]: row for row in response.json()["items"]}
+        self.assertNotIn("preview_sender", results()[normal.pk])
+        User.objects.filter(pk=self.alice.pk).update(notification_preferences={"preview": "sender"})
+        rows = results()
+        self.assertEqual(rows[normal.pk]["preview_sender"], "bob")
+        self.assertNotIn("preview_text", rows[normal.pk])
+        self.assertNotIn("preview_sender", rows[protected.pk])
+        User.objects.filter(pk=self.alice.pk).update(notification_preferences={"preview": "text"})
+        rows = results()
+        self.assertEqual(rows[normal.pk]["preview_text"], "visible preview")
+        self.assertNotIn("preview_text", rows[spoiler.pk])
+        self.assertNotIn("preview_sender", rows[protected.pk])
+        self.assertNotIn("preview_sender", results(include_preview="0")[normal.pk])
+        without_identity = self.client.get(url, {"since": params["since"], "include_preview": "1"})
+        self.assertNotContains(without_identity, "visible preview")
+
+    def test_channel_preview_does_not_reveal_anonymous_publisher(self):
+        channel = Chat.objects.create(type=Chat.Type.CHANNEL, title="Public news")
+        ChatParticipant.objects.create(chat=channel, user=self.bob, role="owner")
+        ChatParticipant.objects.create(chat=channel, user=self.alice)
+        message = Message.objects.create(chat=channel, sender=self.bob, text="Announcement")
+        User.objects.filter(pk=self.alice.pk).update(notification_preferences={"preview": "text"})
+        data = self.client.get(reverse("messenger:poll_sound_notifications"), {
+            "since": (timezone.now()-timedelta(seconds=10)).isoformat(),
+            "account_id": self.alice.pk, "include_preview": "1",
+        }).json()
+        self.assertEqual(data["items"], [{"id":message.pk, "chat_id":channel.pk, "kind":"message",
+            "preview_sender":"Public news", "preview_text":"Announcement"}])
+
     def test_background_notification_poll_does_not_touch_presence(self):
         previous = timezone.now()-timedelta(minutes=5)
         User.objects.filter(pk=self.alice.pk).update(last_seen_at=previous)

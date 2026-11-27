@@ -1003,3 +1003,27 @@ a.tg-settings-danger-action {
 .storage-secondary { width: 100%; min-height: 42px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 9px; color: var(--ink); background: var(--panel-strong); font: inherit; cursor: pointer; }
 .storage-secondary:disabled { opacity: .5; cursor: default; }
 .storage-secondary[hidden] { display: none; }
+
+
+/* Accessible native choices for notification tones and preview privacy. */
+.tg-notification-choice-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 16px;
+}
+.tg-notification-choice-row label { flex: 1 1 100px; min-width: 0; }
+.tg-notification-choice-row select,
+.tg-notification-choice-row button {
+  color: inherit;
+  color-scheme: inherit;
+  background: var(--panel, transparent);
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font: inherit;
+  max-width: 100%;
+}
+.tg-notification-choice-row select { flex: 0 1 170px; min-width: 0; }
+.tg-notification-choice-row button { cursor: pointer; }

@@ -373,6 +373,45 @@
             <span class="tg-settings-switch"><input type="checkbox" data-notification-preference="reply" checked><span class="tg-settings-switch__track"><span></span></span></span>
           </label>
         </div>
+        <div class="tg-settings-subsection">
+          <h2>Звуки уведомлений</h2>
+          <div class="tg-notification-choice-row">
+            <label for="notificationTone_message">Сообщения</label>
+            <select id="notificationTone_message" data-notification-preference="tone_message">
+              <option value="classic">Классический</option><option value="soft">Мягкий</option>
+              <option value="chime">Перезвон</option><option value="short">Короткий</option>
+            </select>
+            <button type="button" data-notification-sample="message" aria-label="Прослушать: сообщения" title="Прослушать">▶</button>
+          </div>
+          <div class="tg-notification-choice-row">
+            <label for="notificationTone_mention">Упоминания</label>
+            <select id="notificationTone_mention" data-notification-preference="tone_mention">
+              <option value="classic">Классический</option><option value="soft">Мягкий</option>
+              <option value="chime">Перезвон</option><option value="short">Короткий</option>
+            </select>
+            <button type="button" data-notification-sample="mention" aria-label="Прослушать: упоминания" title="Прослушать">▶</button>
+          </div>
+          <div class="tg-notification-choice-row">
+            <label for="notificationTone_reply">Ответы</label>
+            <select id="notificationTone_reply" data-notification-preference="tone_reply">
+              <option value="classic">Классический</option><option value="soft">Мягкий</option>
+              <option value="chime">Перезвон</option><option value="short">Короткий</option>
+            </select>
+            <button type="button" data-notification-sample="reply" aria-label="Прослушать: ответы" title="Прослушать">▶</button>
+          </div>
+        </div>
+        <div class="tg-settings-subsection">
+          <h2>Предпросмотр системных уведомлений</h2>
+          <div class="tg-notification-choice-row">
+            <label for="notificationPreviewMode">Содержимое</label>
+            <select id="notificationPreviewMode" data-notification-preference="preview">
+              <option value="hidden">Скрывать всё</option>
+              <option value="sender">Имя и чат</option>
+              <option value="text">Имя, чат и текст</option>
+            </select>
+          </div>
+          <p class="tg-settings-about">По умолчанию содержимое скрыто. При включении предпросмотра оно может быть видно на экране блокировки. Защищённые чаты и спойлеры не раскрываются.</p>
+        </div>
         <div class="tg-settings-subsection"><p id="notificationPreferencesStatus" role="status"></p></div>
       </section>
 

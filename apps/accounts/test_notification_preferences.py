@@ -52,6 +52,25 @@ class NotificationPreferenceTests(TestCase):
         self.user.refresh_from_db()
         self.assertEqual(self.user.last_seen_at, previous)
 
+    def test_tones_and_preview_are_validated_and_synced(self):
+        first, second = Client(), Client()
+        first.force_login(self.user)
+        second.force_login(self.user)
+        url = reverse("accounts:notification_preferences")
+        identity = {"account_id": self.user.pk}
+        default = first.get(url, identity).json()["preferences"]
+        self.assertEqual(default["preview"], "hidden")
+        self.assertEqual(default["tone_message"], "classic")
+        for key, value in (("tone_message", "soft"), ("tone_reply", "short"), ("preview", "sender")):
+            self.assertEqual(first.post(url, {**identity, "key": key, "value": value}).status_code, 200)
+        current = second.get(url, identity).json()["preferences"]
+        self.assertEqual(current["tone_message"], "soft")
+        self.assertEqual(current["tone_reply"], "short")
+        self.assertEqual(current["tone_mention"], "classic")
+        self.assertEqual(current["preview"], "sender")
+        self.assertEqual(first.post(url, {**identity, "key": "preview", "value": "unknown"}).status_code, 400)
+        self.assertEqual(first.post(url, {**identity, "key": "tone_reply", "value": "external"}).status_code, 400)
+
     def test_invalid_values_do_not_initialize_preferences(self):
         self.client.force_login(self.user)
         url = reverse("accounts:notification_preferences")

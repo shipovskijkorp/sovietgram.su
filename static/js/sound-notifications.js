@@ -1,4 +1,4 @@
-/* Content-free notification polling with account preferences and device-local desktop permission. */
+/* Notification polling, account preferences and device-local desktop permission. */
 (() => {
   function newIds(ids, seen) {
     const fresh = [];
@@ -30,7 +30,15 @@
   const preferenceStatus = document.getElementById("notificationPreferencesStatus");
   const originalTitle = document.title;
   const defaults = {sound:true, message:true, mention:true, reply:true, badge:true};
-  const normalize = value => Object.fromEntries(Object.keys(defaults).map(key => [key,value?.[key] !== false]));
+  const tones = {classic:[[660,0],[880,.09]], soft:[[440,0],[554,.11]],
+    chime:[[523,0],[659,.08],[784,.16]], short:[[760,0]]};
+  const choices = {tone_message:Object.keys(tones), tone_mention:Object.keys(tones),
+    tone_reply:Object.keys(tones), preview:["hidden","sender","text"]};
+  const normalize = value => ({
+    ...Object.fromEntries(Object.keys(defaults).map(key => [key,value?.[key] !== false])),
+    ...Object.fromEntries(Object.entries(choices).map(([key, options]) =>
+      [key,options.includes(value?.[key]) ? value[key] : options[0]]))
+  });
   let initialPreferences = {};
   try { initialPreferences = JSON.parse(document.getElementById("notificationAccountPreferences")?.textContent || "{}") || {}; } catch (_) {}
   let serverPreferences = normalize(initialPreferences);
@@ -81,7 +89,7 @@
       while (pending.size) {
         const [name,value] = pending.entries().next().value;
         try {
-          serverPreferences = await requestPreferences({key:name,value:value?"1":"0"});
+          serverPreferences = await requestPreferences({key:name,value:typeof value === "boolean" ? (value?"1":"0") : value});
         } catch (_) {
           saveError = "Не удалось сохранить настройки. Проверьте соединение и повторите.";
         }
@@ -91,9 +99,10 @@
     } finally { saving = false; syncPreferences(); void poll(); }
   }
   function changePreference(name,value) {
-    if (!preferencesUrl || !Object.hasOwn(defaults,name)) return;
+    if (!preferencesUrl || !(Object.hasOwn(defaults,name) || Object.hasOwn(choices,name))) return;
+    if (Object.hasOwn(choices,name) && !choices[name].includes(value)) return;
     generation++; saveError = "";
-    pending.set(name,Boolean(value)); applyPreferences();
+    pending.set(name,Object.hasOwn(defaults,name) ? Boolean(value) : value); applyPreferences();
     void flushPreferences();
   }
   async function importLegacyPreferences() {
@@ -124,7 +133,8 @@
   function syncPreferences() {
     for (const control of preferenceControls) {
       const name = control.dataset.notificationPreference;
-      control.checked = name === "sound" ? enabled : name === "desktop" ? desktopActive() : preferences[name] !== false;
+      if (Object.hasOwn(choices,name)) control.value = preferences[name];
+      else control.checked = name === "sound" ? enabled : name === "desktop" ? desktopActive() : preferences[name] !== false;
       if (name === "desktop") control.disabled = !hasDesktop || desktopBusy;
     }
     if (preferenceStatus) preferenceStatus.textContent = saveError || (saving || initializing
@@ -194,9 +204,15 @@
           const latest = messages.at(-1);
           const kind = messages.some(item => item.kind === "reply") ? "reply"
             : messages.some(item => item.kind === "mention") ? "mention" : "message";
-          const body = kind === "reply" ? "Вам ответили" : kind === "mention" ? "Вас упомянули" :
+          let body = kind === "reply" ? "Вам ответили" : kind === "mention" ? "Вас упомянули" :
             messages.length > 1 ? "Новые сообщения: " + messages.length : "Новое сообщение";
-          const notice = new Notification("Sovietgram", {
+          let title = "Sovietgram";
+          // Honor both the local desired choice and server-approved fields.
+          if (preferences.preview !== "hidden" && latest.preview_sender) {
+            title += " · " + latest.preview_sender;
+            if (preferences.preview === "text" && latest.preview_text) body += "\n" + latest.preview_text;
+          }
+          const notice = new Notification(title, {
             body, tag: "sovietgram-"+button.dataset.accountId+"-"+chatId,
           });
           notice.onclick = async () => {
@@ -233,8 +249,8 @@
     syncPreferences();
   }
   sync();
-  async function unlock() {
-    if (!enabled) return;
+  async function unlock(sample = false) {
+    if (!enabled && !sample) return;
     try {
       const Context=window.AudioContext || window.webkitAudioContext;
       if (!Context) return;
@@ -242,10 +258,11 @@
       if (audio.state==="suspended") await audio.resume();
     } catch(_error) {}
   }
-  function play() {
-    if (!enabled || !audio || audio.state!=="running" || document.hidden || !document.hasFocus()) return;
+  function play(kind = "message", sample = false) {
+    if ((!enabled && !sample) || !audio || audio.state!=="running" || document.hidden || !document.hasFocus()) return;
     const time=audio.currentTime;
-    for (const [frequency,offset] of [[660,0],[880,.09]]) {
+    const tone = tones[preferences["tone_"+kind]] || tones.classic;
+    for (const [frequency,offset] of tone) {
       const oscillator=audio.createOscillator(), gain=audio.createGain();
       oscillator.type="sine"; oscillator.frequency.value=frequency;
       gain.gain.setValueAtTime(.0001,time+offset);
@@ -266,6 +283,8 @@
       const url=new URL(button.dataset.notificationUrl,window.location.origin);
       url.searchParams.set("account_id",button.dataset.accountId);
       if(preferences.badge)url.searchParams.set("include_unread","1");
+      if(desktopActive() && preferences.preview !== "hidden" && serverPreferences.preview !== "hidden")
+        url.searchParams.set("include_preview","1");
       if(cursor){url.searchParams.set("since",cursor);url.searchParams.set("after_id",String(cursorId));}
       const response=await fetch(url,{credentials:"same-origin",cache:"no-store"});
       const result=await response.json();
@@ -279,7 +298,11 @@
       const fresh=new Set(newIds(result.ids||[],seen));
       if(!first && fresh.size) {
         const items=(result.items||[]).filter(item=>fresh.has(String(item.id)) && allowed(item));
-        if(items.length){play();await showDesktop(items);}
+        if(items.length){
+          const kind = items.some(item=>item.kind==="reply") ? "reply"
+            : items.some(item=>item.kind==="mention") ? "mention" : "message";
+          play(kind); await showDesktop(items);
+        }
       }
     }catch(_error){}finally{
       busy=false;
@@ -295,8 +318,13 @@
     const name=control.dataset.notificationPreference;
     if(name==="sound"){setSound(control.checked);return;}
     if(name==="desktop"){void setDesktop(control.checked);return;}
+    if(Object.hasOwn(choices,name)){changePreference(name,control.value);return;}
     if(!Object.hasOwn(defaults,name))return;
     changePreference(name,control.checked);
+  });
+  for(const sample of document.querySelectorAll("[data-notification-sample]")) sample.addEventListener("click",async()=>{
+    await unlock(true);
+    play(sample.dataset.notificationSample,true);
   });
   document.addEventListener("pointerdown",()=>void unlock(),{passive:true});
   document.addEventListener("keydown",()=>void unlock());

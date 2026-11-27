@@ -8,11 +8,21 @@ from django.views.decorators.http import require_http_methods
 from .models import User
 
 KEYS = ("sound", "message", "mention", "reply", "badge")
+TONES = ("classic", "soft", "chime", "short")
+PREVIEWS = ("hidden", "sender", "text")
+CHOICES = {
+    "tone_message": TONES, "tone_mention": TONES, "tone_reply": TONES,
+    "preview": PREVIEWS,
+}
 
 
 def normalized(value):
     value = value if isinstance(value, dict) else {}
-    return {key: value.get(key) is not False for key in KEYS}
+    return {
+        **{key: value.get(key) is not False for key in KEYS},
+        **{key: value.get(key) if value.get(key) in choices else choices[0]
+           for key, choices in CHOICES.items()},
+    }
 
 
 @login_required
@@ -28,7 +38,8 @@ def notification_preferences(request):
         if initializing:
             if any(data.get(k) not in {"0", "1"} for k in KEYS):
                 return JsonResponse({"ok": False, "error": "Некорректные настройки."}, status=400)
-        elif key not in KEYS or value not in {"0", "1"}:
+        elif not ((key in KEYS and value in {"0", "1"})
+                  or (key in CHOICES and value in CHOICES[key])):
             return JsonResponse({"ok": False, "error": "Некорректная настройка."}, status=400)
         # Lock and update one setting at a time to preserve concurrent edits
         # to different preferences made by different devices.
@@ -37,9 +48,9 @@ def notification_preferences(request):
             preferences = normalized(user.notification_preferences)
             if initializing:
                 if not user.notification_preferences:
-                    preferences = {k: data[k] == "1" for k in KEYS}
+                    preferences = normalized({k: data[k] == "1" for k in KEYS})
             else:
-                preferences[key] = value == "1"
+                preferences[key] = value == "1" if key in KEYS else value
             if not user.notification_preferences or not initializing:
                 user.notification_preferences = preferences
                 user.save(update_fields=["notification_preferences"])
