@@ -51,12 +51,147 @@
   let retryPlan = null;
   let editingPhoto = false;
   const sendKeys = window.SovietgramSendRetry.batch();
+  const draftRow = document.getElementById("mediaDraftRow"), draftSummary = document.getElementById("mediaDraftSummary");
+  const draftStatus = document.getElementById("mediaDraftStatus"), draftResume = document.getElementById("mediaDraftResume");
+  const draftDiscard = document.getElementById("mediaDraftDiscard"), draftReplyRow = document.getElementById("mediaDraftReply");
+  const draftReplyText = document.getElementById("mediaDraftReplyText"), draftRemoveReply = document.getElementById("mediaDraftRemoveReply");
+  let draftReply = "", draftQuote = "", draftOriginalText = "";
+  let store = null, revision = null, writeQueue = Promise.resolve(), saveTimer = null;
+  let storageProblem = "", conflict = false, volatile = false, corrupt = false, discarding = false;
+  let pendingWrites = 0, planWasPersisted = false;
 
   function notify(text) {
     if (typeof window.showToast === "function") window.showToast(text);
     else if (typeof showToast === "function") showToast(text);
   }
 
+  function updateDraftUI(){
+    const exists=selectedFiles.length>0||corrupt;
+    if(draftRow)draftRow.hidden=!exists||!backdrop?.hidden;
+    if(draftSummary)draftSummary.textContent=corrupt?"Повреждённый локальный черновик":
+      retryPlan?"Незавершённая отправка · "+retryPlan.completed+" / "+retryPlan.batches.length:
+      "Черновик · "+pluralFiles(selectedFiles.length)+(storageProblem?" · только в этой вкладке":"");
+    if(draftResume){
+      draftResume.disabled=busy||discarding||corrupt;
+      draftResume.textContent=retryPlan?"Продолжить":"Открыть";
+    }
+    if(draftDiscard)draftDiscard.disabled=busy||discarding||conflict;
+    if(draftReplyRow)draftReplyRow.hidden=!draftReply;
+    if(draftReplyText)draftReplyText.textContent="Ответ на сообщение № "+draftReply+(draftQuote?" · с цитатой":"");
+    if(draftRemoveReply)draftRemoveReply.disabled=busy||Boolean(retryPlan);
+    if(draftStatus)draftStatus.textContent=storageProblem||(
+      revision&&!pendingWrites&&!saveTimer?"Сохранено в этом браузере на 7 дней.":"Сохранение локального черновика…");
+  }
+  function snapshot(){
+    return {version:1,files:[...selectedFiles],mode:selectedMode,caption:captionNode?.value||"",
+      group:groupToggle?.checked!==false,silent:Boolean(silentToggle?.checked),
+      compress:Boolean(compressToggle?.checked),spoiler:Boolean(spoilerToggle?.checked),
+      reply:draftReply,quote:draftQuote,originalDraft:draftOriginalText,
+      plan:retryPlan?{...retryPlan,batches:retryPlan.batches.map(b=>({...b,files:[...b.files]}))}:null};
+  }
+  function persistenceError(error){
+    storageProblem=error?.message||"Не удалось сохранить черновик.";
+    if(error?.conflict)conflict=true;
+    updateDraftUI();
+  }
+  function persistCurrent(){
+    clearTimeout(saveTimer);saveTimer=null;
+    if(!selectedFiles.length||corrupt||discarding)return Promise.resolve(false);
+    const data=snapshot();
+    pendingWrites++;updateDraftUI();
+    const operation=writeQueue.then(async()=>{
+      if(conflict||volatile||!store)return false;
+      try{
+        revision=await store.write(revision,data);
+        if(data.plan)planWasPersisted=true;
+        storageProblem="";return true;
+      }catch(e){persistenceError(e);return false;}
+    }).finally(()=>{pendingWrites--;updateDraftUI();});
+    writeQueue=operation.catch(()=>false);
+    return operation;
+  }
+  function schedulePersist(){
+    if(!selectedFiles.length||retryPlan||corrupt)return;
+    clearTimeout(saveTimer);
+    saveTimer=setTimeout(()=>void persistCurrent(),150);
+    updateDraftUI();
+  }
+  async function clearStored(){
+    clearTimeout(saveTimer);saveTimer=null;
+    await writeQueue;
+    if(conflict)return false;
+    if(!store)return revision===null;
+    try{revision=await store.remove(revision);storageProblem="";return true;}
+    catch(e){persistenceError(e);return false;}
+  }
+  function resetComposer(){
+    retryPlan=null;selectedFiles=[];appendNextPick=false;corrupt=false;planWasPersisted=false;
+    draftReply=draftQuote=draftOriginalText="";
+    releaseUrls();sendKeys.clear();
+    if(backdrop)backdrop.hidden=true;
+    if(captionNode)captionNode.value="";
+    setProgress(false,0);updateDraftUI();
+  }
+  function restore(data){
+    selectedFiles=data.files;selectedMode=data.mode;retryPlan=data.plan||null;planWasPersisted=Boolean(retryPlan);
+    draftReply=data.reply;draftQuote=data.quote;draftOriginalText=data.originalDraft;
+    if(modeInput)modeInput.value=selectedMode;
+    if(captionNode)captionNode.value=data.caption;
+    if(groupToggle)groupToggle.checked=data.group!==false;
+    if(silentToggle)silentToggle.checked=Boolean(data.silent);
+    if(compressToggle)compressToggle.checked=Boolean(data.compress);
+    if(spoilerToggle)spoilerToggle.checked=Boolean(data.spoiler);
+    updateDraftUI();
+  }
+  const initDraft=(async()=>{
+    try{
+      store=await window.SovietgramMediaDrafts.create(accountId+":"+conversation.dataset.chatId);
+      const record=await store.load();
+      if(record){
+        revision=record.revision;
+        if(!window.SovietgramMediaDrafts.valid(record.data)){
+          corrupt=true;storageProblem="Не удалось прочитать черновик. Его можно удалить.";return;
+        }
+        restore(record.data);
+      }
+    }catch(e){store=null;persistenceError(e);}
+    finally{if(draftRow)draftRow.dataset.ready="true";updateDraftUI();}
+  })();
+  function resumeDraft(){
+    if(!selectedFiles.length||busy||discarding||corrupt)return;
+    renderSelection();resizeCaption();setProgress(false,0);
+    if(retryPlan&&sendButton)sendButton.textContent="Продолжить отправку";
+    if(backdrop)backdrop.hidden=false;
+    updateDraftUI();
+    if(!retryPlan)captionNode?.focus();
+  }
+  async function discardDraft(confirmFirst=true){
+    if(busy||editingPhoto||discarding)return;
+    if(confirmFirst&&!window.confirm(retryPlan?
+      "Удалить незавершённую отправку? Уже принятые сервером файлы останутся в переписке.":
+      "Удалить черновик вложений с этого устройства?"))return;
+    discarding=true;updateDraftUI();
+    try{
+      if(!await clearStored()){notify(storageProblem||"Не удалось удалить черновик.");return;}
+      resetComposer();
+      volatile=false;
+    }finally{discarding=false;updateDraftUI();}
+  }
+  draftResume?.addEventListener("click",resumeDraft);
+  draftDiscard?.addEventListener("click",()=>void discardDraft());
+  draftRemoveReply?.addEventListener("click",()=>{
+    if(busy||retryPlan)return;
+    draftReply=draftQuote="";updateDraftUI();void persistCurrent();
+  });
+  for(const toggle of [groupToggle,silentToggle,compressToggle,spoilerToggle])
+    toggle?.addEventListener("change",()=>void persistCurrent());
+  captionNode?.addEventListener("input",schedulePersist);
+  document.addEventListener("visibilitychange",()=>{
+    if(document.hidden&&saveTimer&&!retryPlan)void persistCurrent();
+  });
+  window.addEventListener("pagehide",()=>{
+    if(saveTimer&&!retryPlan&&!corrupt)void persistCurrent();
+  });
   function extension(file) {
     const name = (file?.name || "").toLowerCase();
     const index = name.lastIndexOf(".");
@@ -137,26 +272,20 @@
   }
 
   function closeComposer() {
-    if (busy || editingPhoto) return;
-    if (retryPlan && !window.confirm("Прекратить отправку? Уже принятые сервером файлы останутся в переписке.")) return;
-    retryPlan = null;
-    releaseUrls();
-    sendKeys.clear();
-    selectedFiles = [];
-    appendNextPick = false;
+    if (busy || editingPhoto || discarding) return;
     if (backdrop) backdrop.hidden = true;
-    if (captionNode) captionNode.value = "";
-    setProgress(false, 0);
+    releaseUrls();
+    appendNextPick = false;
+    updateDraftUI();
+    if (saveTimer) void persistCurrent();
   }
 
   function removeFile(index) {
     if (busy || retryPlan || editingPhoto) return;
+    if (selectedFiles.length === 1) { void discardDraft(false); return; }
     selectedFiles.splice(index, 1);
-    if (!selectedFiles.length) {
-      closeComposer();
-      return;
-    }
     renderSelection();
+    updateDraftUI();void persistCurrent();
   }
 
   async function editPhoto(index) {
@@ -173,6 +302,7 @@
       selectedFiles = next;
       sendKeys.clear();
       renderSelection();
+      updateDraftUI();void persistCurrent();
     } catch (e) { notify(e.message || "Не удалось открыть редактор."); }
     finally { editingPhoto = false; }
   }
@@ -293,8 +423,9 @@
     previewNode.appendChild(list);
   }
 
-  function openComposer(files, mode, preserveCaption = false) {
-    if (busy || retryPlan || editingPhoto) {
+  async function openComposer(files, mode, preserveCaption = false) {
+    await initDraft;
+    if (busy || retryPlan || editingPhoto || discarding || corrupt || conflict) {
       notify("Сначала завершите или отмените текущую отправку файлов.");
       return;
     }
@@ -309,7 +440,13 @@
       return;
     }
 
+    if (selectedFiles.length && !preserveCaption && !window.confirm("Заменить существующий черновик вложений?")) return;
     const previousCaption = captionNode?.value || "";
+    if (!preserveCaption) {
+      draftReply=replyInput?.value||"";
+      draftQuote=draftReply?window.SovietgramChat?.currentQuote?.()||"":"";
+      draftOriginalText=messageInput?.value||"";
+    }
     selectedFiles = files;
     selectedMode = mode;
     if (modeInput) modeInput.value = mode;
@@ -327,11 +464,14 @@
     if (progressNode) progressNode.hidden = true;
     if (progressBar) progressBar.style.width = "0%";
     if (backdrop) backdrop.hidden = false;
+    updateDraftUI();void persistCurrent();
     window.setTimeout(() => captionNode?.focus(), 0);
   }
 
   function pick(mode, append = false) {
-    if (busy || retryPlan || editingPhoto) return;
+    if (busy || editingPhoto || discarding || conflict || corrupt) return;
+    if (selectedFiles.length && backdrop?.hidden) { resumeDraft(); return; }
+    if (retryPlan) return;
     const input = inputs[mode];
     if (!input) {
       notify("Поле выбора файлов не найдено.");
@@ -442,8 +582,8 @@
   function buildPlan() {
     const files = [...selectedFiles];
     const caption = captionNode?.value || "";
-    const replyTo = replyInput?.value || "";
-    const quote = replyTo ? window.SovietgramChat?.currentQuote?.() || "" : "";
+    const replyTo = draftReply;
+    const quote = draftQuote;
     const silent = Boolean(silentToggle?.checked);
     const compress = selectedMode === "media" && Boolean(compressToggle?.checked);
     const spoiler = selectedMode === "media" && Boolean(spoilerToggle?.checked);
@@ -456,11 +596,12 @@
       quote: index === 0 ? quote : "", id: sendKeys.key(index, signature),
     })) : [{files, caption, reply:replyTo, quote, id:sendKeys.key("album", signature)}];
     return {batches, mode:selectedMode, silent, compress, spoiler, completed:0,
-            originalDraft:messageInput?.value || "", originalReply:replyTo, originalQuote:quote};
+            originalDraft:draftOriginalText, originalReply:replyTo, originalQuote:quote};
   }
 
   async function sendSelected() {
-    if (!selectedFiles.length || busy || editingPhoto) return;
+    if (conflict) { notify(storageProblem); return; }
+    if (!selectedFiles.length || busy || editingPhoto || discarding || corrupt) return;
     const error = validate(selectedFiles, selectedMode);
     if (error) { notify(error); return; }
     const plan = retryPlan || buildPlan();
@@ -471,6 +612,20 @@
     const totalBytes = Math.max(1, plan.batches.reduce((sum, batch) => sum + bytes(batch), 0));
     let sentBytes = plan.batches.slice(0, plan.completed).reduce((sum, batch) => sum + bytes(batch), 0);
     try {
+      // The exact files, options and UUIDs must be committed before the
+      // first request; an old tab cannot replace another tab's retry plan.
+      if (!volatile && !await persistCurrent()) {
+        if (conflict) throw Error(storageProblem);
+        if (planWasPersisted || plan.completed)
+          throw Error("Сначала восстановите доступ к локальной очереди. Сохранённая отправка не будет удалена.");
+        if (!window.confirm((storageProblem||"Локальное хранилище недоступно.")+
+          " Отправить без восстановления после перезагрузки?")) {
+          // Keep the plan intact, including UUIDs.
+          throw Error("Отправка отложена.");
+        }
+        if (!await clearStored()) throw Error(storageProblem||"Не удалось очистить старую запись.");
+        volatile=true;storageProblem="Без сохранения: не закрывайте вкладку.";updateDraftUI();
+      }
       while (plan.completed < plan.batches.length) {
         if (cancelled) throw new Error("Загрузка отменена.");
         const batch = plan.batches[plan.completed];
@@ -482,7 +637,10 @@
         plan.completed++;
         sentBytes += bytes(batch);
         renderSent(payload.message);
+        if (!volatile && !await persistCurrent())
+          throw Error("Сервер принял файл, но не удалось сохранить прогресс. Повтор безопасен с тем же идентификатором.");
       }
+      if (!volatile && !await clearStored()) throw Error("Файлы отправлены, но не удалось очистить локальную очередь.");
       if (messageInput && messageInput.value === plan.originalDraft) {
         messageInput.value = "";
         messageInput.dispatchEvent(new Event("input", { bubbles: true }));
@@ -491,14 +649,15 @@
           (window.SovietgramChat?.currentQuote?.() || "") === plan.originalQuote) {
         window.SovietgramChat?.clearReplyState?.();
       }
-      retryPlan = null;
+      resetComposer();
+      volatile=false;
       setProgress(false, 100);
-      closeComposer();
       void window.SovietgramSidebar?.refresh?.();
       window.SovietgramChat?.focusComposer?.();
     } catch (uploadError) {
       setProgress(false, 0);
       if (sendButton) sendButton.textContent = "Повторить отправку";
+      updateDraftUI();
       notify(uploadError.message + " Отправлено: " + plan.completed + " из " + plan.batches.length + ". Повтор продолжит оставшиеся.");
     }
   }
@@ -521,7 +680,7 @@
   }
   function openTransfer(files) {
     if (!files.length) return;
-    if (busy || retryPlan || editingPhoto) { notify("Сначала завершите текущую отправку или редактирование."); return; }
+    if (busy || retryPlan || editingPhoto || discarding || conflict || corrupt) { notify("Сначала завершите текущую отправку или редактирование."); return; }
     const mode = files.every(isMedia) ? "media" : files.every(isAudio) ? "audio" : "file";
     const append = backdrop && !backdrop.hidden && selectedMode === mode;
     openComposer(append ? [...selectedFiles, ...files] : files, mode, append);
@@ -601,6 +760,11 @@
     onPicked(match[1], match[0]);
   }, true);
 
+  document.addEventListener("keydown", event=>{
+    if(event.key==="Escape"&&backdrop&&!backdrop.hidden&&!document.getElementById("photoEditor")?.open&&!editingPhoto){
+      event.preventDefault();event.stopImmediatePropagation();closeComposer();
+    }
+  },true);
   captionNode?.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" || event.shiftKey) return;
     if (!(event.ctrlKey || event.metaKey || document.body.dataset.enterToSend !== "false")) return;

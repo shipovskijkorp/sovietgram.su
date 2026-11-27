@@ -795,6 +795,87 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.visible(selector)
         self.hidden(selector + " img")
 
+    def test_media_draft_persists_per_chat_and_discards(self):
+        from PIL import Image
+
+        picture = BytesIO()
+        Image.new("RGB", (40, 20), "red").save(picture, format="PNG")
+        self.go(self.direct)
+        self.page.locator("#mediaAttachmentsInput").set_input_files({
+            "name":"draft.png","mimeType":"image/png","buffer":picture.getvalue(),
+        })
+        self.visible("#mediaComposeBackdrop")
+        self.page.locator("#mediaComposeCaption").fill("Caption saved locally")
+        self.page.locator("#mediaComposeSpoiler").check()
+        self.click("#mediaComposeClose")
+        self.visible("#mediaDraftRow")
+        self.expect(self.page.locator("#mediaDraftStatus")).to_contain_text("Сохранено")
+        self.go(self.group)
+        self.expect(self.page.locator("#mediaDraftRow")).to_have_attribute("data-ready","true")
+        self.hidden("#mediaDraftRow")
+        self.go(self.direct)
+        self.visible("#mediaDraftRow")
+        self.click("#mediaDraftResume")
+        self.visible("#mediaComposeBackdrop")
+        self.expect(self.page.locator("#mediaComposeCaption")).to_have_value("Caption saved locally")
+        self.expect(self.page.locator("#mediaComposeSpoiler")).to_be_checked()
+        self.expect(self.page.locator(".media-preview-card img")).to_have_attribute("alt","draft.png")
+        self.click("#mediaComposeClose")
+        self.click("#mediaDraftDiscard")
+        self.hidden("#mediaDraftRow")
+        self.page.reload(wait_until="domcontentloaded")
+        self.expect(self.page.locator("#mediaDraftRow")).to_have_attribute("data-ready","true")
+        self.hidden("#mediaDraftRow")
+
+    def test_media_draft_cas_and_account_scope(self):
+        self.go(self.direct)
+        result = self.page.evaluate("""async () => {
+          const key="999999:888888", other="999998:888888";
+          const a=await window.SovietgramMediaDrafts.create(key);
+          const b=await window.SovietgramMediaDrafts.create(key);
+          const c=await window.SovietgramMediaDrafts.create(other);
+          const file=new File(["data"],"draft.txt",{type:"text/plain",lastModified:1});
+          const data={version:1,files:[file],mode:"file",caption:"A",reply:"",quote:"",originalDraft:"",plan:null};
+          const rev=await a.write(null,data);
+          let conflict=false;
+          try{await b.write(null,{...data,caption:"B"});}catch(e){conflict=Boolean(e.conflict);}
+          const stored=await b.load();
+          const separate=await c.load();
+          await a.remove(rev);a.close();b.close();c.close();
+          return {conflict,caption:stored.data.caption,file:await stored.data.files[0].text(),separate:separate===null};
+        }""")
+        self.assertEqual(result, {"conflict":True,"caption":"A","file":"data","separate":True})
+
+    def test_media_retry_recovers_same_id_after_reload(self):
+        storage = self.enterContext(TemporaryDirectory())
+        self.enterContext(override_settings(MEDIA_ROOT=storage))
+        self.go(self.direct)
+        self.page.locator("#fileAttachmentsInput").set_input_files({
+            "name":"retry.txt","mimeType":"text/plain","buffer":b"retry exact bytes",
+        })
+        self.visible("#mediaComposeBackdrop")
+        self.page.locator("#mediaComposeCaption").fill("Retry caption")
+        url = "**" + reverse("messenger:send_message", args=[self.direct.pk])
+        def lose_response(route):
+            response = route.fetch()
+            self.assertEqual(response.status, 200)
+            route.abort()
+        self.page.route(url, lose_response)
+        self.click("#mediaComposeSend")
+        self.expect(self.page.locator("#mediaComposeSend")).to_have_text("Повторить отправку")
+        self.assertEqual(MessageAttachment.objects.filter(message__chat=self.direct).count(), 1)
+        self.page.unroute(url, lose_response)
+        self.page.reload(wait_until="domcontentloaded")
+        self.visible("#mediaDraftRow")
+        self.expect(self.page.locator("#mediaDraftSummary")).to_contain_text("Незавершённая отправка")
+        self.click("#mediaDraftResume")
+        self.expect(self.page.locator("#mediaComposeSend")).to_have_text("Продолжить отправку")
+        self.click("#mediaComposeSend")
+        self.hidden("#mediaComposeBackdrop")
+        self.hidden("#mediaDraftRow")
+        self.assertEqual(MessageAttachment.objects.filter(message__chat=self.direct).count(), 1)
+        self.assertEqual(Message.objects.filter(chat=self.direct,text="Retry caption").count(), 1)
+
     def test_gallery_filters_navigation_and_protected_download(self):
         from PIL import Image
 

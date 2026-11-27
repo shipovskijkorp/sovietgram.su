@@ -663,6 +663,11 @@
         {% if can_send_text and can_send_sticker %}<section id="stickerSuggestions" class="sticker-suggestions" data-url="{% url 'messenger:sticker_suggestions' %}" aria-label="Подходящие стикеры" hidden></section>{% endif %}
         <input id="replyToInput" type="hidden" name="reply_to" value="{{ composer_draft_reply.id|default:'' }}">
         <input id="replyQuoteInput" type="hidden" name="reply_quote" value="{{ composer_draft_reply.quote|default:'' }}">
+        <div class="media-draft-row" id="mediaDraftRow" hidden>
+          <span id="mediaDraftSummary" aria-live="polite"></span>
+          <button type="button" id="mediaDraftResume">Открыть</button>
+          <button type="button" id="mediaDraftDiscard">Удалить</button>
+        </div>
         <div class="voice-retry-row" id="voiceRetryRow" hidden>
           <span>Голосовое сообщение не подтверждено сервером.</span>
           <button type="button" id="voiceRetrySend">Повторить</button>
@@ -805,6 +810,8 @@
       <button class="media-compose-add" id="mediaComposeAdd" type="button"><span class="tg-native-icon tg-native-icon--add tg-native-icon--compact" aria-hidden="true"></span>Добавить</button>
     </header>
     <div class="media-compose-preview" id="mediaComposePreview"></div>
+    <div class="media-draft-reply" id="mediaDraftReply" hidden><span id="mediaDraftReplyText"></span><button type="button" id="mediaDraftRemoveReply">Убрать ответ</button></div>
+    <p class="media-draft-status" id="mediaDraftStatus" role="status">Черновик сохраняется только в этом браузере.</p>
     <label class="media-compose-group" id="mediaComposeGroupRow" hidden>
       <span><strong>Сгруппировать медиа</strong><small>Отправить выбранное одним альбомом</small></span>
       <span class="media-compose-switch"><input id="mediaComposeGroup" type="checkbox" checked><span><i></i></span></span>
@@ -1368,6 +1375,7 @@
 <script src="{% static 'js/composer-tools.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/attachment-menu.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/photo-editor.js' %}?v={{ static_version }}"></script>
+<script src="{% static 'js/media-drafts.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/attachment-files.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/read-ack.js' %}?v={{ static_version }}"></script>
 <script src="{% static 'js/channel-discussions.js' %}?v={{ static_version }}"></script>

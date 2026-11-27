@@ -30,3 +30,13 @@ test("ordinary uploader receives the configured server limits",()=>{
   assert.match(uploader,/form\.dataset\.maxTotalMib/);
   assert.match(uploader,/xhr\.status === 413/);
 });
+
+test("media retry plan is persisted before uploading and after every acknowledged batch",()=>{
+  const js=read("static/js/attachment-files.js");
+  const store=read("static/js/media-drafts.js");
+  assert.match(js,/await persistCurrent\(\)/);
+  assert.match(js,/plan\.completed\+\+;[\s\S]*?await persistCurrent\(\)/);
+  assert.match(store,/current\?\.revision\|\|null/);
+  assert.match(store,/store\.put\(\{key,revision,bytes,expiresAt:now\+TTL,data\}\)/);
+  assert.match(js,/accountId\+"\x3a"\+conversation\.dataset\.chatId/);
+});
