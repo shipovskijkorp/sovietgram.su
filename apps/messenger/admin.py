@@ -7,6 +7,7 @@ from .models import (
     Message,
     MessageAttachment,
     PinnedMessage,
+    SavedGif,
 )
 
 
@@ -45,3 +46,19 @@ class MessageAdmin(admin.ModelAdmin):
 class PinnedMessageAdmin(admin.ModelAdmin):
     list_display = ("message", "chat", "pinned_by", "pinned_at")
     search_fields = ("message__text", "pinned_by__username")
+
+@admin.register(SavedGif)
+class SavedGifAdmin(admin.ModelAdmin):
+    list_display = ("id", "owner", "name", "size", "published_at", "created_at")
+    list_filter = ("can_publish", "published_at")
+    search_fields = ("name", "tags", "owner__username")
+    fields = ("owner", "name", "tags", "size", "can_publish", "published_at", "created_at")
+    readonly_fields = fields
+    actions = ("unpublish",)
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.action(description="Убрать выбранные GIF из публичного каталога")
+    def unpublish(self, request, queryset):
+        queryset.update(published_at=None)

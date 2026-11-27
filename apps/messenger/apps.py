@@ -7,4 +7,4 @@ class MessengerConfig(AppConfig):
     verbose_name = "Мессенджер"
 
     def ready(self):
-        from . import scheduled_storage  # noqa: F401
+        from . import gif_storage, scheduled_storage  # noqa: F401

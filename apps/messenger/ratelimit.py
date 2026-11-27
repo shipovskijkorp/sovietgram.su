@@ -25,6 +25,8 @@ DEFAULT_RATE_LIMITS = {
     "sticker_packs": {"limit": 50, "window": 60},
     "sticker_suggestions": {"limit": 90, "window": 60},
     "sticker_catalog": {"limit": 60, "window": 60},
+    "gif_library": {"limit": 90, "window": 60},
+    "gif_asset": {"limit": 240, "window": 60},
     "shared_sticker_pack": {"limit": 30, "window": 60},
     "join_invite": {"limit": 40, "window": 60},
     "share_qr": {"limit": 30, "window": 60},

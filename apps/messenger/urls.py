@@ -1,7 +1,7 @@
 from django.urls import path
 
 from apps.accounts import share_qr
-from . import sticker_discovery
+from . import gifs, sticker_discovery
 
 from . import archive_controls, community_profiles, views, scheduled, notifications, folders, stickers, shared_stickers, link_previews, moderation, discussions
 
@@ -16,6 +16,9 @@ urlpatterns = [
     path("chats/mark-all-read/", views.mark_all_chats_read, name="mark_all_chats_read"),
     path("chats/manage/", archive_controls.chat_list_action, name="chat_list_action"),
     path("chats/folders/", folders.chat_folders, name="chat_folders"),
+    path("gifs/", gifs.gif_library, name="gif_library"),
+    path("gifs/<int:gif_id>/image/", gifs.gif_image, name="gif_image"),
+    path("gifs/<int:gif_id>/thumbnail/", gifs.gif_thumbnail, name="gif_thumbnail"),
     path("stickers/", stickers.sticker_packs, name="sticker_packs"),
     path("stickers/catalog/", sticker_discovery.sticker_catalog, name="sticker_catalog"),
     path("stickers/suggestions/", sticker_discovery.sticker_suggestions, name="sticker_suggestions"),

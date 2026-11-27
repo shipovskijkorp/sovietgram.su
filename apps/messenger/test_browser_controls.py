@@ -820,6 +820,7 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.page.locator("#scheduledText").fill("")
         self.click("#scheduledSave")
         self.expect(self.page.locator("#scheduledList")).to_contain_text("future.txt")
+        self.expect(self.page.locator("#scheduledList")).not_to_contain_text("Future file")
         self.page.locator("#scheduledList").get_by_role("button", name="Отправить сейчас", exact=True).click()
         self.expect(self.page.locator("#scheduledList")).not_to_contain_text("future.txt")
         item.refresh_from_db()

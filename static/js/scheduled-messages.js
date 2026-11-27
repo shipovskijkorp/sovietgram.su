@@ -183,6 +183,8 @@
   function showList() {
     ++listVersion; editing=original=stickerDraft=null;collectSpecial=null;updateSpecialControls=null;
     editor.hidden=true; listPane.hidden=false; title.textContent="Отложенные сообщения"; error();
+    // Never expose stale buttons with a previous revision after an edit.
+    list.replaceChildren();
     open(); void loadList();
   }
   let updateSpecialControls = null;
@@ -310,7 +312,7 @@
       else if (result.item.status==="canceled") toast("Отправка отменена.");
       else message=result.item.error || "Сообщение пока не отправлено.";
     } catch(e) {message=e.message;}
-    finally {setBusy(false);error(message);void loadList();}
+    finally {list.replaceChildren();setBusy(false);error(message);void loadList();}
   }
   editor.addEventListener("submit",async event=>{
     event.preventDefault();if(busy)return;

@@ -20,6 +20,12 @@ def scheduled_attachment_path(instance, filename):
     return f"messages/{instance.scheduled.chat_id}/{now:%Y/%m}/{uuid4().hex}{extension}"
 
 
+def saved_gif_path(instance, filename):
+    # The existing private messages namespace is denied by both Nginx
+    # and Django's debug media routes. Access always goes through gifs.py.
+    return f"messages/gifs/{instance.owner_id}/{uuid4().hex}.gif"
+
+
 def chat_avatar_path(instance, filename):
     extension = Path(filename).suffix.lower()[:12]
     return f"chat_avatars/{instance.pk or 'new'}/{uuid4().hex}{extension}"
@@ -627,6 +633,25 @@ class Sticker(models.Model):
 
     class Meta:
         ordering = ("id",)
+
+
+class SavedGif(models.Model):
+    """Independent, bounded copy in an account's GIF library."""
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="saved_gifs")
+    file = models.FileField(upload_to=saved_gif_path)
+    digest = models.CharField(max_length=64, editable=False)
+    size = models.PositiveBigIntegerField(default=0, editable=False)
+    name = models.CharField(max_length=80)
+    tags = models.CharField(max_length=160, blank=True, default="")
+    search_key = models.CharField(max_length=512, editable=False, default="")
+    favorite = models.BooleanField(default=False)
+    can_publish = models.BooleanField(default=False, editable=False)
+    published_at = models.DateTimeField(null=True, blank=True, db_index=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at", "-pk")
+        constraints = [models.UniqueConstraint(fields=("owner", "digest"), name="sg_gif_owner_digest")]
 
 
 class ChatJoinRequest(models.Model):
