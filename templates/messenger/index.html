@@ -505,19 +505,27 @@
                          data-can-add="{{ message.special_ui.can_add|yesno:'true,false' }}"
                          data-can-toggle="{{ message.special_ui.can_toggle|yesno:'true,false' }}">
                   <strong class="message-special__title">{{ message.special_ui.title }}</strong>
-                  <small class="message-special__eyebrow">Список задач</small>
+                  <small class="message-special__eyebrow">Список задач · {{ message.special_ui.completed }}/{{ message.special_ui.total }} выполнено</small>
                   <div class="message-todo__items">
                     {% for task in message.special_ui.tasks %}
-                      <button class="message-todo__item{% if task.done %} is-done{% endif %}" type="button" data-todo-toggle="{{ task.index }}"{% if not message.special_ui.can_toggle %} disabled{% endif %}>
-                        <span class="message-todo__check">✓</span>
-                        <span>{{ task.text }}</span>
-                      </button>
+                      <div class="message-todo__entry">
+                        <button class="message-todo__item{% if task.done %} is-done{% endif %}" type="button" data-todo-toggle="{{ task.index }}" aria-pressed="{{ task.done|yesno:'true,false' }}"{% if not message.special_ui.can_toggle %} disabled{% endif %}>
+                          <span class="message-todo__check">✓</span>
+                          <span>{{ task.text }}{% if task.due_date %}<small class="message-todo__due{% if task.overdue %} is-overdue{% endif %}">{% if task.overdue %}Просрочено · {% else %}До {% endif %}{{ task.due_label }}</small>{% endif %}</span>
+                        </button>
+                        {% if message.special_ui.can_edit_due %}
+                          <details class="message-todo__deadline"><summary>Срок</summary>
+                            <div><input type="date" aria-label="Срок задачи" value="{{ task.due_date }}" data-todo-due-input><button type="button" data-todo-due-save="{{ task.index }}">Сохранить</button></div>
+                          </details>
+                        {% endif %}
+                      </div>
                     {% endfor %}
                   </div>
                   {% if message.special_ui.can_add %}
                     <button class="message-todo__add" type="button" data-todo-add>+ Добавить задачу</button>
                     <div class="message-todo__adder" hidden>
                       <input type="text" maxlength="160" placeholder="Новая задача" data-todo-add-input>
+                      <input type="date" aria-label="Срок новой задачи" data-todo-add-due>
                       <button type="button" data-todo-add-submit>Добавить</button>
                     </div>
                   {% endif %}

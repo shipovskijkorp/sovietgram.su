@@ -1219,3 +1219,21 @@ body[data-theme="dark"] .article-location {
     linear-gradient(135deg, rgba(178,47,57,.11), rgba(198,152,92,.05)),
     repeating-linear-gradient(45deg, transparent 0 12px, rgba(255,255,255,.015) 12px 13px);
 }
+
+
+/* Compact, optional checklist deadlines. */
+.attach-special-row--todo { grid-template-columns: 24px minmax(0, 1fr) 32px; }
+.attach-todo-due { grid-column: 2 / -1; display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:12px; }
+.attach-todo-due input { width:auto; max-width:100%; min-width:0; color-scheme:inherit; }
+.message-todo__entry { min-width:0; }
+.message-todo__entry .message-todo__item { width:100%; }
+.message-todo__due { display:block; font-size:11px; opacity:.78; font-weight:normal; }
+.message-todo__due.is-overdue { color:#b43b3b; opacity:1; }
+body[data-theme="dark"] .message-todo__due.is-overdue { color:#ff9898; }
+.message-todo__deadline { font-size:11px; margin:0 0 4px 27px; }
+.message-todo__deadline summary { cursor:pointer; opacity:.8; }
+.message-todo__deadline div, .message-todo__adder { flex-wrap:wrap; }
+.message-todo__deadline div { display:flex; align-items:center; gap:5px; margin:4px 0; }
+.message-todo__deadline input, .message-todo__deadline button { max-width:100%; min-width:0; color:inherit; font:inherit; background:transparent; border:1px solid currentColor; border-radius:6px; padding:4px 6px; }
+.message-todo__deadline button { cursor:pointer; }
+.message-todo__adder input[type="date"] { max-width:145px; }

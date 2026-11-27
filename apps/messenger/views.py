@@ -91,6 +91,7 @@ from .models import (
 from .models import ChannelPostView, MessageReaction, MessageSendReceipt
 from .contact_names import contact_aliases, contact_display_name, normalize_alias
 from .quotes import make_quote, resolve_quote
+from .todos import clean_due_date
 from .ratelimit import rate_limit
 from .services import (
     apply_archive_rules_on_new_message,
@@ -197,9 +198,20 @@ def _clean_special_payload(special_type, raw_payload):
             raise ValueError("В списке может быть не больше 30 задач.")
         tasks = []
         for value in raw_tasks:
-            text = str(value).strip()[:160]
+            if isinstance(value, dict):
+                if not isinstance(value.get("text"), str):
+                    raise ValueError("Некорректный текст задачи.")
+                text = value["text"].strip()[:160]
+                due = clean_due_date(value.get("due_date"))
+            elif isinstance(value, str):
+                text, due = value.strip()[:160], ""
+            else:
+                raise ValueError("Некорректная задача.")
             if text:
-                tasks.append({"text": text, "done": False, "done_by": None})
+                task = {"text": text, "done": False, "done_by": None}
+                if due:
+                    task["due_date"] = due
+                tasks.append(task)
         if not title:
             raise ValueError("Введите название списка задач.")
         if not tasks:
@@ -2506,8 +2518,10 @@ def special_message_action(request, chat_id, message_id):
             tasks = data.get("tasks") or []
             is_author = message.sender_id == request.user.pk
 
-            if action == "toggle":
-                if not (
+            if action in {"toggle", "set_done", "set_due"}:
+                if action == "set_due" and not is_author:
+                    return JsonResponse({"ok": False, "error": "Сроки может менять автор списка."}, status=403)
+                if action != "set_due" and not (
                     is_author
                     or bool(data.get("allow_others_mark", True))
                 ):
@@ -2528,12 +2542,28 @@ def special_message_action(request, chat_id, message_id):
                         status=404,
                     )
                 task = tasks[index]
-                task["done"] = not bool(task.get("done", False))
-                task["done_by"] = (
-                    request.user.pk
-                    if task["done"]
-                    else None
-                )
+                if action == "set_due":
+                    try:
+                        due = clean_due_date(request.POST.get("due_date", ""))
+                    except ValueError as error:
+                        return JsonResponse({"ok": False, "error": str(error)}, status=400)
+                    if due:
+                        task["due_date"] = due
+                    else:
+                        task.pop("due_date", None)
+                else:
+                    if action == "set_done":
+                        raw_done = request.POST.get("done")
+                        if raw_done not in {"0", "1"}:
+                            return JsonResponse({"ok": False, "error": "Некорректное состояние задачи."}, status=400)
+                        desired = raw_done == "1"
+                    else:
+                        desired = not bool(task.get("done", False))
+                    # Idempotent retries must not flip the checkbox or
+                    # overwrite the original completing participant.
+                    if desired != bool(task.get("done", False)):
+                        task["done"] = desired
+                        task["done_by"] = request.user.pk if desired else None
             elif action == "add":
                 if not (
                     is_author
@@ -2568,13 +2598,14 @@ def special_message_action(request, chat_id, message_id):
                         },
                         status=400,
                     )
-                tasks.append(
-                    {
-                        "text": text_value,
-                        "done": False,
-                        "done_by": None,
-                    }
-                )
+                try:
+                    due = clean_due_date(request.POST.get("due_date", ""))
+                except ValueError as error:
+                    return JsonResponse({"ok": False, "error": str(error)}, status=400)
+                task = {"text": text_value, "done": False, "done_by": None}
+                if due:
+                    task["due_date"] = due
+                tasks.append(task)
             else:
                 return JsonResponse(
                     {"ok": False, "error": "Неизвестное действие списка задач."},
@@ -2845,7 +2876,8 @@ def forward_message(request, chat_id, message_id):
         special_data["closed"] = False
     elif source.special_type == Message.SpecialType.TODO:
         special_data["tasks"] = [
-            {"text": task.get("text", ""), "done": bool(task.get("done")), "done_by": None}
+            {"text": task.get("text", ""), "done": bool(task.get("done")), "done_by": None,
+             **({"due_date": task["due_date"]} if task.get("due_date") else {})}
             for task in special_data.get("tasks", [])
         ]
     hide_sender = request.POST.get("hide_sender") == "1"

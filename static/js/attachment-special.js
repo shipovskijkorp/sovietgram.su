@@ -164,7 +164,13 @@
     input.placeholder = "Задача";
     input.value = value;
 
-    row.append(marker, input, makeRemoveButton(row));
+    const due = document.createElement("input");
+    due.type = "date";
+    due.setAttribute("aria-label", "Срок задачи (необязательно)");
+    const dueLabel = document.createElement("label");
+    dueLabel.className = "attach-todo-due";
+    dueLabel.append("Срок (необязательно)", due);
+    row.append(marker, input, makeRemoveButton(row), dueLabel);
     todoItems?.appendChild(row);
     refreshTodoRows();
     return row;
@@ -286,9 +292,10 @@
     if (activeType === "todo") {
       return {
         title: todoTitle?.value.trim() || "",
-        tasks: [...(todoItems?.querySelectorAll("input[type='text']") || [])]
-          .map((input) => input.value.trim())
-          .filter(Boolean),
+        tasks: [...(todoItems?.children || [])]
+          .map(row => ({text:row.querySelector("input[type='text']")?.value.trim() || "",
+                        due_date:row.querySelector("input[type='date']")?.value || ""}))
+          .filter(task => task.text),
         allow_others_add: Boolean(todoAllowAdd?.checked),
         allow_others_mark: Boolean(todoAllowMark?.checked),
       };
@@ -563,7 +570,7 @@
     card.dataset.canToggle = data.can_toggle ? "true" : "false";
 
     card.appendChild(el("strong", "message-special__title", data.title || "Список задач"));
-    card.appendChild(specialMeta("Список задач"));
+    card.appendChild(specialMeta("Список задач · " + (data.completed ?? 0) + "/" + (data.total ?? (data.tasks || []).length) + " выполнено"));
 
     const list = el("div", "message-todo__items");
     (data.tasks || []).forEach((task) => {
@@ -573,10 +580,27 @@
       );
       button.type = "button";
       button.dataset.todoToggle = String(task.index);
+      button.setAttribute("aria-pressed", String(Boolean(task.done)));
       button.disabled = !data.can_toggle;
       button.appendChild(el("span", "message-todo__check", "✓"));
-      button.appendChild(el("span", "", task.text || ""));
-      list.appendChild(button);
+      const copy = el("span", "", task.text || "");
+      if (task.due_date) copy.appendChild(el("small", "message-todo__due" + (task.overdue ? " is-overdue" : ""),
+        (task.overdue ? "Просрочено · " : "До ") + (task.due_label || task.due_date)));
+      button.appendChild(copy);
+      const entry = el("div", "message-todo__entry");
+      entry.appendChild(button);
+      if (data.can_edit_due) {
+        const details = el("details", "message-todo__deadline");
+        details.appendChild(el("summary", "", "Срок"));
+        const fields = el("div", "");
+        const input = document.createElement("input");
+        input.type = "date"; input.value = task.due_date || ""; input.dataset.todoDueInput = "";
+        input.setAttribute("aria-label", "Срок задачи");
+        const save = el("button", "", "Сохранить");
+        save.type = "button"; save.dataset.todoDueSave = String(task.index);
+        fields.append(input, save); details.appendChild(fields); entry.appendChild(details);
+      }
+      list.appendChild(entry);
     });
     card.appendChild(list);
 
@@ -596,7 +620,10 @@
       const send = el("button", "", "Добавить");
       send.type = "button";
       send.dataset.todoAddSubmit = "";
-      form.append(input, send);
+      const due = document.createElement("input");
+      due.type = "date"; due.dataset.todoAddDue = "";
+      due.setAttribute("aria-label", "Срок новой задачи");
+      form.append(input, due, send);
       card.appendChild(form);
     }
 
@@ -747,13 +774,26 @@
       card.classList.add("is-busy");
       try {
         await specialAction(card, {
-          action: "toggle",
+          action: "set_done",
           index: Number(todoToggle.dataset.todoToggle),
+          done: todoToggle.getAttribute("aria-pressed") === "true" ? "0" : "1",
         });
       } catch (error) {
         card.classList.remove("is-busy");
         notify(error.message);
       }
+      return;
+    }
+
+    const dueSave = event.target.closest("[data-todo-due-save]");
+    if (dueSave) {
+      const card = dueSave.closest("[data-special-type='todo']");
+      const input = dueSave.closest(".message-todo__deadline")?.querySelector("[data-todo-due-input]");
+      if (!card || !input || card.classList.contains("is-busy")) return;
+      card.classList.add("is-busy");
+      try { await specialAction(card, {action:"set_due", index:Number(dueSave.dataset.todoDueSave), due_date:input.value}); }
+      catch (error) { notify(error.message); }
+      finally { card.classList.remove("is-busy"); }
       return;
     }
 
@@ -774,13 +814,15 @@
       const card = todoSubmit.closest("[data-special-type='todo']");
       const input = card?.querySelector("[data-todo-add-input]");
       const value = input?.value.trim() || "";
+      if (!card || card.classList.contains("is-busy")) return;
       if (!value) {
         input?.focus();
         return;
       }
       card.classList.add("is-busy");
       try {
-        await specialAction(card, { action: "add", text: value });
+        await specialAction(card, { action: "add", text: value,
+          due_date:card.querySelector("[data-todo-add-due]")?.value || "" });
       } catch (error) {
         card.classList.remove("is-busy");
         notify(error.message);

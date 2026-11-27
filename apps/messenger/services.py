@@ -8,6 +8,7 @@ from django.utils import timezone
 from apps.accounts.privacy import privacy_allows
 
 from .markdown import render_message_markdown
+from .todos import task_payload
 from .folder_rules import keep_in_archive_for_folder
 from .community_permissions import has_admin_right
 from .models import (
@@ -392,16 +393,21 @@ def serialize_special_content(message, current_user):
     if special_type == Message.SpecialType.TODO:
         is_author = message.sender_id == current_user.pk
         tasks = []
+        today = timezone.localdate()
         for index, task in enumerate(data.get("tasks") or []):
             tasks.append(
                 {
                     "index": index,
                     "text": str(task.get("text", ""))[:160],
                     "done": bool(task.get("done", False)),
+                    **task_payload(task, today),
                 }
             )
         return {
             "type": "todo",
+            "completed": sum(task["done"] for task in tasks),
+            "total": len(tasks),
+            "can_edit_due": is_author,
             "title": str(data.get("title", ""))[:255],
             "tasks": tasks,
             "allow_others_add": bool(data.get("allow_others_add", False)),
