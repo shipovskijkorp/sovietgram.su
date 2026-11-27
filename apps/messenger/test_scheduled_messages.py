@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from apps.accounts.models import User, UserBlock
-from .models import Chat, ChatParticipant, Message, MessageHiddenForUser, ScheduledMessage
+from .models import Chat, ChatParticipant, Message, MessageAttachment, MessageHiddenForUser, ScheduledMessage, Sticker, StickerPack
 from .scheduled import deliver_due_messages
 from .services import get_or_create_direct_chat
 
@@ -139,6 +139,65 @@ class ScheduledMessageTests(TestCase):
             response = self.client.post(self.url(), self.data(text="", special_type=kind, payload=json.dumps(payload)))
             self.assertEqual(response.status_code, 400)
         self.assertFalse(ScheduledMessage.objects.exists())
+
+    def test_scheduled_sticker_snapshot_survives_pack_deletion(self):
+        from io import BytesIO
+        from PIL import Image
+        buffer = BytesIO()
+        Image.new("RGBA", (8, 8), "red").save(buffer, format="WEBP")
+        image = buffer.getvalue()
+        pack = StickerPack.objects.create(owner=self.alice, name="Test")
+        sticker = Sticker.objects.create(pack=pack, image=image)
+        data = self.data(text="", sticker_id=sticker.pk)
+        result = self.client.post(self.url(), data)
+        self.assertEqual(result.status_code, 200, result.content)
+        self.assertEqual(result.json()["item"]["attachment_type"], "sticker")
+        item = ScheduledMessage.objects.get(pk=result.json()["item"]["id"])
+        self.assertEqual(bytes(item.sticker_image), image)
+        self.assertEqual(self.peer.get(self.url()).json()["items"], [])
+        pack.delete()
+        self.assertTrue(self.client.post(self.url(), data).json()["replayed"])
+        updated = self.action(item, "edit", text="ignored",
+            scheduled_for=(timezone.now()+timedelta(minutes=20)).isoformat())
+        self.assertEqual(updated.status_code, 200, updated.content)
+        item.refresh_from_db()
+        self.assertEqual(item.text, "")
+        self.make_due(item)
+        with TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            self.assertEqual(deliver_due_messages(), 1)
+            self.assertEqual(deliver_due_messages(), 0)
+            item.refresh_from_db()
+            self.assertFalse(item.sticker_image)
+            self.assertIsNone(item.sticker_source_id)
+            message = item.delivered_message
+            self.assertEqual(message.text, "")
+            self.assertEqual(message.special_type, "")
+            attachment = message.attachments.get()
+            self.assertEqual(attachment.kind, MessageAttachment.Kind.STICKER)
+            with attachment.file.open("rb") as stored:
+                self.assertEqual(stored.read(), image)
+
+    def test_scheduled_sticker_ownership_media_permission_and_cancel(self):
+        own_pack = StickerPack.objects.create(owner=self.alice, name="Own")
+        own = Sticker.objects.create(pack=own_pack, image=b"sticker")
+        peer_pack = StickerPack.objects.create(owner=self.bob, name="Peer")
+        peer_sticker = Sticker.objects.create(pack=peer_pack, image=b"peer")
+        self.assertEqual(self.client.post(self.url(), self.data(text="", sticker_id=peer_sticker.pk)).status_code, 404)
+        self.assertEqual(self.client.post(self.url(), self.data(text="mixed", sticker_id=own.pk)).status_code, 400)
+        group = Chat.objects.create(type=Chat.Type.GROUP, title="Media only", members_can_send_messages=False)
+        ChatParticipant.objects.create(chat=group, user=self.alice)
+        ChatParticipant.objects.create(chat=group, user=self.bob, role="owner")
+        item = self.schedule(group, text="", sticker_id=own.pk)
+        Chat.objects.filter(pk=group.pk).update(members_can_send_media=False)
+        self.make_due(item)
+        self.assertEqual(deliver_due_messages(), 0)
+        item.refresh_from_db()
+        self.assertEqual(item.status, ScheduledMessage.Status.FAILED)
+        self.assertEqual(self.action(item, "cancel").status_code, 200)
+        item.refresh_from_db()
+        self.assertFalse(item.sticker_image)
+        self.assertIsNone(item.sticker_source_id)
+        self.assertFalse(Message.objects.filter(chat=group).exists())
 
     def test_create_retry_does_not_duplicate_or_recreate_cancelled_item(self):
         data = self.data()

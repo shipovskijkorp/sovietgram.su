@@ -32,7 +32,7 @@
   const scheduleButton = $("scheduleCurrentMessage"), silentButton = $("sendWithoutSound");
   const keys = window.SovietgramSendRetry.batch();
   const keyScope = "sovietgram.pending-schedule."+account+"."+url;
-  let editing = null, original = null, busy = false, listVersion = 0;
+  let editing = null, original = null, stickerDraft = null, busy = false, listVersion = 0;
 
   function toast(value) { window.showToast?.(value); }
   function error(value = "") { errorNode.textContent = value; errorNode.hidden = !value; }
@@ -123,7 +123,8 @@
       when.textContent = formatDate(item.scheduled_for) + (item.silent ? " · Без звука" : "");
       const body = document.createElement("p");
       const labels = {poll:"Опрос", todo:"Список задач", location:"Геопозиция"};
-      body.textContent = (labels[item.special_type] ? labels[item.special_type] + ": " : "") + item.text;
+      body.textContent = item.attachment_type === "sticker" ? "Стикер" :
+        (labels[item.special_type] ? labels[item.special_type] + ": " : "") + item.text;
       const state = document.createElement("small");
       state.textContent = item.status === "failed" ? "Не отправлено: "+item.error
         : item.error ? item.error+" Следующая попытка: "+formatDate(item.next_attempt_at)
@@ -152,26 +153,32 @@
     } catch(e) { if (version===listVersion && dialog.open && !listPane.hidden) error(e.message); }
   }
   function showList() {
-    ++listVersion; editing=original=null;
+    ++listVersion; editing=original=stickerDraft=null;
     editor.hidden=true; listPane.hidden=false; title.textContent="Отложенные сообщения"; error();
     open(); void loadList();
   }
-  function openEditor(item = null) {
+  function openEditor(item = null, sticker = null) {
     if (busy) return;
-    ++listVersion; editing=item;
+    ++listVersion; editing=item; stickerDraft=sticker;
     original=item ? null : {text:input?.value || "",reply:reply?.value || "",quote:window.SovietgramChat?.currentQuote?.() || ""};
-    text.value=item ? item.text : original.text;
-    text.readOnly=Boolean(item?.special_type);
+    const stickerMode = Boolean(stickerDraft || item?.attachment_type === "sticker");
+    text.value=stickerMode ? "Стикер" : item ? item.text : original.text;
+    text.readOnly=Boolean(item?.special_type || stickerMode);
     const minimum = localDateValue(Date.now()+60000);
     date.min=minimum; date.max=localDateValue(Date.now()+365*86400000-60000);
     date.value=item && new Date(item.scheduled_for).getTime()>Date.now()+60000 ? localDateValue(item.scheduled_for) : localDateValue(Date.now()+300000);
     silent.checked=Boolean(item?.silent);
     removeReply.checked=false; replyRow.hidden=!(item?.reply_to || original?.reply);
     listPane.hidden=true; editor.hidden=false;
-    title.textContent=item?"Изменить отложенное сообщение":"Отправить позже";
+    title.textContent=item?"Изменить отложенное сообщение":stickerDraft?"Запланировать стикер":"Отправить позже";
     save.textContent=item?"Сохранить":"Запланировать";
     error();open();(text.readOnly ? date : text).focus();
   }
+  window.SovietgramSchedule.openSticker = item => {
+    if (!item || !/^\d+$/.test(String(item.id)) || busy) return false;
+    openEditor(null, {id:item.id});
+    return true;
+  };
   async function mutate(item, action) {
     if (busy) return;
     if (!window.confirm(action==="cancel"?"Отменить это отложенное сообщение?":"Отправить это сообщение сейчас?")) return;
@@ -195,7 +202,8 @@
     } catch(e) {error(e.message);return;}
     setBusy(true);
     try {
-      const fields={text:text.value,scheduled_for:when,silent:silent.checked?"1":"0"};
+      const isSticker=Boolean(stickerDraft || editing?.attachment_type === "sticker");
+      const fields={text:isSticker?"":text.value,scheduled_for:when,silent:silent.checked?"1":"0"};
       if (editing) {
         Object.assign(fields,{action:"edit",revision:editing.revision,remove_reply:removeReply.checked?"1":"0"});
         await request(editing.action_url,fields);
@@ -205,11 +213,19 @@
         if (fields.reply_to && original?.quote) fields.reply_quote=original.quote;
         const signature=[fields.text,when,fields.silent,fields.reply_to];
         if (fields.reply_quote) signature.push(fields.reply_quote);
+        if (stickerDraft) {
+          fields.sticker_id=String(stickerDraft.id);
+          signature.push(["sticker",fields.sticker_id]);
+        }
         fields.client_message_id=await window.SovietgramSendRetry.textKey(keyScope,signature,keys);
         const result=await request(url,fields,true);
         window.SovietgramSendRetry.clearText(keyScope,keys);
         if (result.item.status==="canceled") throw new Error("Эта отправка уже отменена.");
-        if (original) window.SovietgramChat?.clearScheduledDraft(original.text,original.reply,original.quote);
+        if (stickerDraft && original) {
+          if ((reply?.value || "") === original.reply &&
+              (window.SovietgramChat?.currentQuote?.() || "") === original.quote)
+            window.SovietgramChat?.clearReplyState?.();
+        } else if (original) window.SovietgramChat?.clearScheduledDraft(original.text,original.reply,original.quote);
         toast(result.item.status==="sent"?"Сообщение уже отправлено.":"Сообщение запланировано.");
       }
       setBusy(false);showList();
@@ -222,6 +238,6 @@
   back.addEventListener("click",showList);
   close.addEventListener("click",()=>{if(!busy)dialog.close();});
   dialog.addEventListener("cancel",event=>{if(busy)event.preventDefault();});
-  dialog.addEventListener("close",()=>{++listVersion;editing=original=null;error();});
+  dialog.addEventListener("close",()=>{++listVersion;editing=original=stickerDraft=null;error();});
   window.setInterval(()=>{if(dialog.open&&!listPane.hidden&&!busy&&!document.hidden)void loadList();},5000);
 })();

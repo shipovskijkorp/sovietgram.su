@@ -347,6 +347,11 @@
     };
     if(screen==="picker"){
       make("Отправить без звука",()=>void send(item,true));
+      if(window.SovietgramSchedule?.openSticker)make("Отправить позже",()=>{
+        pickerSelection=selected;
+        dialog.close();
+        window.SovietgramSchedule.openSticker(item);
+      });
     }
     make(item.favorite?"Убрать из избранного":"Добавить в избранное",()=>void mutate("favorite",{sticker_id:item.id,favorite:item.favorite?"0":"1"}));
     if(screen==="picker"&&selected==="recent")make("Убрать из недавних",()=>void mutate("forget_recent",{sticker_id:item.id}));

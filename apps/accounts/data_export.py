@@ -193,10 +193,24 @@ def build_export(user, include_files=False):
                 "id", "post_id", "text", "created_at", "edited_at"))
             writer.jsonl("channel_views.jsonl", rows(ChannelPostView.objects.filter(user=user, post__in=visible),
                 "post_id", "viewed_at"))
-            writer.jsonl("scheduled.jsonl", rows(ScheduledMessage.objects.filter(
+            scheduled = ScheduledMessage.objects.filter(
                 sender=user, chat_id__in=memberships.filter(chat__protect_content=False).values("chat_id"),
                 status__in=[ScheduledMessage.Status.PENDING, ScheduledMessage.Status.FAILED],
-            ), "id", "chat_id", "text", "special_type", "special_data", "silent", "scheduled_for", "status"))
+            )
+            if include_files:
+                for item in scheduled.filter(sticker_source_id__isnull=False).iterator(chunk_size=20):
+                    if item.sticker_image:
+                        writer.binary(f"scheduled/sticker-{item.pk}.webp", item.sticker_image)
+
+            def scheduled_rows():
+                for row in rows(scheduled, "id", "chat_id", "text", "special_type", "special_data",
+                                "silent", "scheduled_for", "status", "sticker_source_id"):
+                    path = f"scheduled/sticker-{row['id']}.webp"
+                    row["attachment_type"] = "sticker" if row.pop("sticker_source_id") is not None else ""
+                    row["archive_path"] = path if path in bundle.NameToInfo else None
+                    yield row
+
+            writer.jsonl("scheduled.jsonl", scheduled_rows())
             writer.jsonl("sticker_packs.jsonl", rows(StickerPack.objects.filter(owner=user),
                 "id", "name", "created_at"))
 
