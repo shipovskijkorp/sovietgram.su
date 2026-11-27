@@ -26,8 +26,9 @@
   padding:0; color:#fff; background:rgba(0,0,0,.60); overflow:hidden;
   --note-cancel-progress:0; --note-lock-progress:0; color-scheme:dark;
 }
-.video-note-dialog[open] { display:grid; grid-template-rows:minmax(0,1fr) auto; align-items:center; justify-items:center; }
-.video-note-dialog::backdrop { background:transparent; }
+.video-note-dialog:not([hidden]) { display:grid; grid-template-rows:minmax(0,1fr) auto; align-items:center; justify-items:center; }
+.video-note-dialog[hidden] { display:none !important; }
+.video-note-dialog { height:100dvh; width:100vw; touch-action:none; overscroll-behavior:contain; }
 .video-note-dialog__panel { width:min(340px,88vw); min-height:0; display:grid; justify-items:center; gap:12px; }
 .video-note-dialog__preview {
   width:min(320px,74vw,52vh); aspect-ratio:1; position:relative; border-radius:50%;
@@ -44,10 +45,13 @@
 #videoNoteClock i,.video-note-gesture__dot { display:inline-block; flex:none; width:8px; height:8px; background:#ed4444; border-radius:50%; }
 .video-note-dialog p { text-align:center; font-size:13px; line-height:1.4; margin:0; padding:0 8px; min-height:18px; text-shadow:0 1px 5px #000; overflow-wrap:anywhere; }
 .video-note-dialog__bottom {
-  width:min(560px,100%); box-sizing:border-box; min-height:76px; padding:12px 18px max(16px,env(safe-area-inset-bottom));
+  width:min(560px,100%); box-sizing:border-box; min-height:116px; padding:12px 12px max(18px,env(safe-area-inset-bottom));
   display:grid; justify-items:center; gap:10px;
 }
-.video-note-dialog__actions { display:flex; align-items:center; justify-content:center; gap:18px; }
+.video-note-dialog__actions { display:flex; align-items:flex-start; justify-content:center; flex-wrap:wrap; gap:12px; }
+.video-note-dialog__actions button { position:relative; margin-bottom:22px; }
+.video-note-dialog__actions button span { position:absolute; top:calc(100% + 4px); left:50%; transform:translateX(-50%); font-size:11px; white-space:nowrap; }
+.video-note-dialog.is-holding .video-note-dialog__bottom { background:rgba(0,0,0,.2); border-radius:18px 18px 0 0; }
 .video-note-dialog button {
   display:grid; place-items:center; flex:none; padding:0; width:48px; height:48px; border:0; border-radius:50%;
   background:#27272aeb; color:white; cursor:pointer;
@@ -65,5 +69,15 @@
 .video-note-gesture__lock svg { width:21px; height:21px; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
 .video-note-gesture__lock small { font-size:10px; }
 @keyframes note-record-pulse { to { opacity:.35; } }
-@media (max-width:480px) { .video-note-player { width:min(184px,100%); } .video-note-dialog__preview { width:min(300px,76vw,48vh); } }
+@media (max-width:480px) {
+  .video-note-player { width:min(184px,100%); }
+  .video-note-dialog__preview { width:min(300px,76vw,45dvh); }
+  .video-note-dialog__actions { gap:10px; }
+  .video-note-dialog__bottom { min-height:116px; }
+}
+@media (max-height:480px) {
+  .video-note-dialog__preview { width:min(210px,42dvh); }
+  .video-note-dialog__panel { gap:7px; }
+  .video-note-dialog__bottom { min-height:94px; padding-top:5px; }
+}
 @media (prefers-reduced-motion:reduce) { .video-note-gesture__dot { animation:none; } }

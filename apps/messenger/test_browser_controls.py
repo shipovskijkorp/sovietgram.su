@@ -350,6 +350,8 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.click("#videoNoteStop")
         self.visible("#videoNoteSend")
         self.expect(self.page.locator("#videoNotePreview")).to_have_attribute("src", re.compile(r"^blob:"))
+        self.expect(self.page.locator("#videoNoteSend")).to_be_enabled()
+        self.page.wait_for_function("document.getElementById('videoNotePreview').videoWidth > 0 && document.getElementById('videoNotePreview').readyState >= 2")
         self.click("#videoNoteSend")
         self.hidden("#videoNoteDialog")
         self.expect(self.page.locator("[data-video-note-player]")).to_have_count(1)
@@ -382,6 +384,59 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.expect(self.page.locator("[data-video-note-player]")).to_have_count(2)
         action.click()
         self.expect(action).to_have_attribute("data-composer-action", "voice")
+
+    def test_video_note_recovers_from_delayed_camera_and_codec_start_failure(self):
+        self.context.grant_permissions(["camera", "microphone"], origin=self.live_server_url)
+        self.page.add_init_script("""
+            const getCamera = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+            window.cameraAttempts = 0;
+            navigator.mediaDevices.getUserMedia = async constraints => {
+                if (!constraints.video) return getCamera(constraints);
+                window.cameraAttempts++;
+                if (window.cameraAttempts === 1) throw new DOMException("Test permission denial", "NotAllowedError");
+                await new Promise(resolve => setTimeout(resolve, 1100));
+                return getCamera(constraints);
+            };
+            const originalStart = MediaRecorder.prototype.start;
+            window.encoderAttempts = 0;
+            MediaRecorder.prototype.start = function(...args) {
+                window.encoderAttempts++;
+                if (window.encoderAttempts === 1) throw new DOMException("Test codec failure", "NotSupportedError");
+                return originalStart.apply(this, args);
+            };
+        """)
+        self.page.set_viewport_size({"width":390, "height":844})
+        self.go(self.direct)
+        action = self.page.locator("#sendButton")
+        action.click()
+        self.expect(action).to_have_attribute("data-composer-action", "video_note")
+        box = action.bounding_box()
+        x, y = box["x"] + box["width"]/2, box["y"] + box["height"]/2
+        self.page.mouse.move(x, y)
+        self.page.mouse.down()
+        self.expect(self.page.locator("#videoNoteDialog")).to_have_attribute("data-record-state", "error")
+        self.page.mouse.up()
+        self.visible("#videoNoteRetry")
+        self.click("#videoNoteClose")
+        self.hidden("#videoNoteDialog")
+        # A camera prompt can outlast the original hold. Releasing must leave
+        # a usable preview instead of silently disposing the permission request.
+        self.page.mouse.move(x, y)
+        self.page.mouse.down()
+        self.expect(self.page.locator("#videoNoteDialog")).to_have_attribute("data-record-state", "opening")
+        self.page.mouse.up()
+        self.expect(self.page.locator("#videoNoteDialog")).to_have_attribute("data-record-state", "ready")
+        self.click("#videoNoteStart")
+        self.expect(self.page.locator("#videoNoteDialog")).to_have_attribute("data-record-state", "recording")
+        self.assertGreaterEqual(self.page.evaluate("window.encoderAttempts"), 2)
+        self.page.wait_for_timeout(1200)
+        self.click("#videoNoteStop")
+        self.expect(self.page.locator("#videoNoteSend")).to_be_enabled()
+        self.page.wait_for_function("document.getElementById('videoNotePreview').videoWidth > 0")
+        self.click("#videoNoteSend")
+        self.hidden("#videoNoteDialog")
+        self.expect(self.page.locator("[data-video-note-player]")).to_have_count(1)
+        self.assertEqual(MessageAttachment.objects.filter(message__chat=self.direct, kind="video_note").count(), 1)
 
     def test_group_message_readers_dialog(self):
         ChatParticipant.objects.filter(chat=self.group, user=self.peer).update(read_through_id=self.message.pk)

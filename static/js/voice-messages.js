@@ -1151,7 +1151,8 @@
     gesture = null; window.clearTimeout(g.timer);
     if (!g.started && !g.canceled && !canceled) { tapRecorder(); return; }
     if (g.started && g.mode === "video_note") {
-      if (canceled || g.canceled) window.SovietgramVideoNotes?.cancelHold();
+      if (g.canceled) window.SovietgramVideoNotes?.cancelHold();
+      else if (canceled) window.SovietgramVideoNotes?.interruptHold();
       else if (!g.locked) window.SovietgramVideoNotes?.releaseHold();
     } else if (g.started) {
       if (pendingPointer?.pointerId === g.pointerId && !g.locked) pendingPointer.released = true;
@@ -1194,6 +1195,11 @@
   }, true);
   document.addEventListener("pointerup", event => stopGesture(event), true);
   document.addEventListener("pointercancel", event => stopGesture(event,true), true);
+  recordButton?.addEventListener("lostpointercapture", event => {
+    // Normal pointerup already cleared gesture. An unexpected capture loss
+    // (browser permission UI, touch interruption) must never leave it stuck.
+    if (gesture?.pointerId === event.pointerId) stopGesture(event,true);
+  });
 
   recordDelete?.addEventListener("click", () => {
     if (recordSession && !recordSession.sending) requestStop(recordSession, "cancel");

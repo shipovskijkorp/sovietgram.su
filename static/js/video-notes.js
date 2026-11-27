@@ -108,94 +108,157 @@
     for(const other of document.querySelectorAll("audio,video"))
       if(other!==player && !other.paused && !(other.id==="videoNotePreview"&&other.srcObject))other.pause();
   },true);
-  window.SovietgramVideoNotes = {buildPlayer, setListened, isOpen:()=>Boolean(dialog?.open)};
-  if(!dialog || !form || !stage)return;
+  const isOpen=()=>Boolean(dialog && !dialog.hidden);
+  window.SovietgramVideoNotes={buildPlayer,setListened,isOpen};
+  if(!dialog||!form||!stage)return;
 
+  // A plain overlay avoids native dialog focus changes and pointer capture
+  // loss in browsers while the composer button is still being held.
+  document.body.appendChild(dialog);
   const preview=$("videoNotePreview"), clock=$("videoNoteClock"), status=$("videoNoteStatus");
   const start=$("videoNoteStart"), stop=$("videoNoteStop"), send=$("videoNoteSend");
-  const camera=$("videoNoteCamera"), retake=$("videoNoteRetake"), close=$("videoNoteClose");
+  const camera=$("videoNoteCamera"), retake=$("videoNoteRetake"), close=$("videoNoteClose"), retry=$("videoNoteRetry");
   const silent=$("videoNoteSilent"), silentRow=$("videoNoteSilentRow");
+  const gestureBar=$("videoNoteGesture"), gestureHint=$("videoNoteGestureHint"), elapsed=$("videoNoteElapsed");
   const MAX_MS=60000, MIN_MS=200, MAX_BYTES=25*1024*1024;
+  const CAMERA_TIMEOUT=30000, STOP_TIMEOUT=5000, DECODE_TIMEOUT=10000;
   let state="idle", generation=0, facing="user", source=null, session=null, pending=null, objectUrl="";
-  let holdMode=false, holdLocked=false;
-  const gestureBar=$("videoNoteGesture"), gestureHint=$("videoNoteGestureHint"), actions=$("videoNoteActions");
-  const elapsed=$("videoNoteElapsed");
+  let holdMode=false, holdLocked=false, openingTimer=0, uploadController=null, restoreFocus=null;
   const stopTracks=stream=>stream?.getTracks?.().forEach(track=>track.stop());
   function ui(next,message="") {
     state=next; status.textContent=message;
     dialog.dataset.recordState=next;
-    const holding=holdMode && !holdLocked && ["opening","ready","recording"].includes(next);
+    const holding=holdMode&&!holdLocked&&["opening","ready","recording"].includes(next);
     dialog.classList.toggle("is-holding",holding);
     dialog.classList.toggle("is-locked",holdLocked);
     gestureBar.hidden=!holding;
-    actions.hidden=holding;
-    start.hidden=!["ready","opening","error"].includes(next);
+    // Keep an explicit escape hatch and normal controls visible during hold.
+    start.hidden=next!=="ready";
     start.disabled=next!=="ready";
-    camera.hidden=holding || !["ready","opening","error"].includes(next);
-    camera.disabled=next==="opening";
+    camera.hidden=!["ready","error"].includes(next);
+    camera.disabled=next!=="ready";
+    retry.hidden=next!=="error";
     stop.hidden=next!=="recording";
-    retake.hidden=!["review","sending"].includes(next);
-    send.hidden=!["review","sending"].includes(next) && !(next==="recording" && !holding);
-    send.disabled=retake.disabled=close.disabled=silent.disabled=next==="sending"||next==="stopping";
+    retake.hidden=!["checking","review"].includes(next);
+    send.hidden=!["recording","checking","review","sending"].includes(next);
+    send.disabled=next==="checking"||next==="sending"||(next==="review"&&!pending?.verified);
+    retake.disabled=next==="sending";
+    close.disabled=false;
+    close.setAttribute("aria-label",next==="sending"?"Прервать ожидание отправки":"Отменить видеозапись");
     send.setAttribute("aria-label",next==="sending"?"Отправка…":"Отправить");
-    silentRow.hidden=!["review","sending"].includes(next);
+    silentRow.hidden=next!=="review";
+    silent.disabled=Boolean(pending?.data);
     clock.hidden=!["recording","stopping"].includes(next);
   }
   function clearPreview() {
-    preview.pause(); preview.srcObject=null; preview.removeAttribute("src"); preview.controls=false; preview.muted=true;
+    preview.pause();preview.autoplay=false;preview.controls=false;preview.muted=true;
+    preview.srcObject=null;preview.removeAttribute("src");
+    try{preview.load();}catch(_){}
     preview.classList.remove("is-mirrored");
     if(objectUrl){URL.revokeObjectURL(objectUrl);objectUrl="";}
   }
   function releaseRecording(current) {
     if(!current)return;
-    clearInterval(current.timer);
-    clearTimeout(current.deadline);
-    cancelAnimationFrame(current.frame);
-    if(current.recordStream && current.recordStream!==source)stopTracks(current.recordStream);
+    clearInterval(current.timer);clearTimeout(current.deadline);clearTimeout(current.stopTimer);
   }
-  function cancel() {
-    generation++;
+  function reset() {
+    ++generation;clearTimeout(openingTimer);openingTimer=0;
+    const current=session;session=null;
+    releaseRecording(current);
+    if(current&&current.recorder.state!=="inactive"){try{current.recorder.stop();}catch(_){}}
+    stopTracks(source);source=null;pending=null;
+    clearPreview();
     holdMode=false;holdLocked=false;
     dialog.style.removeProperty("--note-cancel-progress");
     dialog.style.removeProperty("--note-lock-progress");
-    const current=session; session=null;
-    if(current && current.recorder.state!=="inactive") { try{current.recorder.stop();}catch(_){} }
-    releaseRecording(current); stopTracks(source);source=null;pending=null;
-    clearPreview();ui("idle");
+    ui("idle");
   }
-  function shut() { if(state==="sending")return;cancel();if(dialog.open)dialog.close(); }
-  async function openCamera() {
-    const token=++generation;
-    stopTracks(source); source=null; pending=null; clearPreview();
-    ui("opening","Разрешите доступ к камере и микрофону.");
-    try {
-      if(!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || !window.MediaRecorder)
-        throw new Error("Запись доступна только в браузере с поддержкой камеры и HTTPS.");
-      const stream=await navigator.mediaDevices.getUserMedia({video:{
-        facingMode:{ideal:facing},width:{ideal:480},height:{ideal:480},aspectRatio:{ideal:1},frameRate:{ideal:24,max:30},
-      },audio:true});
-      if(token!==generation||!dialog.open||document.hidden){stopTracks(stream);return;}
-      if(!stream.getVideoTracks().length||!stream.getAudioTracks().length){stopTracks(stream);throw new Error("Нужны камера и микрофон.");}
-      source=stream; preview.srcObject=source; preview.muted=true;
-      preview.classList.toggle("is-mirrored",facing==="user");
-      await preview.play();
-      if(token!==generation||!dialog.open){stopTracks(stream);return;}
-      for(const track of source.getTracks())track.addEventListener("ended",()=>{
-        if(token!==generation||source!==stream)return;
-        if(state==="recording")finish();
-        else if(state==="ready"){stopTracks(source);source=null;clearPreview();ui("error","Камера отключилась. Смените камеру или откройте запись заново.");}
-      });
-      ui("ready","До 60 секунд. Перед отправкой можно посмотреть запись.");
-      if(holdMode) begin();
-    } catch(error) {
-      if(token!==generation)return;
-      stopTracks(source);source=null;clearPreview();
-      ui("error",error?.name==="NotAllowedError"?"Доступ к камере или микрофону запрещён.":error?.name==="NotFoundError"?"Камера или микрофон не найдены.":error.message||"Не удалось открыть камеру.");
+  function closeRecorder() {
+    reset();dialog.hidden=true;
+    window.SovietgramVoice?.syncComposerActions?.();
+    if(restoreFocus?.isConnected)restoreFocus.focus({preventScroll:true});
+    restoreFocus=null;
+  }
+  function fail(message) {
+    reset();ui("error",message);
+  }
+  function manualMode(message) {
+    holdMode=false;holdLocked=false;
+    ui(state,message||status.textContent);
+  }
+  function cameraError(error) {
+    switch(error?.name){
+      case "NotAllowedError":case "SecurityError":
+        return "Нет разрешения на камеру или микрофон. Разрешите доступ к сайту в браузере и нажмите «Повторить».";
+      case "NotFoundError":case "DevicesNotFoundError":
+        return "Камера или микрофон не найдены.";
+      case "NotReadableError":case "TrackStartError":case "AbortError":
+        return "Не удалось открыть камеру или микрофон. Проверьте, не заняты ли они другой программой, и повторите.";
+      case "OverconstrainedError":
+        return "Камера не поддерживает запрошенные параметры. Попробуйте другую камеру.";
+      default:return error?.message||"Не удалось открыть камеру.";
     }
   }
-  function mimeType() {
-    return ["video/mp4;codecs=avc1.42E01E,mp4a.40.2","video/mp4","video/webm;codecs=vp8,opus","video/webm;codecs=vp9,opus","video/webm"].find(type=>
-      typeof MediaRecorder.isTypeSupported==="function"&&MediaRecorder.isTypeSupported(type)) || "";
+  async function getCamera() {
+    const audio={echoCancellation:true,noiseSuppression:true,autoGainControl:true};
+    try {
+      return await navigator.mediaDevices.getUserMedia({video:{
+        facingMode:{ideal:facing},width:{ideal:480},height:{ideal:480},
+        aspectRatio:{ideal:1},frameRate:{ideal:24,max:30},
+      },audio});
+    } catch(error) {
+      // Some drivers and mobile browsers reject otherwise advisory constraints.
+      if(!["OverconstrainedError","ConstraintNotSatisfiedError","TypeError"].includes(error?.name))throw error;
+      return navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facing}},audio:true});
+    }
+  }
+  async function openCamera() {
+    const token=++generation;
+    clearTimeout(openingTimer);
+    stopTracks(source);source=null;pending=null;clearPreview();
+    ui("opening","Разрешите доступ к камере и микрофону. Можно отпустить кнопку.");
+    openingTimer=setTimeout(()=>{
+      if(token===generation&&state==="opening")fail("Камера не ответила. Проверьте разрешения и нажмите «Повторить».");
+    },CAMERA_TIMEOUT);
+    try {
+      if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder)
+        throw new Error("Запись требует HTTPS, камеры и браузера с поддержкой MediaRecorder.");
+      const stream=await getCamera();
+      if(token!==generation||!isOpen()){stopTracks(stream);return;}
+      if(document.hidden){stopTracks(stream);fail("Вернитесь на вкладку и нажмите «Повторить».");return;}
+      if(!stream.getVideoTracks().some(track=>track.readyState==="live")||
+         !stream.getAudioTracks().some(track=>track.readyState==="live")){
+        stopTracks(stream);throw new Error("Для кружка нужны работающие камера и микрофон.");
+      }
+      clearTimeout(openingTimer);openingTimer=0;source=stream;
+      preview.autoplay=true;preview.muted=true;preview.srcObject=source;
+      preview.classList.toggle("is-mirrored",facing==="user");
+      // Preview playback is not a prerequisite for native recording. A rejected
+      // play() or delayed metadata event must not stall the entire UI.
+      try {
+        const playing=preview.play();
+        playing?.catch(()=>{if(token===generation&&state==="ready")
+          status.textContent="Предпросмотр не запустился. Нажмите «Записать» или смените камеру.";});
+      } catch(_) {}
+      for(const track of stream.getTracks())track.addEventListener("ended",()=>{
+        if(token!==generation||source!==stream)return;
+        if(state==="recording")finish(false);
+        else if(state==="ready")fail("Камера или микрофон отключились. Нажмите «Повторить».");
+      });
+      ui("ready","Камера готова. Нажмите «Записать».");
+      if(holdMode)begin();
+    } catch(error) {
+      if(token===generation)fail(cameraError(error));
+    }
+  }
+  function recorderTypes() {
+    // Prefer portable WebM/Opus on Chromium/Firefox; Safari can select MP4.
+    const options=["video/webm;codecs=vp8,opus","video/webm",
+      "video/webm;codecs=vp9,opus","video/mp4;codecs=avc1.42E01E,mp4a.40.2","video/mp4"];
+    const supported=options.filter(type=>{
+      try{return !MediaRecorder.isTypeSupported||MediaRecorder.isTypeSupported(type);}catch(_){return false;}
+    });
+    return [...supported,""];
   }
   function finish(sendImmediately=false) {
     const current=session;
@@ -204,85 +267,116 @@
     current.duration=Math.min(MAX_MS,Math.max(0,Math.round(performance.now()-current.started)));
     clearInterval(current.timer);clearTimeout(current.deadline);
     ui("stopping","Подготовка записи…");
-    try{if(current.recorder.state!=="inactive")current.recorder.stop();}
-    catch(_){cancel();ui("error","Не удалось завершить запись.");}
+    current.stopTimer=setTimeout(()=>{
+      if(session===current)fail("Браузер не завершил запись. Попробуйте ещё раз.");
+    },STOP_TIMEOUT);
+    try {
+      if(current.recorder.state!=="inactive")current.recorder.stop();
+    } catch(_) {fail("Не удалось завершить запись. Попробуйте ещё раз.");}
+  }
+  async function containerType(blob) {
+    const header=new Uint8Array(await blob.slice(0,16).arrayBuffer());
+    if(header.length>=4&&header[0]===0x1a&&header[1]===0x45&&header[2]===0xdf&&header[3]===0xa3)return "video/webm";
+    if(header.length>=12&&String.fromCharCode(...header.slice(4,8))==="ftyp")return "video/mp4";
+    return "";
+  }
+  async function prepareReview(current) {
+    if(session!==current)return;
+    releaseRecording(current);
+    // Browser may stop itself (device lost). Still calculate the elapsed time.
+    const duration=current.duration||Math.min(MAX_MS,Math.max(0,Math.round(performance.now()-current.started)));
+    session=null;stopTracks(source);source=null;clearPreview();
+    holdMode=false;holdLocked=false;
+    const token=generation;
+    const raw=new Blob(current.chunks);
+    if(duration<MIN_MS||!raw.size||raw.size>MAX_BYTES){
+      fail(raw.size>MAX_BYTES?"Запись превышает 25 МиБ.":raw.size?"Запись слишком короткая.":"Камера не передала ни одного фрагмента записи.");
+      return;
+    }
+    ui("checking","Проверка записанного видео…");
+    let type;
+    try{type=await containerType(raw);}catch(_){type="";}
+    if(token!==generation||!isOpen())return;
+    if(!type){fail("Полученный файл не является поддерживаемым WebM или MP4. Попробуйте снова.");return;}
+    const blob=new Blob([raw],{type});
+    const item={blob,duration,filename:"video-note-"+Date.now()+(type==="video/mp4"?".mp4":".webm"),data:null,verified:false};
+    pending=item;objectUrl=URL.createObjectURL(blob);
+    preview.preload="auto";preview.autoplay=false;preview.controls=true;preview.muted=false;silent.checked=false;
+    // Validate that the browser can actually decode a video track, not just
+    // that MediaRecorder returned a nonempty audio-only or invalid container.
+    let timer=0, settled=false;
+    const cleanup=()=>{
+      clearTimeout(timer);
+      for(const name of ["loadeddata","canplay","playing"])preview.removeEventListener(name,decoded);
+      preview.removeEventListener("error",invalid);
+    };
+    const decoded=()=>{
+      if(token!==generation||pending!==item){cleanup();return;}
+      if(preview.readyState<2||!preview.videoWidth||!preview.videoHeight)return;
+      if(settled)return;settled=true;cleanup();
+      item.verified=true;
+      ui("review","Запись готова. Можно посмотреть или отправить.");
+      if(current.autoSend)void upload();
+    };
+    const invalid=()=>{
+      if(settled)return;settled=true;cleanup();
+      if(token===generation&&pending===item)fail("Не удалось декодировать записанное видео. Запишите кружок заново.");
+    };
+    for(const name of ["loadeddata","canplay","playing"])preview.addEventListener(name,decoded);
+    preview.addEventListener("error",invalid);
+    timer=setTimeout(()=>{
+      if(token!==generation||pending!==item){cleanup();return;}
+      // Mobile data-saving modes may defer preload until the user presses play.
+      // Keep the recording and let the user trigger decoding, never auto-send
+      // a video that has not been verified.
+      current.autoSend=false;
+      ui("review","Нажмите ▶ на предпросмотре, чтобы проверить видео, или перезапишите его.");
+    },DECODE_TIMEOUT);
+    preview.src=objectUrl;preview.load();decoded();
   }
   function begin() {
     if(state!=="ready"||!source)return;
-    // Square center crop at a modest resolution. On browsers without canvas
-    // capture the actual camera stream is kept and still displayed round.
-    let recordStream=source, canvas=null, context=null;
-    if(preview.videoWidth&&preview.videoHeight){
-      const target=document.createElement("canvas");target.width=target.height=480;
-      const ctx=target.getContext("2d",{alpha:false});
-      if(ctx&&typeof target.captureStream==="function"){
+    if(!source.getVideoTracks().some(track=>track.readyState==="live")){
+      fail("Камера отключилась. Нажмите «Повторить».");return;
+    }
+    // Record the camera stream directly. Canvas capture + requestAnimationFrame
+    // can produce black/empty frames on real GPUs and mobile browsers.
+    // The circular player still crops the center of the original video.
+    let lastError=null;
+    for(const mime of recorderTypes()){
+      for(const withBitrate of [true,false]){
+        let recorder=null,current=null;
         try{
-          const captured=target.captureStream(24);
-          if(captured.getVideoTracks().length){
-            for(const audio of source.getAudioTracks())captured.addTrack(audio);
-            recordStream=captured;canvas=target;context=ctx;
-          }else stopTracks(captured);
-        }catch(_){}
+          const options={...(mime?{mimeType:mime}:{}),...(withBitrate?{videoBitsPerSecond:1400000,audioBitsPerSecond:64000}:{})};
+          recorder=new MediaRecorder(source,options);
+          current={recorder,chunks:[],bytes:0,started:performance.now(),duration:0,timer:0,deadline:0,stopTimer:0,autoSend:false};
+          session=current;
+          recorder.addEventListener("dataavailable",event=>{
+            if(session!==current||!event.data?.size)return;
+            current.chunks.push(event.data);current.bytes+=event.data.size;
+            if(current.bytes>MAX_BYTES&&state==="recording")finish(false);
+          });
+          recorder.addEventListener("error",()=>{
+            if(session===current)fail("Ошибка кодирования видео. Проверьте камеру и повторите.");
+          });
+          recorder.addEventListener("stop",()=>{void prepareReview(current);},{once:true});
+          recorder.start(250);current.started=performance.now();
+          elapsed.textContent="0:00";ui("recording",holdLocked?"Запись зафиксирована":"Идёт запись…");
+          current.timer=setInterval(()=>{elapsed.textContent=time(Math.min(MAX_MS,performance.now()-current.started)/1000);},100);
+          current.deadline=setTimeout(()=>finish(false),MAX_MS);
+          return;
+        }catch(error){
+          lastError=error;session=null;
+          releaseRecording(current);
+          if(recorder&&recorder.state!=="inactive"){try{recorder.stop();}catch(_){}}
+        }
       }
     }
-    const mime=mimeType();
-    let recorder;
-    try{
-      const options={videoBitsPerSecond:1400000,audioBitsPerSecond:64000,...(mime?{mimeType:mime}:{})};
-      try{recorder=new MediaRecorder(recordStream,options);}
-      catch(_){recorder=new MediaRecorder(recordStream,mime?{mimeType:mime}:undefined);}
-    }catch(_){
-      if(recordStream!==source)stopTracks(recordStream);
-      cancel();ui("error","Браузер не смог начать запись видео. Смените камеру или попробуйте другой браузер.");return;
-    }
-    const current={recorder,recordStream,chunks:[],bytes:0,started:performance.now(),duration:0,frame:0,timer:0,deadline:0};
-    session=current;
-    function draw(){
-      if(session!==current||!context)return;
-      if(preview.videoWidth&&preview.videoHeight){
-        const edge=Math.min(preview.videoWidth,preview.videoHeight);
-        context.drawImage(preview,(preview.videoWidth-edge)/2,(preview.videoHeight-edge)/2,edge,edge,0,0,480,480);
-      }
-      current.frame=requestAnimationFrame(draw);
-    }
-    if(canvas)draw();
-    recorder.addEventListener("dataavailable",event=>{
-      if(session!==current||!event.data?.size)return;
-      current.chunks.push(event.data);current.bytes+=event.data.size;
-      if(current.bytes>MAX_BYTES&&state==="recording")finish();
-    });
-    recorder.addEventListener("error",()=>{
-      if(session!==current)return;
-      cancel();ui("error","Ошибка записи. Попробуйте снова.");
-    });
-    recorder.addEventListener("stop",()=>{
-      if(session!==current)return;
-      releaseRecording(current);
-      stopTracks(source);source=null;session=null;clearPreview();
-      const type=(recorder.mimeType||current.chunks[0]?.type||mime).split(";",1)[0].toLowerCase();
-      if(!["video/webm","video/mp4"].includes(type)){
-        ui("error","Формат записанного видео не поддерживается.");return;
-      }
-      const blob=new Blob(current.chunks,{type});
-      if(current.duration<MIN_MS||!blob.size||blob.size>MAX_BYTES){
-        ui("error",blob.size>MAX_BYTES?"Запись больше 25 МБ.":"Запись слишком короткая.");return;
-      }
-      pending={blob,duration:current.duration,filename:"video-note-"+Date.now()+(type==="video/mp4"?".mp4":".webm"),data:null};
-      objectUrl=URL.createObjectURL(blob);preview.src=objectUrl;preview.controls=true;preview.muted=false;
-      silent.checked=false;
-      ui("review","Просмотрите кружок или отправьте его.");
-      if(current.autoSend) void upload();
-    },{once:true});
-    try{
-      recorder.start(250);current.started=performance.now();
-      elapsed.textContent="0:00";ui("recording",holdLocked?"Запись зафиксирована":"Идёт запись…");
-      current.timer=setInterval(()=>{elapsed.textContent=time(Math.min(MAX_MS,performance.now()-current.started)/1000);},100);
-      current.deadline=setTimeout(()=>finish(false),MAX_MS);
-    }catch(_){cancel();ui("error","Не удалось начать запись.");}
+    fail("Не удалось запустить видеокодек"+(lastError?.name?" ("+lastError.name+")":"")+". Попробуйте другой браузер или камеру.");
   }
   async function upload() {
-    if(state!=="review"||!pending)return;
-    const item=pending;
+    if(state!=="review"||!pending?.verified)return;
+    const item=pending,token=generation;
     if(!item.data){
       const reply=$("replyToInput")?.value||"",quote=reply?window.SovietgramChat?.currentQuote?.()||"":"";
       const data=new FormData();
@@ -297,80 +391,114 @@
       data.append("attachments",item.blob,item.filename);item.data=data;
     }
     preview.pause();ui("sending","Отправка видеокружка…");
+    const controller=new AbortController();uploadController=controller;
+    const deadline=setTimeout(()=>controller.abort(),90000);
     try {
       const response=await window.SovietgramSendRetry.fetchSend(form.action,{
-        method:"POST",credentials:"same-origin",headers:{"X-Requested-With":"XMLHttpRequest"},body:item.data,
+        method:"POST",credentials:"same-origin",headers:{"X-Requested-With":"XMLHttpRequest"},
+        body:item.data,signal:controller.signal,
       });
       const result=await response.json().catch(()=>({}));
+      if(token!==generation||pending!==item)return;
       if(!response.ok||!result.ok||!result.message)
         throw new Error(result.error||Object.values(result.errors||{}).flat()[0]?.message||"Не удалось отправить запись.");
       if(($("replyToInput")?.value||"")===(item.data.get("reply_to")||"")&&
          (window.SovietgramChat?.currentQuote?.()||"")===(item.data.get("reply_quote")||""))
         window.SovietgramChat?.clearReplyState?.();
-      if(!window.SovietgramChat?.acceptSentMessage?.(result.message))
-        window.SovietgramChat?.syncNow?.();
-      cancel();dialog.close();notify("Видеокружок отправлен.");
+      if(!window.SovietgramChat?.acceptSentMessage?.(result.message))window.SovietgramChat?.syncNow?.();
+      closeRecorder();notify("Видеокружок отправлен.");
     } catch(error) {
-      ui("review",(error.message||"Ошибка отправки.")+" Запись сохранена для повтора.");
-      // Retry the same immutable payload to avoid duplicate sends.
-      silent.disabled=true;
-    }
+      if(token===generation&&pending===item)ui("review",
+        (controller.signal.aborted?"Отправка прервана или сервер не ответил.":error.message||"Ошибка отправки.")+
+        " Запись сохранена для повтора без дублирования.");
+    } finally {clearTimeout(deadline);if(uploadController===controller)uploadController=null;}
   }
   function openRecorder(held=false) {
-    if(dialog.open)return false;
-    if(window.SovietgramVoice?.isRecording?.() || ($("voiceRecordingBar") && !$("voiceRecordingBar").hidden)){
+    if(isOpen())return false;
+    if(window.SovietgramVoice?.isRecording?.()||($("voiceRecordingBar")&&!$("voiceRecordingBar").hidden)){
       notify("Сначала завершите голосовую запись.");return false;
     }
+    restoreFocus=document.activeElement;
     holdMode=held;holdLocked=false;facing="user";
     gestureHint.textContent="‹ Сдвиньте влево для отмены";
-    // A non-modal overlay during a held pointer preserves its capture on
-    // the composer button. The overlay still intercepts unrelated clicks.
-    if(held) dialog.show(); else dialog.showModal();
+    dialog.hidden=false;
+    // Do not steal focus or pointer capture during a live hold.
+    if(!held)close.focus({preventScroll:true});
     void openCamera();return true;
   }
+  function stopOrCancel() {
+    if(state==="sending"){
+      // A server may already have committed the upload. Preserve its UUID
+      // and the recording when the user interrupts the wait.
+      uploadController?.abort();return;
+    }
+    if(pending&&!window.confirm("Удалить записанный кружок?"))return;
+    closeRecorder();
+  }
   Object.assign(window.SovietgramVideoNotes,{
-    openPreview:()=>openRecorder(false),
-    startHold:()=>openRecorder(true),
+    openPreview:()=>openRecorder(false),startHold:()=>openRecorder(true),
     moveHold:(cancelProgress,lockProgress)=>{
-      if(!holdMode||holdLocked||!dialog.open)return;
+      if(!holdMode||holdLocked||!isOpen())return;
       dialog.style.setProperty("--note-cancel-progress",String(cancelProgress));
       dialog.style.setProperty("--note-lock-progress",String(lockProgress));
       gestureHint.textContent=cancelProgress>.5?"Отмена записи":lockProgress>.5?"Фиксация записи":"‹ Сдвиньте влево для отмены";
     },
     lockHold:()=>{
-      if(!holdMode||!dialog.open)return;
-      holdLocked=true;ui(state,"Запись зафиксирована");
+      if(!holdMode||!isOpen())return;
+      holdLocked=true;ui(state,state==="opening"?"Подключение камеры… Запись зафиксирована.":"Запись зафиксирована");
     },
-    cancelHold:()=>{if(holdMode && dialog.open && state!=="sending")shut();},
+    cancelHold:()=>{if(holdMode&&isOpen()&&state!=="sending")closeRecorder();},
+    // Browser permission prompts and touch pointer interruptions must not
+    // discard the recorder. Finish into preview, never send on interruption.
+    interruptHold:()=>{
+      if(!holdMode||holdLocked||!isOpen())return;
+      if(state==="recording")finish(false);
+      else if(["opening","ready"].includes(state))manualMode("Подключите камеру, затем нажмите «Записать».");
+    },
     releaseHold:()=>{
-      if(!holdMode||holdLocked||!dialog.open)return;
+      if(!holdMode||holdLocked||!isOpen())return;
       if(state==="recording")finish(true);
-      else if(["opening","ready"].includes(state)){
-        shut();notify("Камера ещё не готова. Удерживайте кнопку до начала записи.");
-      }
+      else if(["opening","ready"].includes(state))manualMode("Подключите камеру, затем нажмите «Записать».");
     },
   });
   document.addEventListener("click",event=>{
-    if(!event.target.closest?.("[data-open-video-note]")||dialog.open)return;
-    event.preventDefault();
-    const menu=$("attachmentMenu");if(menu&&!menu.hidden)$("attachmentButton")?.click();
-    openRecorder(false);
+    if(!event.target.closest?.("[data-open-video-note]")||isOpen())return;
+    event.preventDefault();window.SovietgramAttachmentMenu?.close();openRecorder(false);
   });
-  start.addEventListener("click",begin);stop.addEventListener("click",()=>finish(false));
-  close.addEventListener("click",shut);
-  camera.addEventListener("click",()=>{if(state!=="opening"){holdMode=false;holdLocked=false;facing=facing==="user"?"environment":"user";void openCamera();}});
-  retake.addEventListener("click",()=>{if(state==="review"&&window.confirm("Удалить текущую запись и записать новую?")){holdMode=false;holdLocked=false;void openCamera();}});
-  send.addEventListener("click",()=>{if(state==="recording")finish(true);else void upload();});
-  dialog.addEventListener("cancel",event=>{event.preventDefault();if(state!=="sending")shut();});
-  dialog.addEventListener("close",()=>{if(state!=="idle")cancel();window.SovietgramVoice?.syncComposerActions?.();});
-  document.addEventListener("keydown",event=>{if(event.key==="Escape"&&dialog.open&&state!=="sending"){event.preventDefault();shut();}});
-  document.addEventListener("visibilitychange",()=>{
-    if(!document.hidden)return;
-    if(state==="recording")finish();
-    else if(state==="ready"||state==="opening"){
-      generation++;stopTracks(source);source=null;clearPreview();
-      ui("error","Камера отключена, поскольку вкладка скрыта. Смените камеру или откройте запись заново.");
+  start.addEventListener("click",()=>{holdMode=false;holdLocked=true;begin();});
+  stop.addEventListener("click",()=>finish(false));
+  close.addEventListener("click",stopOrCancel);
+  retry.addEventListener("click",()=>{holdMode=false;holdLocked=false;void openCamera();});
+  camera.addEventListener("click",()=>{
+    if(state!=="ready")return;
+    holdMode=false;holdLocked=false;facing=facing==="user"?"environment":"user";void openCamera();
+  });
+  retake.addEventListener("click",()=>{
+    if(["review","checking"].includes(state)&&window.confirm("Удалить текущую запись и записать новую?")){
+      holdMode=false;holdLocked=false;void openCamera();
     }
   });
-  window.addEventListener("pagehide",cancel);
+  send.addEventListener("click",()=>{if(state==="recording")finish(true);else void upload();});
+  document.addEventListener("keydown",event=>{
+    if(!isOpen())return;
+    if(event.key==="Escape"){event.preventDefault();stopOrCancel();}
+    if(event.key==="Tab"){
+      const focusable=[...dialog.querySelectorAll("button,input,video[controls]")].filter(node=>!node.disabled&&node.getClientRects().length);
+      if(!focusable.length)return;
+      const first=focusable[0],last=focusable[focusable.length-1];
+      if(!dialog.contains(document.activeElement)||event.shiftKey&&document.activeElement===first||!event.shiftKey&&document.activeElement===last){
+        event.preventDefault();(event.shiftKey?last:first).focus();
+      }
+    }
+  },true);
+  document.addEventListener("visibilitychange",()=>{
+    if(!document.hidden||!isOpen())return;
+    if(state==="recording")finish(false);
+    else if(state==="opening"){
+      // An OS permission prompt may momentarily hide the document.
+      // Keep the permission request alive; late streams are checked above.
+      manualMode("Ожидание разрешения камеры и микрофона…");
+    }else if(state==="ready")fail("Камера отключена в фоновой вкладке. Нажмите «Повторить».");
+  });
+  window.addEventListener("pagehide",()=>{uploadController?.abort();if(isOpen())reset();dialog.hidden=true;});
 })();
