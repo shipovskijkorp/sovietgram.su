@@ -345,6 +345,7 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.page.mouse.move(x, y-105, steps=6)
         self.page.mouse.up()
         self.visible("#videoNoteStop")
+        self.visible("#videoNoteSend")
         self.page.wait_for_timeout(1200)
         self.click("#videoNoteStop")
         self.visible("#videoNoteSend")

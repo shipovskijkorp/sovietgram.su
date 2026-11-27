@@ -135,7 +135,7 @@
     camera.disabled=next==="opening";
     stop.hidden=next!=="recording";
     retake.hidden=!["review","sending"].includes(next);
-    send.hidden=!["review","sending"].includes(next);
+    send.hidden=!["review","sending"].includes(next) && !(next==="recording" && !holding);
     send.disabled=retake.disabled=close.disabled=silent.disabled=next==="sending"||next==="stopping";
     send.setAttribute("aria-label",next==="sending"?"Отправка…":"Отправить");
     silentRow.hidden=!["review","sending"].includes(next);
@@ -360,7 +360,7 @@
   close.addEventListener("click",shut);
   camera.addEventListener("click",()=>{if(state!=="opening"){holdMode=false;holdLocked=false;facing=facing==="user"?"environment":"user";void openCamera();}});
   retake.addEventListener("click",()=>{if(state==="review"&&window.confirm("Удалить текущую запись и записать новую?")){holdMode=false;holdLocked=false;void openCamera();}});
-  send.addEventListener("click",upload);
+  send.addEventListener("click",()=>{if(state==="recording")finish(true);else void upload();});
   dialog.addEventListener("cancel",event=>{event.preventDefault();if(state!=="sending")shut();});
   dialog.addEventListener("close",()=>{if(state!=="idle")cancel();window.SovietgramVoice?.syncComposerActions?.();});
   document.addEventListener("keydown",event=>{if(event.key==="Escape"&&dialog.open&&state!=="sending"){event.preventDefault();shut();}});
