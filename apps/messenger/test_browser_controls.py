@@ -304,6 +304,43 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.hidden("#channelDiscussion")
         self.expect(self.page.locator(entry)).to_contain_text("Комментарии: 1")
 
+    def test_discussion_search_reactions_and_gif_media(self):
+        from .models import ChannelCommentAttachment
+        from .test_gif_and_formatting import gif_bytes
+        storage=self.enterContext(TemporaryDirectory())
+        self.enterContext(override_settings(MEDIA_ROOT=storage))
+        self.channel.comments_enabled=True
+        self.channel.save(update_fields=["comments_enabled"])
+        post=Message.objects.create(chat=self.channel,sender=self.owner,text="Discuss media")
+        self.go(self.channel)
+        self.click(f'.message[data-message-id="{post.pk}"] [data-discussion-url]')
+        self.visible("#discussionForm")
+        self.page.locator("#discussionText").fill("Космический кот")
+        self.page.locator("#discussionFiles").set_input_files({
+            "name":"cat.gif","mimeType":"image/gif","buffer":gif_bytes(),
+        })
+        self.expect(self.page.locator("#discussionAttachmentList")).to_contain_text("cat.gif")
+        self.click("#discussionSend")
+        comment=self.page.locator(".discussion-comment").filter(has_text="Космический кот")
+        self.expect(comment).to_be_visible()
+        self.expect(comment.locator(".discussion-media img")).to_have_attribute("alt","cat.gif")
+        self.assertEqual(ChannelCommentAttachment.objects.filter(comment__post=post).count(),1)
+        comment.locator(".discussion-reaction-select").select_option("👍")
+        self.expect(comment.locator('[data-comment-reaction="👍"]')).to_have_attribute("aria-pressed","true")
+        comment.locator('[data-comment-reaction="👍"]').click()
+        self.expect(comment.locator('[data-comment-reaction="👍"]')).to_have_count(0)
+        self.page.locator("#discussionSearch").fill("КОСМИЧЕСКИЙ")
+        self.click("#discussionSearchSubmit")
+        self.expect(self.page.locator("#discussionStatus")).to_contain_text("Найдено: 1")
+        self.expect(comment).to_be_visible()
+        self.page.locator("#discussionSearch").fill("несуществующий")
+        self.click("#discussionSearchSubmit")
+        self.expect(self.page.locator(".discussion-empty")).to_contain_text("Ничего не найдено")
+        self.click("#discussionSearchClear")
+        self.expect(comment).to_be_visible()
+        self.click("#discussionClose")
+        self.hidden("#channelDiscussion")
+
     def test_community_statistics_period_switch(self):
         from .membership_statistics import Source, record_membership_event
         record_membership_event(self.group, Source.DIRECTORY, count=2)

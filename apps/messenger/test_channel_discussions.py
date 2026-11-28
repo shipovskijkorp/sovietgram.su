@@ -154,6 +154,92 @@ class ChannelDiscussionTests(TestCase):
         url = reverse("messenger:discussion_action",args=[self.channel.pk,another.pk])
         self.assertEqual(self.act("create",url=url,text="Invalid",client_id=str(uuid4()),reply_to=rows[0].pk).status_code,404)
 
+    def test_unicode_search_and_pagination_after_edit(self):
+        for i in range(42):
+            ChannelComment.objects.create(post=self.post, author=self.member, text=f"Космос КОТ {i}", client_id=uuid4())
+        unrelated = self.create("Другой комментарий").json()["id"]
+        result = self.get(q="кот космос").json()
+        self.assertEqual(result["total"], 43)
+        self.assertEqual(result["matched"], 42)
+        self.assertEqual(len(result["comments"]), 40)
+        second = self.get(q="КОСМОС кот", before=result["next_before"]).json()
+        self.assertEqual(len(second["comments"]), 2)
+        comment = result["comments"][0]
+        self.assertEqual(self.act("edit",comment_id=comment["id"],revision=comment["revision"],text="Изменён").status_code,200)
+        self.assertEqual(self.get(q="кот космос").json()["matched"],41)
+        self.assertEqual(self.get(q="ИЗМЕНЁН").json()["comments"][0]["id"],comment["id"])
+        self.assertEqual(self.get(q="x"*121).status_code,400)
+        self.assertEqual(self.get(self.outsider,q="кот").status_code,404)
+        self.assertEqual(self.get(q="несуществующее").json()["matched"],0)
+
+    def test_comment_reactions_limits_and_permissions(self):
+        from .models import ChannelCommentReaction
+        comment_id=self.create().json()["id"]
+        for emoji in ("👍","🔥","❤️"):
+            for _ in range(2):
+                response=self.act("react",comment_id=comment_id,emoji=emoji,enabled="1")
+                self.assertEqual(response.status_code,200,response.content)
+        self.assertEqual(ChannelCommentReaction.objects.count(),3)
+        self.assertEqual(self.act("react",comment_id=comment_id,emoji="😂",enabled="1").status_code,409)
+        self.assertEqual(self.act("react",self.other,comment_id=comment_id,emoji="👍",enabled="1").status_code,200)
+        data=self.get().json()["comments"][0]["reactions"]
+        self.assertIn({"emoji":"👍","count":2,"mine":True},data)
+        self.assertEqual(self.act("react",comment_id=comment_id,emoji="👍",enabled="0").status_code,200)
+        self.assertEqual(self.act("react",comment_id=comment_id,emoji="👍",enabled="0").status_code,200)
+        self.assertIn({"emoji":"👍","count":1,"mine":False},self.get().json()["comments"][0]["reactions"])
+        self.channel.allowed_reactions=["👍"]
+        self.channel.save(update_fields=["allowed_reactions"])
+        self.assertEqual(self.get().json()["allowed_reactions"],["👍"])
+        self.assertEqual(self.act("react",comment_id=comment_id,emoji="😂",enabled="1").status_code,403)
+        self.assertEqual(self.act("close",self.owner).status_code,200)
+        self.assertEqual(self.act("react",comment_id=comment_id,emoji="👍",enabled="1").status_code,403)
+        self.assertEqual(self.get().json()["allowed_reactions"],[])
+        self.assertEqual(self.act("delete",comment_id=comment_id).status_code,200)
+        self.assertFalse(ChannelCommentReaction.objects.exists())
+
+    def test_comment_media_idempotency_visibility_and_cleanup(self):
+        from tempfile import TemporaryDirectory
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.test import override_settings
+        from apps.accounts.storage_views import storage_summary
+        from .models import ChannelCommentAttachment
+        from .test_gif_and_formatting import gif_bytes
+
+        self.enterContext(override_settings(MEDIA_ROOT=self.enterContext(TemporaryDirectory())))
+        key=str(uuid4())
+        def send(raw, name="animation.gif"):
+            return self.act("create",client_id=key,reply_to=0,text="",attachments=[
+                SimpleUploadedFile(name,raw,content_type="image/gif")])
+        first=send(gif_bytes())
+        self.assertEqual(first.status_code,200,first.content)
+        again=send(gif_bytes())
+        self.assertEqual(again.status_code,200,again.content)
+        self.assertTrue(again.json()["replayed"])
+        self.assertEqual(send(gif_bytes(),"other.gif").status_code,409)
+        self.assertEqual(ChannelCommentAttachment.objects.count(),1)
+        attachment=ChannelCommentAttachment.objects.get()
+        self.assertEqual(storage_summary(self.member)["comment_media_bytes"],len(gif_bytes()))
+        data=self.get().json()["comments"][0]
+        self.assertEqual(data["attachments"][0]["id"],attachment.pk)
+        path=data["attachments"][0]["url"].split("?")[0]
+        response=self.client_for(self.other).get(path,{"account_id":self.other.pk})
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response["Content-Type"],"image/gif")
+        self.assertEqual(response["Cache-Control"],"private, no-store")
+        self.assertEqual(b"".join(response.streaming_content),gif_bytes())
+        self.assertEqual(self.client_for(self.outsider).get(path,{"account_id":self.outsider.pk}).status_code,404)
+        self.assertEqual(self.client_for(self.other).get(path,{"account_id":self.member.pk}).status_code,404)
+        MessageHiddenForUser.objects.create(message=self.post,user=self.other)
+        self.assertEqual(self.client_for(self.other).get(path,{"account_id":self.other.pk}).status_code,404)
+        self.assertEqual(self.act("create",text="",client_id=str(uuid4()),reply_to=0,
+            attachments=SimpleUploadedFile("bad.gif",b"bad")).status_code,400)
+        saved,storage=attachment.file.name,attachment.file.storage
+        with self.captureOnCommitCallbacks(execute=True):
+            self.assertEqual(self.act("delete",comment_id=first.json()["id"]).status_code,200)
+        self.assertFalse(storage.exists(saved))
+        self.assertFalse(ChannelCommentAttachment.objects.exists())
+        self.assertEqual(self.client_for(self.member).get(path,{"account_id":self.member.pk}).status_code,404)
+
     def test_expiry_and_csrf(self):
         csrf = Client(enforce_csrf_checks=True)
         csrf.force_login(self.member)

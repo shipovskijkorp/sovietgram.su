@@ -4,6 +4,11 @@
     <button id="discussionClose" type="button" aria-label="Закрыть">×</button>
   </header>
   <div class="discussion-toolbar"><span id="discussionStatus" role="status"></span><button type="button" id="discussionLock" class="gallery-open-link" hidden></button></div>
+  <form id="discussionSearchForm" class="discussion-search">
+    <input id="discussionSearch" type="search" maxlength="120" placeholder="Поиск по комментариям" aria-label="Поиск по комментариям" autocomplete="off">
+    <button type="submit" id="discussionSearchSubmit">Найти</button>
+    <button type="button" id="discussionSearchClear" aria-label="Сбросить поиск" hidden>×</button>
+  </form>
   <div id="discussionScroll" class="discussion-scroll">
     <button type="button" id="discussionOlder" class="gallery-open-link" hidden>Предыдущие комментарии</button>
     <div id="discussionList"></div>
@@ -11,7 +16,11 @@
   <form id="discussionForm" class="discussion-composer" hidden>
     {% csrf_token %}
     <div id="discussionReply" class="discussion-reply" hidden><span id="discussionReplyText"></span><button id="discussionReplyCancel" type="button" aria-label="Отменить ответ или редактирование">×</button></div>
-    <textarea id="discussionText" name="text" rows="2" maxlength="4096" placeholder="Написать комментарий" required></textarea>
+    <div id="discussionAttachmentList" class="discussion-attachments-preview" hidden></div>
+    <div class="discussion-composer-main">
+      <label id="discussionAttachLabel" class="discussion-attach" title="Добавить фото, GIF или видео"><span aria-hidden="true">＋</span><span class="discussion-attach-text">Медиа</span><input id="discussionFiles" type="file" accept=".png,.jpg,.jpeg,.webp,.gif,.mp4,.webm" multiple aria-label="Добавить медиа"></label>
+      <textarea id="discussionText" name="text" rows="2" maxlength="4096" placeholder="Написать комментарий"></textarea>
+    </div>
     <button type="submit" id="discussionSend">Отправить</button>
   </form>
   <p id="discussionReadOnly" class="discussion-readonly" hidden>Добавление комментариев недоступно.</p>
