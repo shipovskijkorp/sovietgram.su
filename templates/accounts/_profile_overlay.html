@@ -15,7 +15,7 @@
 
       <section class="tg-profile__hero">
         <button class="tg-profile__avatar" id="userProfileAvatar" type="button" aria-label="Открыть фотографию профиля"></button>
-        <h2 id="userProfileName"></h2>
+        <div class="tg-profile-name-row"><h2 id="userProfileName"></h2><span id="userProfileEmojiStatus" class="profile-emoji-status" aria-label="Emoji-статус" hidden></span></div>
         <p id="userProfileStatus"></p>
       </section>
 
@@ -85,6 +85,9 @@
           <span class="tg-peer-copy-icon" aria-hidden="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg></span>
         </button>
 
+        <button class="tg-profile__row tg-profile__row--interactive" id="userProfileGalleryOpen" type="button" hidden><span class="tg-profile__row-copy"><strong>Фотографии профиля</strong><small id="userProfileGalleryCount"></small></span><span aria-hidden="true">›</span></button>
+        <a class="tg-profile__row tg-profile__row--interactive" id="userProfileGalleryManage" hidden><span class="tg-profile__row-copy"><strong>Управление фотографиями</strong><small>История и видимость</small></span><span aria-hidden="true">›</span></a>
+        <a class="tg-profile__row tg-profile__row--interactive" id="userProfileEmojiEdit" hidden><span class="tg-profile__row-copy"><strong id="userProfileEmojiEditLabel">Установить emoji-статус</strong><small>Настроение и срок действия</small></span><span aria-hidden="true">›</span></a>
         <button class="tg-profile__row tg-profile__row--interactive" id="userProfileQr" type="button">
           <span class="tg-profile__row-copy"><strong>QR-код профиля</strong><small>Поделиться профилем</small></span>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h4v4h-3m-4-3v3"/></svg>
@@ -270,6 +273,9 @@
         <span class="tg-native-icon tg-native-icon--close" aria-hidden="true"></span>
       </button>
       <img id="userProfilePhotoImage" alt="">
+      <nav class="profile-gallery-controls" id="userProfilePhotoControls" aria-label="Фотографии профиля" hidden>
+        <button type="button" id="userProfilePhotoPrev" aria-label="Предыдущая фотография">‹</button><span id="userProfilePhotoPosition" aria-live="polite"></span><button type="button" id="userProfilePhotoNext" aria-label="Следующая фотография">›</button>
+      </nav>
       <button class="tg-profile-photo-viewer__remove" id="userProfilePhotoRemove" type="button" hidden>Удалить фото</button>
     </section>
   </div>

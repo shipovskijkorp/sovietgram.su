@@ -2364,3 +2364,29 @@ body:not([data-theme="dark"]) .tg-profile__view.is-foreign {
 .tg-peer-alias-editor label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
 .tg-peer-alias-editor input { box-sizing: border-box; width: 100%; min-height: 40px; border: 1px solid var(--line); border-radius: 7px; background: var(--peer-tile); color: var(--ink); padding: 8px; font: inherit; font-size: 16px; }
 .tg-profile__view.is-foreign .tg-peer-menu { max-height: min(65dvh, 440px); overflow-y: auto; }
+
+/* Opt-in profile gallery and bounded emoji status picker. */
+.tg-profile-name-row{display:flex;justify-content:center;align-items:center;gap:6px;max-width:100%;}
+.tg-profile-name-row h2{min-width:0;overflow-wrap:anywhere;}
+.profile-emoji-status{font-size:1.05em;flex-shrink:0;}
+.profile-emoji-status[hidden],.profile-gallery-controls[hidden],#userProfileGalleryManage[hidden],#userProfileEmojiEdit[hidden]{display:none!important;}
+#userProfileGalleryManage,#userProfileEmojiEdit{color:inherit;text-decoration:none;}
+.profile-gallery-controls{display:flex;align-items:center;justify-content:center;gap:16px;margin:6px auto;color:white;}
+.profile-gallery-controls button{width:44px;height:40px;border-radius:20px;border:1px solid #fff5;background:#202020;color:white;font-size:26px;cursor:pointer;line-height:1;}
+.profile-gallery-controls button:disabled{opacity:.35;cursor:default;}
+.profile-gallery-page,.emoji-status-page{max-width:min(650px,100%);}
+.profile-gallery-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;}
+.profile-gallery-grid a{position:relative;display:block;border-radius:10px;overflow:hidden;aspect-ratio:1;background:var(--panel-strong);}
+.profile-gallery-grid img{width:100%;height:100%;object-fit:cover;}
+.profile-gallery-grid small{position:absolute;bottom:5px;left:5px;background:#000b;color:white;padding:3px 6px;border-radius:5px;}
+.emoji-status-choices{border:0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;}
+.emoji-status-choices legend{margin-bottom:8px;font-size:13px;font-weight:600;}
+.emoji-status-choices label{position:relative;min-width:0;cursor:pointer;}
+.emoji-status-choices input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer;}
+.emoji-status-option{display:grid;place-items:center;align-content:center;min-height:74px;border-radius:9px;border:1px solid var(--line);padding:5px;gap:4px;text-align:center;}
+.emoji-status-option>span{font-size:25px;}
+.emoji-status-option small{font-size:10px;line-height:1.2;color:var(--muted);}
+.emoji-status-choices input:checked + .emoji-status-option{border-color:var(--red);background:color-mix(in srgb,var(--red) 12%,transparent);}
+.emoji-status-choices input:focus-visible + .emoji-status-option{outline:2px solid var(--red);}
+.emoji-status-duration select{font:inherit;width:100%;border:1px solid var(--line);border-radius:8px;padding:9px;background:var(--panel-strong);color:var(--ink);}
+@media(max-width:480px){.profile-gallery-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.emoji-status-choices{grid-template-columns:repeat(3,minmax(0,1fr));}}

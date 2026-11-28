@@ -1,0 +1,17 @@
+{% extends 'base.html' %}
+{% block title %}Фотографии @{{ owner.username }} — Sovietgram{% endblock %}
+{% block body_class %}auth-body{% endblock %}
+{% block content %}
+<main class="auth-shell">
+  <section class="auth-card auth-card--wide profile-gallery-page">
+    <a class="auth-brand" href="{% url 'accounts:public_profile' owner.username %}"><span class="brand__mark">★</span><span>SOVIETGRAM</span></a>
+    <div class="auth-heading"><p class="eyebrow">@{{ owner.username }}</p><h1>Фотографии профиля</h1></div>
+    <div class="profile-gallery-grid">
+      {% for photo in photos %}<a href="{{ photo.url }}" target="_blank" rel="noopener noreferrer"><img src="{{ photo.url }}" alt="{% if photo.current %}Текущая фотография{% else %}Фотография профиля{% endif %}" loading="lazy">{% if photo.current %}<small>Текущая</small>{% endif %}</a>
+      {% empty %}<p>Нет доступных фотографий.</p>{% endfor %}
+    </div>
+    {% if request.user.pk == owner.pk %}<p class="auth-switch"><a href="{% url 'accounts:avatar_history' %}">Управление фотографиями</a></p>{% endif %}
+    <p class="auth-switch"><a href="{% url 'accounts:public_profile' owner.username %}">Вернуться в профиль</a></p>
+  </section>
+</main>
+{% endblock %}

@@ -139,6 +139,33 @@ class BrowserControlsTests(StaticLiveServerTestCase):
                 self.click("#communityProfileClose")
                 self.hidden("#communityProfile")
 
+    def test_profile_gallery_navigation_and_emoji_status(self):
+        from apps.accounts.models import AvatarHistory
+        from apps.accounts.test_avatar_history import picture
+
+        storage=self.enterContext(TemporaryDirectory())
+        self.enterContext(override_settings(MEDIA_ROOT=storage))
+        self.owner.avatar.save("main.png",picture("main.png","blue"),save=True)
+        archived=AvatarHistory.objects.create(user=self.owner,image=picture("older.png","red"),is_shared=True)
+        self.go(self.direct,query="?profile=owner")
+        self.visible("#userProfileOverlay")
+        self.click("#userProfileGalleryOpen")
+        self.visible("#userProfilePhotoViewer")
+        self.expect(self.page.locator("#userProfilePhotoPosition")).to_have_text("1 / 2")
+        self.click("#userProfilePhotoNext")
+        self.expect(self.page.locator("#userProfilePhotoPosition")).to_have_text("2 / 2")
+        self.expect(self.page.locator("#userProfilePhotoImage")).to_have_attribute("src",reverse("accounts:gallery_image",args=[self.owner.username,archived.pk]))
+        self.hidden("#userProfilePhotoRemove")
+        self.click("#userProfilePhotoPrev")
+        self.visible("#userProfilePhotoRemove")
+        self.click("#userProfilePhotoClose")
+        self.click("#userProfileEmojiEdit")
+        self.page.locator('input[name="emoji"][value="💻"]').check()
+        self.page.locator('select[name="duration"]').select_option("3600")
+        self.page.get_by_role("button",name="Сохранить статус").click()
+        self.visible("#userProfileOverlay")
+        self.expect(self.page.locator("#userProfileEmojiStatus")).to_have_text("💻")
+
     def test_admin_title_and_public_community_directory(self):
         self.group.title="Космическая группа"
         self.group.username="browser_cosmic"

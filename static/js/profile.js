@@ -180,6 +180,7 @@ const userProfilePhotoClose = document.getElementById("userProfilePhotoClose");
 const userProfilePhotoRemove = document.getElementById("userProfilePhotoRemove");
 
 let openedProfile = null;
+let profilePhotoId = null, profileEmojiTimer = 0;
 let profileAvatarPreviewUrl = "";
 let pendingProfileChannelId = "";
 let profileFieldKey = "";
@@ -294,9 +295,7 @@ async function saveSelfProfile(changes = {}, avatarFile = null) {
   };
   renderProfileAvatar(userProfileAvatar, openedProfile);
   renderProfileAvatar(userProfileEditAvatar, openedProfile);
-  if (userProfilePhotoImage && !userProfilePhotoViewer?.hidden) {
-    userProfilePhotoImage.src = openedProfile.avatar_url || "";
-  }
+  refreshProfileExtras(openedProfile);
   updateGlobalSelfIdentity(payload);
   updateProfileHistory(openedProfile.username || "");
   return payload;
@@ -414,10 +413,7 @@ async function refreshProfilePresence() {
         if (userProfileEditAvatarOpen) {
           userProfileEditAvatarOpen.disabled = !openedProfile.avatar_url;
         }
-        if (userProfilePhotoImage && userProfilePhotoViewer && !userProfilePhotoViewer.hidden) {
-          if (openedProfile.avatar_url) userProfilePhotoImage.src = openedProfile.avatar_url;
-          else closeProfilePhotoViewer();
-        }
+        // The gallery refresh below preserves the selected archived photo.
       }
       if (fresh.id != null) {
         window.SovietgramAvatarSync?.updateUser(
@@ -434,6 +430,9 @@ async function refreshProfilePresence() {
         });
       }
     }
+    openedProfile.profile_photos = fresh.profile_photos || [];
+    openedProfile.emoji_status = fresh.emoji_status || {emoji:"",until:""};
+    refreshProfileExtras(openedProfile);
     if (Object.prototype.hasOwnProperty.call(fresh, "personal_channel")) {
       const previousChannel = openedProfile.personal_channel;
       const nextChannel = fresh.personal_channel;
@@ -491,20 +490,94 @@ function openProfileChannelContext(event) {
   userProfileChannelContext.style.top = `${Math.max(8, top)}px`;
 }
 
+function profilePhotos(profile=openedProfile){
+  if(!profile)return [];
+  if(Array.isArray(profile.profile_photos))return profile.profile_photos;
+  return profile.avatar_url?[{id:"current",url:profile.avatar_url,current:true}]:[];
+}
+function currentProfileEmoji(profile){
+  const status=profile?.emoji_status;
+  if(!status?.emoji||status.until&&Date.parse(status.until)<=Date.now())return "";
+  return status.emoji;
+}
+function refreshProfileExtras(profile){
+  const photos=profilePhotos(profile);
+  const gallery=document.getElementById("userProfileGalleryOpen");
+  const count=document.getElementById("userProfileGalleryCount");
+  const manage=document.getElementById("userProfileGalleryManage");
+  const emojiEdit=document.getElementById("userProfileEmojiEdit");
+  if(gallery)gallery.hidden=!photos.length;
+  if(count)count.textContent=String(photos.length);
+  if(manage){
+    manage.hidden=!profile.is_self||!profile.gallery_manage_url;
+    if(manage.hidden)manage.removeAttribute("href");else manage.href=profile.gallery_manage_url;
+  }
+  if(emojiEdit){
+    emojiEdit.hidden=!profile.is_self||!profile.emoji_status_url;
+    if(emojiEdit.hidden)emojiEdit.removeAttribute("href");else emojiEdit.href=profile.emoji_status_url;
+  }
+  const emoji=currentProfileEmoji(profile);
+  const badge=document.getElementById("userProfileEmojiStatus");
+  if(badge){badge.textContent=emoji;badge.hidden=!emoji;badge.title=emoji?"Emoji-статус":"";}
+  const label=document.getElementById("userProfileEmojiEditLabel");
+  if(label)label.textContent=emoji?emoji+" · Изменить emoji-статус":"Установить emoji-статус";
+  clearTimeout(profileEmojiTimer);
+  const until=Date.parse(profile.emoji_status?.until||"");
+  if(emoji&&Number.isFinite(until)&&until>Date.now()){
+    profileEmojiTimer=window.setTimeout(()=>{if(openedProfile===profile)refreshProfileExtras(profile);},Math.min(2147483647,until-Date.now()+100));
+  }
+  if(userProfileAvatar){userProfileAvatar.disabled=!photos.length;userProfileAvatar.classList.toggle("is-clickable",Boolean(photos.length));}
+  if(userProfileEditAvatarOpen)userProfileEditAvatarOpen.disabled=!photos.length;
+  if(userProfilePhotoViewer&&!userProfilePhotoViewer.hidden){
+    if(photos.some(photo=>photo.id===profilePhotoId))renderProfilePhoto(profilePhotoId);
+    else closeProfilePhotoViewer(); // Recheck permission / publication on every refresh.
+  }
+}
 function closeProfilePhotoViewer() {
   if (!userProfilePhotoViewer) return;
   userProfilePhotoViewer.hidden = true;
+  profilePhotoId=null;
   if (userProfilePhotoImage) userProfilePhotoImage.removeAttribute("src");
 }
-
-function openProfilePhotoViewer() {
-  if (!openedProfile?.avatar_url || !userProfilePhotoViewer || !userProfilePhotoImage) return;
-  userProfilePhotoImage.src = openedProfile.avatar_url;
-  if (userProfilePhotoRemove) {
-    userProfilePhotoRemove.hidden = !(openedProfile.is_self && openedProfile.remove_avatar_url);
+function renderProfilePhoto(id){
+  const photos=profilePhotos();
+  const index=photos.findIndex(photo=>photo.id===id);
+  if(index<0||!userProfilePhotoViewer||!userProfilePhotoImage)return;
+  const photo=photos[index];
+  profilePhotoId=photo.id;
+  if(userProfilePhotoImage.getAttribute("src")!==photo.url)userProfilePhotoImage.src=photo.url;
+  userProfilePhotoImage.alt=photo.current?"Текущая фотография профиля":"Фотография профиля";
+  const controls=document.getElementById("userProfilePhotoControls");
+  if(controls){
+    controls.hidden=photos.length<2;
+    document.getElementById("userProfilePhotoPrev").disabled=index===0;
+    document.getElementById("userProfilePhotoNext").disabled=index===photos.length-1;
+    document.getElementById("userProfilePhotoPosition").textContent=(index+1)+" / "+photos.length;
   }
-  userProfilePhotoViewer.hidden = false;
+  if(userProfilePhotoRemove)userProfilePhotoRemove.hidden=!(photo.current&&openedProfile.is_self&&openedProfile.remove_avatar_url);
 }
+function openProfilePhotoViewer(){
+  const photo=profilePhotos()[0];
+  if(!photo||!userProfilePhotoViewer)return;
+  renderProfilePhoto(photo.id);
+  userProfilePhotoViewer.hidden=false;
+}
+function stepProfilePhoto(offset){
+  const photos=profilePhotos(),index=photos.findIndex(photo=>photo.id===profilePhotoId);
+  if(index<0)return;
+  if(photos[index+offset])renderProfilePhoto(photos[index+offset].id);
+}
+document.getElementById("userProfilePhotoPrev")?.addEventListener("click",()=>stepProfilePhoto(-1));
+document.getElementById("userProfilePhotoNext")?.addEventListener("click",()=>stepProfilePhoto(1));
+document.getElementById("userProfileGalleryOpen")?.addEventListener("click",openProfilePhotoViewer);
+userProfilePhotoViewer?.addEventListener("keydown",event=>{
+  if(event.key==="ArrowLeft"||event.key==="ArrowRight"){
+    event.preventDefault();event.stopPropagation();stepProfilePhoto(event.key==="ArrowLeft"?-1:1);
+  }
+});
+userProfilePhotoImage?.addEventListener("error",()=>{
+  if(!userProfilePhotoViewer?.hidden){closeProfilePhotoViewer();showProfileToast("Фотография больше недоступна.");}
+});
 
 function closeProfileFieldEditor() {
   if (!userProfileFieldEditor) return;
@@ -562,6 +635,7 @@ async function closeUserProfile() {
   }
   closeProfileFieldEditor();
   closeProfilePhotoViewer();
+  clearTimeout(profileEmojiTimer);
   closeProfileChannelContext();
   closePeerProfileMenus();
   if (peerProfileElements.CommonGroups) peerProfileElements.CommonGroups.open = false;
@@ -736,6 +810,7 @@ function renderUserProfile(profile) {
     userProfileAvatar.classList.toggle("is-clickable", Boolean(profile.avatar_url));
   }
   if (userProfileName) userProfileName.textContent = profile.contact_alias || profile.display_name || profile.username || "";
+  refreshProfileExtras(profile);
   updateProfilePresence(profile);
   if (userProfileUsername) userProfileUsername.textContent = `@${profile.username || ""}`;
 
@@ -1082,7 +1157,7 @@ userProfilePhotoViewer?.addEventListener("click", (event) => {
 });
 
 userProfilePhotoRemove?.addEventListener("click", async () => {
-  if (!openedProfile?.is_self || !openedProfile.remove_avatar_url) return;
+  if (!openedProfile?.is_self || !openedProfile.remove_avatar_url || profilePhotoId!=="current") return;
   if (!window.confirm("Удалить фотографию профиля?")) return;
 
   userProfilePhotoRemove.disabled = true;
@@ -1102,6 +1177,7 @@ userProfilePhotoRemove?.addEventListener("click", async () => {
     if (!response.ok || !payload.ok) throw new Error("avatar remove failed");
 
     openedProfile.avatar_url = "";
+    openedProfile.profile_photos=profilePhotos().filter(photo=>!photo.current);
     openedProfile.initials = payload.initials || openedProfile.initials;
     updateGlobalSelfIdentity(payload);
     renderProfileAvatar(userProfileAvatar, openedProfile);
@@ -1111,7 +1187,7 @@ userProfilePhotoRemove?.addEventListener("click", async () => {
       userProfileAvatar.classList.remove("is-clickable");
     }
     if (userProfileEditAvatarOpen) userProfileEditAvatarOpen.disabled = true;
-    closeProfilePhotoViewer();
+    closeProfilePhotoViewer();refreshProfileExtras(openedProfile);
   } catch (_error) {
     showProfileToast("Не удалось удалить фото.");
   } finally {

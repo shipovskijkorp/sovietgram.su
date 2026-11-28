@@ -8,7 +8,7 @@
     <div class="auth-heading">
       <p class="eyebrow">Ваш профиль</p>
       <h1>История фотографий</h1>
-      <p>При замене фотографии сохраняются до {{ history_limit }} предыдущих. Архив виден только вам. Удаление текущего аватара не добавляет его в архив.</p>
+      <p>При замене фотографии сохраняются до {{ history_limit }} предыдущих. По умолчанию архив виден только вам. Добавляйте отдельные фотографии в галерею вручную. Галерея учитывает настройку приватности «Фотография профиля». Удаление текущего аватара не добавляет его в архив.</p>
     </div>
     {% if request.user.avatar %}
       <section class="storage-section">
@@ -25,7 +25,9 @@
             {% csrf_token %}
             <input type="hidden" name="account_id" value="{{ request.user.pk }}">
             <time datetime="{{ photo.archived_at|date:'c' }}">{{ photo.archived_at|date:"d.m.Y H:i" }}</time>
-            <button class="primary-button" type="submit" name="action" value="restore">Установить снова</button>
+            <small>{% if photo.is_shared %}Показывается в галерее{% else %}Видна только вам{% endif %}</small>
+            {% if photo.is_shared %}<button class="storage-secondary" type="submit" name="action" value="unshare">Скрыть из галереи</button>{% else %}<button class="primary-button" type="submit" name="action" value="share">Показать в галерее</button>{% endif %}
+            <button class="storage-secondary" type="submit" name="action" value="restore">Установить снова</button>
             <button class="storage-secondary" type="submit" name="action" value="delete">Удалить из истории</button>
           </form>
         </div>
@@ -33,7 +35,7 @@
         <p>Предыдущих фотографий пока нет.</p>
       {% endfor %}
     </section>
-    <p class="auth-switch"><a href="{% url 'messenger:home' %}?settings=main">Вернуться к настройкам</a></p>
+    <p class="auth-switch"><a href="{% url 'accounts:profile_gallery' request.user.username %}">Открыть галерею</a> · <a href="{% url 'messenger:home' %}?profile={{ request.user.username|urlencode }}">Вернуться в профиль</a></p>
   </section>
 </main>
 {% endblock %}

@@ -26,7 +26,7 @@
       {% endif %}
 
       <div class="public-profile-title">
-        <h1>{{ profile_user.display_name }}</h1>
+        <h1>{{ profile_user.display_name }}{% if profile_emoji_status.emoji %} <span class="profile-emoji-status" aria-label="Emoji-статус">{{ profile_emoji_status.emoji }}</span>{% endif %}</h1>
         <p>@{{ profile_user.username }}</p>
 
         <div class="public-profile-actions">
@@ -62,6 +62,7 @@
       </div>
 
       <button class="public-profile-copy" type="button" data-copy-profile data-profile-url="{% url 'accounts:public_profile' profile_user.username %}">Скопировать ссылку</button>
+      {% if profile_photos %}<a class="public-profile-copy" href="{% url 'accounts:profile_gallery' profile_user.username %}">Фотографии профиля ({{ profile_photos|length }})</a>{% endif %}
       <a class="public-profile-copy" href="{% url 'accounts:profile_qr' profile_user.username %}" target="_blank" rel="noopener noreferrer">QR-код профиля</a>
     </div>
 

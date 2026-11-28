@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block title %}Emoji-статус — Sovietgram{% endblock %}
+{% block body_class %}auth-body{% endblock %}
+{% block content %}
+<main class="auth-shell">
+  <section class="auth-card auth-card--wide emoji-status-page">
+    <a class="auth-brand" href="{% url 'messenger:home' %}?profile={{ request.user.username|urlencode }}"><span class="brand__mark">★</span><span>SOVIETGRAM</span></a>
+    <div class="auth-heading"><p class="eyebrow">Ваш профиль</p><h1>Emoji-статус</h1><p>Выберите настроение и срок действия. Видимость определяется настройкой «О себе».</p></div>
+    <form method="post" class="auth-form">
+      {% csrf_token %}
+      <input type="hidden" name="account_id" value="{{ request.user.pk }}">
+      <fieldset class="emoji-status-choices"><legend>Выберите статус</legend>
+        {% for emoji,label in choices %}<label title="{{ label }}"><input type="radio" name="emoji" value="{{ emoji }}"{% if emoji == status.emoji %} checked{% endif %}><span class="emoji-status-option"><span aria-hidden="true">{{ emoji|default:"×" }}</span><small>{{ label }}</small></span></label>{% endfor %}
+      </fieldset>
+      {% if status.until %}<p class="micro-copy" id="emojiCurrentExpiry">Текущий статус ограничен по времени. При сохранении будет установлен новый срок.</p>{% endif %}
+      <label class="emoji-status-duration">Срок действия<select name="duration">{% for value,label in durations %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select></label>
+      <button class="primary-button" type="submit">Сохранить статус</button>
+    </form>
+    <p class="auth-switch"><a href="{% url 'messenger:home' %}?profile={{ request.user.username|urlencode }}">Отмена</a></p>
+  </section>
+</main>
+{% endblock %}

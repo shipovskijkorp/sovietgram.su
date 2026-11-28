@@ -84,6 +84,8 @@
             <p>Эти данные будут видны другим пользователям Sovietgram.</p>
           </div>
           <button class="link-button" type="button" data-copy-profile data-profile-url="{% url 'accounts:public_profile' request.user.username %}">Скопировать ссылку</button>
+          <a class="link-button" href="{% url 'accounts:avatar_history' %}">Управление фотографиями</a>
+          <a class="link-button" href="{% url 'accounts:emoji_status' %}">Emoji-статус</a>
           <a class="link-button" href="{% url 'accounts:profile_qr' request.user.username %}" target="_blank" rel="noopener noreferrer">QR-код профиля</a>
         </div>
 
