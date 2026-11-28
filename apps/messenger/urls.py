@@ -29,6 +29,7 @@ urlpatterns = [
     path("chat/<int:chat_id>/link-preview/", link_previews.link_preview, name="link_preview"),
     path("create/", views.create_community, name="create_community"),
     path("join/<str:username>/", views.join_public_chat, name="join_public_chat"),
+    path("communities/join/<str:username>/", views.join_public_chat, {"source": "directory"}, name="join_directory_chat"),
     path("invite/<str:token>/", community_profiles.join_invite, name="join_invite"),
     path("join-requests/", community_profiles.my_join_requests, name="my_join_requests"),
     path("contacts/<str:username>/add/", views.add_contact, name="add_contact"),

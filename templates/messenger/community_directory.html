@@ -31,7 +31,7 @@
           <small>@{{ chat.username }} · {% if chat.type == 'channel' %}Канал{% else %}Группа{% endif %} · {{ chat.directory_members }} {% if chat.type == 'channel' %}подписчиков{% else %}участников{% endif %}</small>
           {% if chat.description %}<p>{{ chat.description|truncatechars:240 }}</p>{% endif %}
           {% if chat.joined %}<a class="directory-action" href="{% url 'messenger:chat' chat.pk %}">Открыть</a>
-          {% else %}<form method="post" action="{% url 'messenger:join_public_chat' chat.username %}">{% csrf_token %}<input type="hidden" name="account_id" value="{{ request.user.pk }}"><button type="submit" class="directory-action">Вступить</button></form>{% endif %}
+          {% else %}<form method="post" action="{% url 'messenger:join_directory_chat' chat.username %}">{% csrf_token %}<input type="hidden" name="account_id" value="{{ request.user.pk }}"><button type="submit" class="directory-action">Вступить</button></form>{% endif %}
         </div>
       </article>
       {% empty %}<p class="micro-copy" id="directoryEmpty">Сообщества не найдены.</p>{% endfor %}

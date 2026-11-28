@@ -9,7 +9,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Exists, OuterRef, Q
 from django.db.models.functions import TruncDate
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -28,12 +28,14 @@ from .models import (
     ChatMemberModeration,
     ChatParticipant,
     ChannelPostView,
+    ChannelComment,
     Message,
     MessageAttachment,
     MessageReaction,
 )
 from .services import visible_chat_attachments, shared_attachment_payload, invited_membership_defaults, set_membership_archived
 from .ratelimit import rate_limit
+from .membership_statistics import Source as MembershipSource, leave_collective, membership_activity, record_membership_event
 from .community_permissions import (
     ADMIN_RIGHTS, MEMBER_DENIALS, MEDIA_KINDS, group_media_kinds, active_sanctions, admin_rights,
     can_add_members, can_moderate, has_admin_right, is_banned, allowed_reaction_emojis, available_member_denials,
@@ -542,6 +544,28 @@ def community_statistics(request, chat_id):
             "average_views": round(published_views / published_count, 1) if published_count else 0,
             "undated_views": retained_views.filter(viewed_at__isnull=True).count(),
         }
+    membership_stats, event_days = membership_activity(
+        chat_id, start, now, tz, include_invite_details=has_admin_right(actor, "invite_users"),
+    )
+    retained = Message.objects.filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now),
+                                      chat_id=chat_id, is_deleted=False)
+    period_reactions = MessageReaction.objects.filter(message__in=retained, created_at__gte=start, created_at__lte=now)
+    period_comments = ChannelComment.objects.filter(post__in=retained, is_deleted=False,
+                                                    created_at__gte=start, created_at__lte=now)
+    active_members = members.filter(
+        Q(Exists(history.filter(sender_id=OuterRef("user_id"))))
+        | Q(Exists(period_reactions.filter(user_id=OuterRef("user_id"))))
+        | Q(Exists(period_comments.filter(author_id=OuterRef("user_id"))))
+    ).count()
+    member_total = members.count()
+    engagement = {
+        "active_members": active_members,
+        "active_member_percent": round(100 * active_members / member_total, 1) if member_total else 0,
+        "period_reactions": period_reactions.count(),
+        "unique_reactors": period_reactions.order_by().values("user_id").distinct().count(),
+        "period_comments": period_comments.count(),
+        "unique_commenters": period_comments.order_by().values("author_id").distinct().count(),
+    }
     series = []
     for offset in range(days):
         day = first + timedelta(days=offset)
@@ -550,11 +574,15 @@ def community_statistics(request, chat_id):
             "messages": message_counts.get(day, 0),
             "new_members": member_counts.get(day, 0),
             "views": view_counts.get(day, 0),
+            "joins": event_days.get(day, {}).get("joins", 0),
+            "leaves": event_days.get(day, {}).get("leaves", 0),
         })
     response = JsonResponse({
         "ok": True, "account_id": request.user.pk, "days": days,
         "timezone": timezone.get_current_timezone_name(),
-        "members": members.count(),
+        "members": member_total,
+        "membership_stats": membership_stats,
+        "engagement": engagement,
         "new_members": sum(member_counts.values()),
         "messages": sum(message_counts.values()),
         "active_authors": history.order_by().values("sender_id").distinct().count(),
@@ -867,6 +895,7 @@ def join_invite(request, token):
         if membership is None:
             ChatParticipant.objects.create(chat=chat, user=request.user, role=ChatParticipant.Role.MEMBER,
                                            can_see_pre_join_history=chat.history_visible_to_new_members)
+            record_membership_event(chat, MembershipSource.INVITE, invite=invite)
             invite.usage_count += 1
             invite.save(update_fields=("usage_count",))
             _log(chat, request.user, "join_invite", f"{request.user.display_name} вступил(а) по ссылке-приглашению.",
@@ -922,6 +951,7 @@ def community_join_request_action(request, chat_id):
                           "can_see_pre_join_history": chat.history_visible_to_new_members},
             )
             if created:
+                record_membership_event(chat, MembershipSource.APPROVAL, invite=invite)
                 invite.usage_count += 1
                 invite.save(update_fields=["usage_count"])
             elif membership.is_hidden:
@@ -1072,6 +1102,7 @@ def community_member_action(request, chat_id):
                 can_see_pre_join_history=chat.history_visible_to_new_members,
                 **invited_membership_defaults(request.user, target_user),
             )
+            record_membership_event(chat, MembershipSource.MANUAL_ADD)
             ChatJoinRequest.objects.filter(chat=chat, user=target_user, status=ChatJoinRequest.Status.PENDING).update(
                 status=ChatJoinRequest.Status.APPROVED, decided_at=timezone.now(), decided_by=request.user,
             )
@@ -1092,6 +1123,7 @@ def community_member_action(request, chat_id):
         if actor.role == ChatParticipant.Role.ADMIN and target.role != ChatParticipant.Role.MEMBER:
             return _json_error("Администратор не может удалить другого администратора.", status=403)
         target.delete()
+        record_membership_event(chat, MembershipSource.REMOVED)
         _log(
             chat,
             request.user,
@@ -1210,14 +1242,13 @@ def community_profile_action(request, chat_id):
                 "Владелец не может выйти, пока права владельца не переданы.",
                 status=403,
             )
-        _log(
-            chat,
-            request.user,
-            "leave",
-            f"{request.user.display_name} покинул(а) сообщество.",
-            target_user=request.user,
-        )
-        membership.delete()
+        with transaction.atomic():
+            result = leave_collective(chat.pk, request.user.pk)
+            if result == "owner":
+                return _json_error("Владелец не может выйти, пока права владельца не переданы.", status=403)
+            if result == "left":
+                _log(chat, request.user, "leave",
+                     f"{request.user.display_name} покинул(а) сообщество.", target_user=request.user)
         return JsonResponse(
             {
                 "ok": True,

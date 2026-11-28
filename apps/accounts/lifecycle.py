@@ -3,6 +3,7 @@ from django.db import transaction
 from django.db.models import Case, F, IntegerField, Value, When
 from django.utils import timezone
 
+from apps.messenger.membership_statistics import Source as MembershipSource, record_membership_event
 from apps.messenger.models import (
     Chat,
     ChatAdminLog,
@@ -94,7 +95,8 @@ def delete_user_account(user, *, inactive_at=None):
         successor.role = ChatParticipant.Role.OWNER
         successor.save(update_fields=("role",))
         owner_membership.role = ChatParticipant.Role.MEMBER
-        owner_membership.save(update_fields=("role",))
+        owner_membership.admin_title = ""
+        owner_membership.save(update_fields=("role", "admin_title"))
         ChatAdminLog.objects.create(
             chat=chat,
             actor=None,
@@ -136,5 +138,7 @@ def delete_user_account(user, *, inactive_at=None):
     for photo in user.avatar_history.all().iterator():
         _delete_stored_file(photo.image)
     _delete_stored_file(user.avatar)
+    for chat in Chat.objects.filter(type__in=(Chat.Type.GROUP, Chat.Type.CHANNEL), memberships__user=user).iterator():
+        record_membership_event(chat, MembershipSource.ACCOUNT_DELETED)
     user.delete()
     return True

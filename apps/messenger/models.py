@@ -453,6 +453,33 @@ class ChatInviteLink(models.Model):
         return f"Invite for {self.chat_id}: {self.name or self.token[:8]}"
 
 
+class CommunityMembershipEvent(models.Model):
+    """Membership transitions without user IDs or invite tokens."""
+
+    class Source(models.TextChoices):
+        CREATED = "created", "Создание сообщества"
+        INITIAL_ADD = "initial_add", "Добавление при создании"
+        MANUAL_ADD = "manual_add", "Добавление администратором"
+        PUBLIC = "public", "Публичный адрес"
+        DIRECTORY = "directory", "Каталог сообществ"
+        INVITE = "invite", "Ссылка-приглашение"
+        APPROVAL = "approval", "Одобренная заявка"
+        LEAVE = "leave", "Самостоятельный выход"
+        REMOVED = "removed", "Удаление участника"
+        BANNED = "banned", "Блокировка"
+        ACCOUNT_DELETED = "account_deleted", "Удаление аккаунта"
+
+    chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="membership_events")
+    source = models.CharField(max_length=20, choices=Source.choices)
+    invite_id = models.PositiveBigIntegerField(null=True, blank=True)
+    count = models.PositiveIntegerField(default=1)
+    occurred_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        indexes = [models.Index(fields=("chat", "occurred_at"), name="sg_member_event_chat_time")]
+        constraints = [models.CheckConstraint(condition=models.Q(count__gt=0), name="sg_member_event_positive")]
+
+
 class ChatAdminLog(models.Model):
     chat = models.ForeignKey(Chat, on_delete=models.CASCADE, related_name="admin_log")
     actor = models.ForeignKey(

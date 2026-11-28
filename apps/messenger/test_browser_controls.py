@@ -147,7 +147,7 @@ class BrowserControlsTests(StaticLiveServerTestCase):
         self.go(self.group)
         self.manage()
         self.click('[data-community-settings-open="admins"]')
-        self.click(f'[data-admin-title-user="{self.owner.pk}"]')
+        self.click(f'#communitySettingsAdminList [data-admin-title-user="{self.owner.pk}"]')
         self.visible("#communityAdminTitleDialog")
         self.page.locator("#communityAdminTitleInput").fill("Капитан")
         self.click("#communityAdminTitleSubmit")

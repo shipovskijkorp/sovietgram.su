@@ -13,6 +13,7 @@ from . import community_profiles as profiles
 from .community_permissions import ADMIN_RIGHTS, DURATIONS, available_member_denials, can_moderate, has_admin_right
 from .models import Chat, ChatJoinRequest, ChatMemberModeration, ChatParticipant
 from .ratelimit import rate_limit
+from .membership_statistics import Source as MembershipSource, record_membership_event
 
 
 def error(message, status=400):
@@ -103,6 +104,7 @@ def community_moderation(request, chat_id):
                 if action == "ban":
                     if target:
                         target.delete()
+                        record_membership_event(chat, MembershipSource.BANNED)
                     ChatJoinRequest.objects.filter(chat=chat, user=target_user, status=ChatJoinRequest.Status.PENDING).update(
                         status=ChatJoinRequest.Status.REJECTED, decided_at=timezone.now(), decided_by=request.user,
                     )

@@ -74,6 +74,7 @@ from .community_permissions import (
     can_pin_messages, has_admin_right, is_banned, member_denials, member_reaction_emojis,
 )
 from .folder_rules import decorate_folder_categories, matching_chats, requested_folder
+from .membership_statistics import Source as MembershipSource, leave_collective, record_membership_event
 from .markdown import mentioned_usernames, render_message_markdown
 from .models import (
     Chat,
@@ -1538,6 +1539,7 @@ def create_community(request):
             user=request.user,
             role=ChatParticipant.Role.OWNER,
         )
+        record_membership_event(chat, MembershipSource.CREATED)
 
         if chat.type == Chat.Type.GROUP:
             requested = form.cleaned_data["members"]
@@ -1573,6 +1575,8 @@ def create_community(request):
                 ],
                 ignore_conflicts=True,
             )
+            record_membership_event(chat, MembershipSource.INITIAL_ADD,
+                                    count=ChatParticipant.objects.filter(chat=chat, role=ChatParticipant.Role.MEMBER).count())
 
     redirect_url = reverse("messenger:chat", args=[chat.pk])
     if _wants_json(request):
@@ -1593,7 +1597,7 @@ def create_community(request):
 
 @login_required
 @require_POST
-def join_public_chat(request, username):
+def join_public_chat(request, username, source="public"):
     if request.POST.get("account_id", str(request.user.pk)) != str(request.user.pk):
         return JsonResponse({"ok": False, "error": "Аккаунт изменился. Обновите страницу."}, status=409)
     with transaction.atomic():
@@ -1614,8 +1618,10 @@ def join_public_chat(request, username):
                 "can_see_pre_join_history": chat.history_visible_to_new_members,
             },
         )
+        if created:
+            record_membership_event(chat, MembershipSource.DIRECTORY if source == "directory" else MembershipSource.PUBLIC)
         if not created and membership.is_hidden:
-            # Rejoining a hidden chat preserves the clear-history watermark.
+            # Reopening an existing membership is not a new subscription.
             ChatParticipant.objects.filter(pk=membership.pk).update(is_hidden=False)
         ChatJoinRequest.objects.filter(chat=chat, user=request.user, status=ChatJoinRequest.Status.PENDING).update(
             status=ChatJoinRequest.Status.APPROVED, decided_at=timezone.now(),
@@ -3637,7 +3643,9 @@ def chat_action(request, chat_id):
                 "Владелец не может выйти, пока права владельца не переданы.",
             )
             return redirect("messenger:chat", chat_id=chat.pk)
-        membership.delete()
+        result = leave_collective(chat.pk, request.user.pk)
+        if result == "owner":
+            return action_error("Владелец не может выйти, пока права владельца не переданы.", status=403)
         return action_response(
             "Вы покинули канал."
             if chat.type == Chat.Type.CHANNEL
@@ -3794,7 +3802,9 @@ def chat_action(request, chat_id):
                 scope="everyone",
             )
 
-        membership.delete()
+        result = leave_collective(chat.pk, request.user.pk)
+        if result == "owner":
+            return action_error("Владелец не может выйти, пока права владельца не переданы.", status=403)
         return action_response(
             "Вы покинули канал."
             if chat.type == Chat.Type.CHANNEL

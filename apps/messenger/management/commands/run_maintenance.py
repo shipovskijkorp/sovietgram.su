@@ -5,6 +5,7 @@ from django.core.management.base import BaseCommand, CommandError
 from apps.accounts.maintenance import purge_inactive_accounts
 from apps.messenger.services import purge_expired_messages
 from apps.messenger.sticker_auto_update import refresh_due_sticker_packs
+from apps.messenger.membership_statistics import purge_membership_events
 
 
 class Command(BaseCommand):
@@ -25,7 +26,9 @@ class Command(BaseCommand):
             removed_messages = purge_expired_messages(limit=messages)
             removed_accounts = purge_inactive_accounts(limit=accounts)
             added_stickers = refresh_due_sticker_packs(limit=stickers)
+            removed_events = purge_membership_events()
             self.stdout.write(
                 f"Maintenance: removed {removed_messages} expired message(s), "
-                f"{removed_accounts} inactive account(s). Added {added_stickers} sticker(s)."
+                f"{removed_accounts} inactive account(s). Added {added_stickers} sticker(s). "
+                f"Removed {removed_events} expired membership event(s)."
             )
