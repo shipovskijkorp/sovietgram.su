@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import account_security, avatar_history, data_export, notification_preferences, security_events, storage_views, two_factor_views, share_qr
+from . import account_security, avatar_history, data_export, notification_preferences, security_events, storage_views, two_factor_views, share_qr, emoji_status
 
 from .views import (
     SovietgramLoginView,
@@ -46,6 +46,7 @@ urlpatterns = [
     path("settings/notification-preferences/", notification_preferences.notification_preferences, name="notification_preferences"),
     path("settings/security-history/", security_events.security_history, name="security_history"),
     path("profile/avatar/remove/", remove_avatar, name="remove_avatar"),
+    path("profile/status/", emoji_status.settings_view, name="emoji_status"),
     path("profile/avatar/history/", avatar_history.history, name="avatar_history"),
     path("profile/avatar/history/<int:photo_id>/image/", avatar_history.image, name="avatar_history_image"),
     path("profile/avatar/history/<int:photo_id>/action/", avatar_history.action, name="avatar_history_action"),
@@ -55,6 +56,8 @@ urlpatterns = [
         name="password_change",
     ),
     path("u/<str:username>/avatar/", profile_avatar, name="profile_avatar"),
+    path("u/<str:username>/photos/", avatar_history.gallery, name="profile_gallery"),
+    path("u/<str:username>/photos/<int:photo_id>/", avatar_history.gallery_image, name="gallery_image"),
     path("u/<str:username>/qr/", share_qr.profile_qr, name="profile_qr"),
     path("u/<str:username>/", public_profile, name="public_profile"),
 ]

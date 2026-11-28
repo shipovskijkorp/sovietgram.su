@@ -163,7 +163,7 @@ def build_export(user, include_files=False):
             # Explicit allowlist, never dump User.__dict__ or credential fields.
             profile = {field: getattr(user, field) for field in (
                 "id", "username", "email", "email_verified_at", "first_name", "last_name",
-                "bio", "birthday", "date_joined", "last_seen_at", "personal_channel_id",
+                "bio", "birthday", "date_joined", "last_seen_at", "personal_channel_id", "emoji_status", "emoji_status_until",
                 "theme", "enter_to_send", "media_preload", "notification_preferences", "keep_archived_chats", "keep_folder_chats_archived",
                 "archive_unknown_chats", "archive_in_main_menu", "privacy_settings",
                 "default_auto_delete_seconds", "delete_after_inactive_days", "two_factor_enabled",
@@ -243,7 +243,7 @@ def build_export(user, include_files=False):
                     writer.file(f"avatars/history-{photo.pk}.bin", photo.image)
 
             def avatar_rows():
-                for row in rows(archived_photos, "id", "archived_at"):
+                for row in rows(archived_photos, "id", "archived_at", "is_shared"):
                     path = f"avatars/history-{row['id']}.bin"
                     row["archive_path"] = path if path in bundle.NameToInfo else None
                     yield row

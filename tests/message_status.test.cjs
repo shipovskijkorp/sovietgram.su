@@ -60,3 +60,11 @@ test("server markup and all live renderers share the vector receipt states", () 
     assert.match(svg, /<path /);
   }
 });
+
+test("a delayed sent update cannot undo a confirmed read receipt", () => {
+  const receipt = loadReceipt();
+  const node = receipt.create(true);
+  receipt.set(node, false);
+  assert.equal(node.dataset.readState, "read");
+  assert.equal(node.attributes["aria-label"], "Прочитано");
+});

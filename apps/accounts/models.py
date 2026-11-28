@@ -21,6 +21,8 @@ class User(AbstractUser):
         "дата отправки подтверждения", null=True, blank=True,
     )
     bio = models.CharField("о себе", max_length=160, blank=True, default="")
+    emoji_status = models.CharField(max_length=16, blank=True, default="")
+    emoji_status_until = models.DateTimeField(null=True, blank=True)
     avatar = models.ImageField(
         "фотография профиля",
         upload_to="avatars/%Y/%m/",
@@ -213,11 +215,12 @@ class SecurityEvent(models.Model):
 
 
 class AvatarHistory(models.Model):
-    """Private archive of a previous profile photo, never a public media URL."""
+    """Previous profile photo; private until explicitly shared by its owner."""
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="avatar_history")
     image = models.ImageField(upload_to="avatars/%Y/%m/")
     archived_at = models.DateTimeField(auto_now_add=True)
+    is_shared = models.BooleanField(default=False)
 
     class Meta:
         ordering = ("-id",)

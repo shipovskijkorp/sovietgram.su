@@ -36,7 +36,8 @@ from .forms import (
     UserSettingsForm,
 )
 from .models import SecurityEvent, User, UserBlock
-from .avatar_history import archive_previous, delete_unused_avatar
+from .avatar_history import archive_previous, delete_unused_avatar, gallery_payload
+from .emoji_status import visible_status
 from .security_events import record_event
 from .two_factor import verify_factor_locked
 from .multiaccount import (
@@ -407,6 +408,8 @@ def profile(request):
                 "username": user.username,
                 "bio": user.bio,
                 "avatar_url": user.avatar_url if user.avatar else "",
+                "profile_photos": gallery_payload(user, user),
+                "emoji_status": visible_status(user, user),
                 "initials": user.initials,
                 "birthday": user.birthday.isoformat() if user.birthday else "",
                 "birthday_display": user.birthday.strftime("%d.%m.%Y") if user.birthday else "",
@@ -863,6 +866,10 @@ def public_profile(request, username):
                     if profile_user.avatar and photo_visible
                     else ""
                 ),
+                "profile_photos": gallery_payload(profile_user, viewer),
+                "emoji_status": visible_status(profile_user, viewer),
+                "emoji_status_url": reverse("accounts:emoji_status") if is_self else "",
+                "gallery_manage_url": reverse("accounts:avatar_history") if is_self else "",
                 "birthday": (
                     profile_user.birthday.isoformat()
                     if profile_user.birthday and birthday_visible
@@ -954,6 +961,8 @@ def public_profile(request, username):
         {
             "profile_user": profile_user,
             "is_contact": is_contact,
+            "profile_photos": gallery_payload(profile_user, viewer),
+            "profile_emoji_status": visible_status(profile_user, viewer),
             "profile_avatar_visible": privacy_allows(
                 profile_user,
                 viewer,

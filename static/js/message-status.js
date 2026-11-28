@@ -1,6 +1,8 @@
 /* Shared, font-independent delivery/read indicators for all message renderers. */
 (() => {
   function set(node, isRead) {
+    // Read cursors are monotonic: a stale poll cannot undo a confirmed read.
+    isRead = Boolean(isRead || node.dataset.readState === "read");
     const state = isRead ? "read" : "sent";
     const label = isRead ? "Прочитано" : "Отправлено";
     node.dataset.readState = state;

@@ -31,6 +31,8 @@ DEFAULT_RATE_LIMITS = {
     "shared_sticker_pack": {"limit": 30, "window": 60},
     "join_invite": {"limit": 40, "window": 60},
     "share_qr": {"limit": 30, "window": 60},
+    "profile_gallery": {"limit": 120, "window": 60},
+    "profile_status": {"limit": 30, "window": 60},
     "join_request_action": {"limit": 60, "window": 60},
     "community_moderation": {"limit": 60, "window": 60},
     "link_preview": {"limit": 12, "window": 60},

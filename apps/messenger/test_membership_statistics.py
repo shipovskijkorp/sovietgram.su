@@ -59,7 +59,7 @@ class MembershipStatisticsTests(TestCase):
         self.assertEqual(other.post(reverse("messenger:join_invite", args=[self.approval_invite.token])).status_code,302)
         row = ChatJoinRequest.objects.get(chat=self.channel,user=self.other)
         for _ in range(2):
-            self.assertEqual(self.post("community_join_request_action",self.client,action="approve",request_id=row.pk,account_id=self.owner.pk).status_code,200)
+            self.assertEqual(self.post("community_join_request_action",self.client,action="approve",request_id=row.pk,account_id=self.owner.pk,revision=row.created_at.isoformat()).status_code,200)
         data = self.stats()
         growth = data["membership_stats"]
         self.assertEqual((growth["recorded_joins"],growth["recorded_leaves"],growth["recorded_net"]),(4,2,2))
