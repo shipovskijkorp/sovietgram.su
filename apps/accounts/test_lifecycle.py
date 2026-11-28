@@ -113,6 +113,7 @@ class AccountLifecycleTests(TestCase):
             chat=group,
             user=self.alice,
             role=ChatParticipant.Role.OWNER,
+            admin_title="Owner title",
         )
         ChatParticipant.objects.create(
             chat=group,
@@ -147,6 +148,8 @@ class AccountLifecycleTests(TestCase):
         delete_user_account(self.alice)
 
         group.refresh_from_db()
+        from apps.messenger.models import CommunityMembershipEvent
+        self.assertTrue(CommunityMembershipEvent.objects.filter(chat=group, source="account_deleted", count=1).exists())
         self.assertEqual(
             ChatParticipant.objects.get(chat=group, user=self.bob).role,
             ChatParticipant.Role.OWNER,

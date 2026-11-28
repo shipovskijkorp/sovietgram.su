@@ -348,11 +348,40 @@
         <div id="communityStatsContent" hidden>
           <div class="community-stats-grid">
             <div><small>Участников сейчас</small><strong data-stats-value="members"></strong></div>
-            <div><small>Новые участники</small><strong data-stats-value="new_members"></strong></div>
+            <div><small>Нынешние участники, вступившие за период</small><strong data-stats-value="new_members"></strong></div>
             <div><small>Сообщения</small><strong data-stats-value="messages"></strong></div>
             <div><small>Активные авторы</small><strong data-stats-value="active_authors"></strong></div>
             <div><small>Реакции к сообщениям</small><strong data-stats-value="reactions"></strong></div>
           </div>
+          <section id="communityStatsEngagement">
+            <h3>Вовлечённость</h3>
+            <div class="community-stats-grid">
+              <div><small>Активных нынешних участников</small><strong data-engagement-stat="active_members"></strong></div>
+              <div><small>Доля активных участников</small><strong data-engagement-stat="active_member_percent" data-unit="%"></strong></div>
+              <div><small>Сохранившиеся реакции за период</small><strong data-engagement-stat="period_reactions"></strong></div>
+              <div><small>Уникальные авторы реакций</small><strong data-engagement-stat="unique_reactors"></strong></div>
+              <div><small>Сохранившиеся комментарии за период</small><strong data-engagement-stat="period_comments"></strong></div>
+              <div><small>Уникальные комментаторы</small><strong data-engagement-stat="unique_commenters"></strong></div>
+            </div>
+            <p class="community-settings__hint">Активный участник — нынешний участник, который за выбранные дни отправил сохранившееся сообщение, поставил сохранившуюся реакцию или оставил сохранившийся комментарий. Реакции и комментарии учитываются также на старых доступных публикациях.</p>
+          </section>
+          <section id="communityStatsGrowth">
+            <h3>Изменение аудитории</h3>
+            <div class="community-stats-grid">
+              <div><small>Зафиксировано вступлений</small><strong data-membership-stat="recorded_joins"></strong></div>
+              <div><small>Зафиксировано выходов</small><strong data-membership-stat="recorded_leaves"></strong></div>
+              <div><small>Чистый прирост по событиям</small><strong data-membership-stat="recorded_net"></strong></div>
+            </div>
+            <p class="community-settings__hint">Новый учёт действует с момента установки обновления 0044. Старые события неизвестны; ноль означает отсутствие зафиксированных событий, а не обязательно отсутствие активности. Повторное вступление после выхода считается новым событием.</p>
+            <h3>Вступления по дням</h3><div class="community-stats-chart" id="communityStatsJoins"></div>
+            <h3>Выходы по дням</h3><div class="community-stats-chart" id="communityStatsLeaves"></div>
+            <h3>Источники вступлений</h3><div class="community-stats-chart community-stats-breakdown" id="communityStatsJoinSources"></div>
+            <section id="communityStatsInviteSection" hidden>
+              <h3>Вступления по приглашениям</h3><div class="community-stats-chart community-stats-breakdown" id="communityStatsInviteSources"></div>
+              <p class="community-settings__hint">До 20 наиболее используемых ссылок за выбранный период. Учитываются прямые вступления и одобренные заявки; токены ссылок не раскрываются.</p>
+            </section>
+            <h3>Причины выхода</h3><div class="community-stats-chart community-stats-breakdown" id="communityStatsLeaveSources"></div>
+          </section>
           <section id="communityStatsChannel" hidden>
             <h3>Охват канала</h3>
             <div class="community-stats-grid">
@@ -367,7 +396,7 @@
           </section>
           <h3>Сообщения по дням</h3><div class="community-stats-chart" id="communityStatsMessages"></div>
           <h3>Новые участники по дням</h3><div class="community-stats-chart" id="communityStatsMembers"></div>
-          <p class="community-settings__hint">Учитываются сохранившиеся сообщения за выбранный период, без удалённых и просроченных. Новые участники — нынешние участники, вступившие в указанные дни. Реакции — текущие реакции на сообщения этого периода. История выходов из сообщества не ведётся.</p>
+          <p class="community-settings__hint">Учитываются сохранившиеся сообщения за выбранный период, без удалённых и просроченных. Новые участники в этом графике — нынешние участники, вступившие в указанные дни. Реакции — текущие реакции на сообщения этого периода. Полный учёт вступлений и выходов вынесен выше и начинается с установки обновления.</p>
         </div>
       </div>
     </section>

@@ -134,6 +134,28 @@
     }));
   }
 
+  function renderStatsBreakdown(target, rows, emptyLabel="Нет зафиксированных событий."){
+    if(!target)return;
+    target.replaceChildren();
+    const available=rows.filter(row=>Number(row.count)>0);
+    if(!available.length){
+      const empty=document.createElement("p");empty.className="community-settings__hint";empty.textContent=emptyLabel;target.append(empty);return;
+    }
+    const total=available.reduce((sum,row)=>sum+Number(row.count),0);
+    for(const row of available){
+      const item=document.createElement("div");item.className="community-stats-breakdown-row";
+      const head=document.createElement("div");head.className="community-stats-breakdown-label";
+      const label=document.createElement("span");label.textContent=row.label;
+      const number=document.createElement("strong");
+      const percentage=Number(row.count)/total*100;
+      number.textContent=Number(row.count).toLocaleString("ru-RU")+" · "+percentage.toLocaleString("ru-RU",{maximumFractionDigits:1})+"%";
+      head.append(label,number);
+      const track=document.createElement("span");track.className="community-stats-bar-track";
+      const bar=document.createElement("span");bar.style.width=percentage+"%";track.append(bar);
+      item.append(head,track);target.append(item);
+    }
+  }
+
   async function loadStatistics() {
     if (activeView !== "statistics" || !settings?.urls?.statistics) return;
     const mine = ++statsGeneration;
@@ -159,6 +181,30 @@
       }
       renderStatsChart($("communityStatsMessages"), data.series || [], "messages");
       renderStatsChart($("communityStatsMembers"), data.series || [], "new_members");
+      const growth=$("communityStatsGrowth"),engagement=$("communityStatsEngagement");
+      growth.hidden=!data.membership_stats;engagement.hidden=!data.engagement;
+      if(data.engagement){
+        for(const node of engagement.querySelectorAll("[data-engagement-stat]")){
+          node.textContent=Number(data.engagement[node.dataset.engagementStat]||0).toLocaleString("ru-RU",{maximumFractionDigits:1})+(node.dataset.unit||"");
+        }
+      }
+      if(data.membership_stats){
+        const stats=data.membership_stats;
+        for(const node of growth.querySelectorAll("[data-membership-stat]")){
+          const value=Number(stats[node.dataset.membershipStat]||0);
+          node.textContent=(node.dataset.membershipStat==="recorded_net"&&value>0?"+":"")+value.toLocaleString("ru-RU");
+        }
+        renderStatsChart($("communityStatsJoins"),data.series||[],"joins");
+        renderStatsChart($("communityStatsLeaves"),data.series||[],"leaves");
+        renderStatsBreakdown($("communityStatsJoinSources"),stats.join_sources||[]);
+        renderStatsBreakdown($("communityStatsLeaveSources"),stats.leave_sources||[]);
+        $("communityStatsInviteSection").hidden=!Array.isArray(stats.invite_sources);
+        if(Array.isArray(stats.invite_sources)){
+          const links=[...stats.invite_sources];
+          if(stats.other_invite_joins>0)links.push({label:"Другие ссылки",count:stats.other_invite_joins});
+          renderStatsBreakdown($("communityStatsInviteSources"),links,"Нет вступлений по приглашениям за период.");
+        }else $("communityStatsInviteSources").replaceChildren();
+      }
       const channel = $("communityStatsChannel");
       if (channel) {
         channel.hidden = !data.channel_stats;

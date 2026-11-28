@@ -1106,3 +1106,12 @@ body[data-theme="dark"] .community-moderation-dialog {background:#251f1b;color:#
 .community-stats-chart-row strong { text-align:right; }
 .community-stats-bar-track { height:9px;border-radius:4px;background:color-mix(in srgb,var(--red) 7%,transparent);overflow:hidden; }
 .community-stats-bar-track>span { display:block;height:100%;background:var(--red);border-radius:4px; }
+
+.community-stats-breakdown{display:grid;gap:10px;}
+.community-stats-breakdown-row{display:grid;gap:5px;min-width:0;}
+.community-stats-breakdown-label{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12px;}
+.community-stats-breakdown-label span{min-width:0;overflow-wrap:anywhere;}
+.community-stats-breakdown-label strong{white-space:nowrap;}
+.community-stats-breakdown-row .community-stats-bar-track{display:block;width:100%;}
+#communityStatsContent section[hidden]{display:none!important;}
+#communityStatsGrowth,#communityStatsEngagement{margin-top:16px;}
