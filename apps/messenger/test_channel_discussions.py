@@ -240,6 +240,32 @@ class ChannelDiscussionTests(TestCase):
         self.assertFalse(ChannelCommentAttachment.objects.exists())
         self.assertEqual(self.client_for(self.member).get(path,{"account_id":self.member.pk}).status_code,404)
 
+    def test_comment_video_range_and_post_deletion(self):
+        from tempfile import TemporaryDirectory
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.test import override_settings
+        from .models import ChannelCommentAttachment
+
+        self.enterContext(override_settings(MEDIA_ROOT=self.enterContext(TemporaryDirectory())))
+        # The upload checks the container header, not whether a video can decode.
+        raw=bytes.fromhex("00000018667479706d70343200000000") + b"example video bytes"
+        response=self.act("create",client_id=str(uuid4()),reply_to=0,text="Video",
+            attachments=SimpleUploadedFile("clip.mp4",raw,content_type="video/mp4"))
+        self.assertEqual(response.status_code,200,response.content)
+        attachment=ChannelCommentAttachment.objects.get()
+        path=reverse("messenger:comment_media",args=[self.channel.pk,self.post.pk,attachment.pk])
+        response=self.client_for(self.member).get(path,{"account_id":self.member.pk},HTTP_RANGE="bytes=4-11")
+        self.assertEqual(response.status_code,206)
+        self.assertEqual(response["Content-Range"],f"bytes 4-11/{len(raw)}")
+        self.assertEqual(b"".join(response.streaming_content),raw[4:12])
+        stored,storage=attachment.file.name,attachment.file.storage
+        with self.captureOnCommitCallbacks(execute=True):
+            response=self.client_for(self.owner).post(reverse("messenger:delete_message",args=[self.channel.pk,self.post.pk]),{"scope":"everyone"})
+            self.assertEqual(response.status_code,200,response.content)
+        self.assertFalse(storage.exists(stored))
+        self.assertFalse(ChannelCommentAttachment.objects.exists())
+        self.assertEqual(self.client_for(self.member).get(path,{"account_id":self.member.pk}).status_code,404)
+
     def test_expiry_and_csrf(self):
         csrf = Client(enforce_csrf_checks=True)
         csrf.force_login(self.member)

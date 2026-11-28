@@ -112,7 +112,9 @@ def create_comment(post, user, client_id, text, reply, digest, prepared):
 
 
 def error(text, status=400):
-    return JsonResponse({"ok": False, "error": text}, status=status)
+    result = JsonResponse({"ok": False, "error": text}, status=status)
+    result["Cache-Control"] = "private, no-store"
+    return result
 
 
 def integer(value, *, zero=False):

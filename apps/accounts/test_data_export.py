@@ -57,6 +57,44 @@ class AccountExportTests(TestCase):
             self.assertIn("Personal label", bundle.read("contacts.jsonl").decode())
             self.assertEqual(bundle.read(f"media/attachment-{attachment.pk}.bin"), b"test file")
 
+    def test_comment_export_excludes_other_people_and_protected_posts(self):
+        from uuid import uuid4
+        from apps.messenger.models import ChannelComment, ChannelCommentAttachment, ChannelCommentReaction
+        from apps.messenger.test_gif_and_formatting import gif_bytes
+
+        channel=Chat.objects.create(type=Chat.Type.CHANNEL,title="Open channel",comments_enabled=True)
+        ChatParticipant.objects.create(chat=channel,user=self.alice)
+        ChatParticipant.objects.create(chat=channel,user=self.bob,role="owner")
+        post=Message.objects.create(chat=channel,sender=self.bob,text="Public post")
+        own=ChannelComment.objects.create(post=post,author=self.alice,text="My comment",client_id=uuid4())
+        other=ChannelComment.objects.create(post=post,author=self.bob,text="Other comment",client_id=uuid4())
+        attachment=ChannelCommentAttachment.objects.create(comment=own,original_name="cat.gif",kind="image",
+            mime_type="image/gif",size=len(gif_bytes()),file=ContentFile(gif_bytes(),name="cat.gif"))
+        foreign=ChannelCommentAttachment.objects.create(comment=other,original_name="foreign.gif",kind="image",
+            mime_type="image/gif",size=len(gif_bytes()),file=ContentFile(gif_bytes(),name="foreign.gif"))
+        ChannelCommentReaction.objects.create(comment=other,user=self.alice,emoji="👍")
+        ChannelCommentReaction.objects.create(comment=own,user=self.bob,emoji="🔥")
+        fields={"account_id":self.alice.pk,"password":"Password-1945!","include_files":"on"}
+        response=self.client.post(self.url,fields)
+        self.assertEqual(response.status_code,200)
+        with zipfile.ZipFile(io.BytesIO(b"".join(response.streaming_content))) as bundle:
+            comments=[json.loads(line) for line in bundle.read("channel_comments.jsonl").splitlines()]
+            self.assertEqual([row["id"] for row in comments],[own.pk])
+            media=[json.loads(line) for line in bundle.read("comment_attachments.jsonl").splitlines()]
+            self.assertEqual([row["id"] for row in media],[attachment.pk])
+            self.assertEqual(bundle.read(media[0]["archive_path"]),gif_bytes())
+            self.assertNotIn(f"comments/attachment-{foreign.pk}.bin",bundle.namelist())
+            reactions=[json.loads(line) for line in bundle.read("comment_reactions.jsonl").splitlines()]
+            self.assertEqual([(row["comment_id"],row["emoji"]) for row in reactions],[(other.pk,"👍")])
+        channel.protect_content=True
+        channel.save(update_fields=["protect_content"])
+        response=self.client.post(self.url,fields)
+        self.assertEqual(response.status_code,200)
+        with zipfile.ZipFile(io.BytesIO(b"".join(response.streaming_content))) as bundle:
+            for name in ("channel_comments.jsonl","comment_attachments.jsonl","comment_reactions.jsonl"):
+                self.assertEqual(bundle.read(name),b"")
+            self.assertNotIn(f"comments/attachment-{attachment.pk}.bin",bundle.namelist())
+
     def test_two_factor_is_required_and_export_limit_is_explicit(self):
         import pyotp
         from unittest.mock import patch

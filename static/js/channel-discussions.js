@@ -159,7 +159,7 @@
       const identity = el("span",comment.author + " · @" + comment.username);
       header.append(identity,el("time",comment.time + (comment.edited ? " · изм." : "")));
       row.append(header);
-      if (comment.reply) row.append(el("div",comment.reply.author + ": " + comment.reply.text,"discussion-comment-reply"));
+      if (comment.reply) row.append(el("div",comment.reply.author + ": " + (comment.reply.text||"Медиа"),"discussion-comment-reply"));
       if(comment.text)row.append(el("p",comment.text,"discussion-comment-text"));
       if(comment.attachments?.length)row.append(renderMedia(comment));
       const reactions=renderReactions(comment);if(reactions.childElementCount)row.append(reactions);

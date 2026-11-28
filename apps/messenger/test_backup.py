@@ -96,6 +96,20 @@ class BackupTests(SimpleTestCase):
         self.assertTrue(self.database.exists())
         self.assertTrue((self.media / "avatars/previous.webp").exists())
 
+    def test_comment_media_is_in_backup_and_restore_manifest(self):
+        name="messages/comments/1/animation.gif"
+        with sqlite3.connect(self.database) as connection:
+            connection.execute("CREATE TABLE messenger_channelcommentattachment (file TEXT)")
+            connection.execute("INSERT INTO messenger_channelcommentattachment VALUES (?)",(name,))
+        path=self.media/name
+        path.parent.mkdir(parents=True,exist_ok=True)
+        path.write_bytes(b"comment media")
+        archive=self.backup()
+        self.assertIn("media/"+name,verify_backup(archive)["files"])
+        self.assertEqual(rehearse_sqlite_backup(archive)["referenced_media"],4)
+        with tarfile.open(archive,"r:gz") as bundle:
+            self.assertEqual(bundle.extractfile("media/"+name).read(),b"comment media")
+
     def test_pre_avatar_history_database_rehearsal_remains_supported(self):
         with sqlite3.connect(self.database) as connection:
             connection.execute("DROP TABLE accounts_avatarhistory")
