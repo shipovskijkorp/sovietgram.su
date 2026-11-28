@@ -2390,3 +2390,7 @@ body:not([data-theme="dark"]) .tg-profile__view.is-foreign {
 .emoji-status-choices input:focus-visible + .emoji-status-option{outline:2px solid var(--red);}
 .emoji-status-duration select{font:inherit;width:100%;border:1px solid var(--line);border-radius:8px;padding:9px;background:var(--panel-strong);color:var(--ink);}
 @media(max-width:480px){.profile-gallery-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.emoji-status-choices{grid-template-columns:repeat(3,minmax(0,1fr));}}
+
+/* Leave room for navigation with tall photographs; keep deletion separate. */
+.tg-profile-photo-viewer__card:has(.profile-gallery-controls:not([hidden])) > img{max-height:calc(100dvh - 106px);}
+.tg-profile-photo-viewer__card:has(.profile-gallery-controls:not([hidden])) .tg-profile-photo-viewer__remove{bottom:66px;}

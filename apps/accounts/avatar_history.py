@@ -1,4 +1,4 @@
-"""Owner-only previous photos, bounded retention and explicit restoration."""
+"""Private photo archive, explicit sharing, bounded retention and restoration."""
 import mimetypes
 
 from django.contrib import messages

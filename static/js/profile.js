@@ -521,7 +521,7 @@ function refreshProfileExtras(profile){
   if(badge){badge.textContent=emoji;badge.hidden=!emoji;badge.title=emoji?"Emoji-статус":"";}
   const label=document.getElementById("userProfileEmojiEditLabel");
   if(label)label.textContent=emoji?emoji+" · Изменить emoji-статус":"Установить emoji-статус";
-  clearTimeout(profileEmojiTimer);
+  window.clearTimeout(profileEmojiTimer);
   const until=Date.parse(profile.emoji_status?.until||"");
   if(emoji&&Number.isFinite(until)&&until>Date.now()){
     profileEmojiTimer=window.setTimeout(()=>{if(openedProfile===profile)refreshProfileExtras(profile);},Math.min(2147483647,until-Date.now()+100));
@@ -635,7 +635,7 @@ async function closeUserProfile() {
   }
   closeProfileFieldEditor();
   closeProfilePhotoViewer();
-  clearTimeout(profileEmojiTimer);
+  window.clearTimeout(profileEmojiTimer);
   closeProfileChannelContext();
   closePeerProfileMenus();
   if (peerProfileElements.CommonGroups) peerProfileElements.CommonGroups.open = false;
