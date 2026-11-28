@@ -9,7 +9,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 
-from apps.messenger.models import MessageAttachment, SavedGif, ScheduledAttachment, Sticker
+from apps.messenger.models import ChannelCommentAttachment, MessageAttachment, SavedGif, ScheduledAttachment, Sticker
 from .models import User
 
 
@@ -55,6 +55,8 @@ def storage_summary(user):
     scheduled_file_bytes = scheduled_files["size"] or 0
     gifs = SavedGif.objects.filter(owner=user).aggregate(count=Count("pk"), size=Sum("size"))
     gif_bytes = gifs["size"] or 0
+    comments = ChannelCommentAttachment.objects.filter(comment__author=user, comment__is_deleted=False).aggregate(count=Count("pk"), size=Sum("size"))
+    comment_bytes = comments["size"] or 0
     total = sum(row.get("size") or 0 for row in grouped.values())
     counts = sum(row.get("count", 0) for row in grouped.values())
     sticker_bytes = stickers["size"] or 0
@@ -66,7 +68,8 @@ def storage_summary(user):
         "scheduled_sticker_count": scheduled_stickers["count"], "scheduled_sticker_bytes": scheduled_sticker_bytes,
         "scheduled_file_count": scheduled_files["count"], "scheduled_file_bytes": scheduled_file_bytes,
         "gif_count": gifs["count"], "gif_bytes": gif_bytes,
-        "total_known": total + sticker_bytes + (avatar_size or 0) + archived_avatar_bytes + scheduled_sticker_bytes + scheduled_file_bytes + gif_bytes,
+        "comment_media_count": comments["count"], "comment_media_bytes": comment_bytes,
+        "total_known": total + sticker_bytes + (avatar_size or 0) + archived_avatar_bytes + scheduled_sticker_bytes + scheduled_file_bytes + gif_bytes + comment_bytes,
     }
 
 

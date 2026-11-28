@@ -39,6 +39,7 @@ SELECT file FROM messenger_messageattachment WHERE file <> ''
 AVATAR_HISTORY_QUERY = "\nUNION\nSELECT image FROM accounts_avatarhistory WHERE image <> ''"
 SCHEDULED_MEDIA_QUERY = "\nUNION\nSELECT file FROM messenger_scheduledattachment WHERE file <> ''"
 GIF_MEDIA_QUERY = "\nUNION\nSELECT file FROM messenger_savedgif WHERE file <> ''"
+COMMENT_MEDIA_QUERY = "\nUNION\nSELECT file FROM messenger_channelcommentattachment WHERE file <> ''"
 
 
 def sqlite_media_names(connection):
@@ -52,7 +53,10 @@ def sqlite_media_names(connection):
     has_gifs = connection.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='messenger_savedgif'"
     ).fetchone()
-    query = MEDIA_QUERY + (AVATAR_HISTORY_QUERY if has_history else "") + (SCHEDULED_MEDIA_QUERY if has_scheduled_media else "") + (GIF_MEDIA_QUERY if has_gifs else "")
+    has_comment_media = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='messenger_channelcommentattachment'"
+    ).fetchone()
+    query = MEDIA_QUERY + (AVATAR_HISTORY_QUERY if has_history else "") + (SCHEDULED_MEDIA_QUERY if has_scheduled_media else "") + (GIF_MEDIA_QUERY if has_gifs else "") + (COMMENT_MEDIA_QUERY if has_comment_media else "")
     return sorted(media_name(row[0]) for row in connection.execute(query))
 
 
@@ -107,7 +111,7 @@ def postgres_snapshot(database, work):
         connection.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         snapshot_id = connection.execute("SELECT pg_export_snapshot()").fetchone()[0]
         # Production schema is expected to be migrated before backups run.
-        media = sorted(media_name(row[0]) for row in connection.execute(MEDIA_QUERY + AVATAR_HISTORY_QUERY + SCHEDULED_MEDIA_QUERY + GIF_MEDIA_QUERY))
+        media = sorted(media_name(row[0]) for row in connection.execute(MEDIA_QUERY + AVATAR_HISTORY_QUERY + SCHEDULED_MEDIA_QUERY + GIF_MEDIA_QUERY + COMMENT_MEDIA_QUERY))
         subprocess.run(
             ["pg_dump", "--format=custom", "--no-password", "--snapshot=" + snapshot_id,
              "--file=" + str(destination)],

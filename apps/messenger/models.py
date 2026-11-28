@@ -21,6 +21,12 @@ def scheduled_attachment_path(instance, filename):
     return f"messages/{instance.scheduled.chat_id}/{now:%Y/%m}/{uuid4().hex}{extension}"
 
 
+def comment_attachment_path(instance, filename):
+    extension = Path(filename).suffix.lower()[:12]
+    now = timezone.now()
+    return f"messages/comments/{instance.comment.post.chat_id}/{now:%Y/%m}/{uuid4().hex}{extension}"
+
+
 def saved_gif_path(instance, filename):
     # The existing private messages namespace is denied by both Nginx
     # and Django's debug media routes. Access always goes through gifs.py.
@@ -747,11 +753,13 @@ class ChatMemberModeration(models.Model):
 
 
 class ChannelComment(models.Model):
-    """A text discussion belonging to exactly one channel publication."""
+    """A discussion belonging to exactly one channel publication."""
     post = models.ForeignKey(Message, on_delete=models.CASCADE, related_name="channel_comments")
     author = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="channel_comments")
     client_id = models.UUIDField()
-    text = models.TextField(max_length=4096)
+    request_digest = models.CharField(max_length=64, blank=True, default="", editable=False)
+    text = models.TextField(max_length=4096, blank=True)
+    search_key = models.TextField(blank=True, default="", editable=False)
     reply_to = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="replies")
     is_deleted = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -764,3 +772,35 @@ class ChannelComment(models.Model):
             models.UniqueConstraint(fields=("post", "author", "client_id"), name="sg_comment_send_once"),
         ]
         indexes = [models.Index(fields=("post", "is_deleted", "id"), name="sg_comment_post_visible_idx")]
+
+    def save(self, *args, **kwargs):
+        fields = kwargs.get("update_fields")
+        if fields is None or {"text", "is_deleted"}.intersection(fields):
+            self.search_key = "" if self.is_deleted else community_search_key(self.text)
+            if fields is not None:
+                kwargs["update_fields"] = set(fields) | {"search_key"}
+        super().save(*args, **kwargs)
+
+
+class ChannelCommentReaction(models.Model):
+    comment = models.ForeignKey(ChannelComment, on_delete=models.CASCADE, related_name="reactions")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="comment_reactions")
+    emoji = models.CharField(max_length=8, choices=MessageReaction.Emoji.choices)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=("comment", "user", "emoji"), name="sg_comment_user_emoji")]
+
+
+class ChannelCommentAttachment(models.Model):
+    comment = models.ForeignKey(ChannelComment, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(upload_to=comment_attachment_path)
+    kind = models.CharField(max_length=16, choices=[("image", "Изображение"), ("video", "Видео")])
+    original_name = models.CharField(max_length=255)
+    mime_type = models.CharField(max_length=127)
+    size = models.PositiveBigIntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("pk",)
+

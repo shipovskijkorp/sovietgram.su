@@ -17,7 +17,7 @@ from django.views.decorators.debug import sensitive_post_parameters
 from django.views.decorators.http import require_http_methods
 
 from apps.messenger.models import (
-    ChannelComment, ChannelPostView, Chat, ChatFolder, ChatMemberModeration,
+    ChannelComment, ChannelCommentAttachment, ChannelCommentReaction, ChannelPostView, Chat, ChatFolder, ChatMemberModeration,
     ChatParticipant, Contact, Message, MessageAttachment, MessageHiddenForUser,
     MessageReaction, SavedGif, ScheduledAttachment, ScheduledMessage, Sticker, StickerPack,
 )
@@ -189,9 +189,24 @@ def build_export(user, include_files=False):
                 "id", "chat_id", "text", "special_type", "special_data", "silent", "sender_title", "signature_name", "created_at", "edited_at")))
             writer.jsonl("reactions.jsonl", rows(MessageReaction.objects.filter(user=user, message__in=visible),
                 "message_id", "emoji", "created_at"))
-            writer.jsonl("channel_comments.jsonl", rows(ChannelComment.objects.filter(
-                author=user, post__in=visible, is_deleted=False),
+            comments = ChannelComment.objects.filter(post__in=visible, post__chat__comments_enabled=True, is_deleted=False)
+            own_comments = comments.filter(author=user)
+            writer.jsonl("channel_comments.jsonl", rows(own_comments,
                 "id", "post_id", "text", "created_at", "edited_at"))
+            writer.jsonl("comment_reactions.jsonl", rows(ChannelCommentReaction.objects.filter(user=user, comment__in=comments),
+                "comment_id", "emoji", "created_at"))
+            comment_files = ChannelCommentAttachment.objects.filter(comment__in=own_comments)
+            if include_files:
+                for attachment in comment_files.iterator(chunk_size=20):
+                    writer.file(f"comments/attachment-{attachment.pk}.bin", attachment.file)
+
+            def comment_media_rows():
+                for row in rows(comment_files, "id", "comment_id", "kind", "original_name", "mime_type", "size", "created_at"):
+                    path = f"comments/attachment-{row['id']}.bin"
+                    row["archive_path"] = path if path in bundle.NameToInfo else None
+                    yield row
+
+            writer.jsonl("comment_attachments.jsonl", comment_media_rows())
             writer.jsonl("channel_views.jsonl", rows(ChannelPostView.objects.filter(user=user, post__in=visible),
                 "post_id", "viewed_at"))
             scheduled = ScheduledMessage.objects.filter(
